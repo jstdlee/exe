@@ -59,6 +59,11 @@ type Config struct {
 	// APIToken, when set, is required as a Bearer token on every API call.
 	APIToken string `json:"api_token"`
 
+	// AppsDirs lists extra folders scanned for desktop app bundles in
+	// addition to ~/.exe/apps — e.g. a separate git repo of experimental
+	// apps. A leading ~ expands to the daemon user's home.
+	AppsDirs []string `json:"apps_dirs,omitempty"`
+
 	SSHUser  string `json:"ssh_user"`
 	ImageURL string `json:"image_url"`
 
@@ -143,6 +148,13 @@ func (c *Config) Normalize() {
 	c.ProxyListen = NormalizeListen(c.ProxyListen)
 	c.SSHListen = NormalizeListen(c.SSHListen)
 	c.AdvertiseHost = strings.TrimSpace(c.AdvertiseHost)
+	var dirs []string
+	for _, d := range c.AppsDirs {
+		if d = strings.TrimSpace(d); d != "" {
+			dirs = append(dirs, d)
+		}
+	}
+	c.AppsDirs = dirs
 	c.Firecracker.Binary = strings.TrimSpace(c.Firecracker.Binary)
 	c.Firecracker.KernelURL = strings.TrimSpace(c.Firecracker.KernelURL)
 	c.Firecracker.NetworkHelper = strings.TrimSpace(c.Firecracker.NetworkHelper)

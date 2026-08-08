@@ -2547,6 +2547,7 @@ const CONFIG_FIELDS = [
     { path: "ssh_listen", hint: "SSH gate — ssh -p 2222 exe@host (lobby) or <vm>@host; \"off\" disables; rebinds live on Save" },
     { path: "advertise_host", hint: "this Mac as seen from the cloudflared host" },
     { path: "api_token", secret: true },
+    { path: "apps_dirs", list: true, hint: "extra app-bundle folders, comma-separated — e.g. ~/Developer/exe-apps" },
     { path: "ssh_user", restart: true },
     { path: "image_url", restart: true },
   ]},
@@ -2627,7 +2628,7 @@ async function loadConfig() {
       const input = el("input", {
         id: "cfg-" + f.path,
         type: f.secret ? "password" : (f.num ? "number" : "text"),
-        value: val == null ? "" : String(val),
+        value: val == null ? "" : (f.list ? val.join(", ") : String(val)),
       });
       // inside a group tab the "ollama." / "cloudflare." prefix is redundant
       const label = f.path.includes(".") ? f.path.split(".").pop() : f.path;
@@ -2695,7 +2696,8 @@ $("#cfg-save").onclick = async () => {
       // getElementById, not querySelector: ids like cfg-ollama.base_url
       // contain dots that a selector would parse as class names
       const raw = document.getElementById("cfg-" + f.path).value;
-      setPath(nc, f.path, f.num ? (parseInt(raw, 10) || 0) : raw);
+      setPath(nc, f.path, f.list ? raw.split(",").map(s => s.trim()).filter(Boolean)
+        : f.num ? (parseInt(raw, 10) || 0) : raw);
     }
   }
   $("#cfg-save").disabled = true;

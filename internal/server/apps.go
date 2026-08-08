@@ -30,6 +30,44 @@ import (
 
 func (s *Server) appsDir() string      { return filepath.Join(s.StateDir, "apps") }
 func (s *Server) workspaceDir() string { return filepath.Join(s.StateDir, "workspace") }
+
+// appRoots returns every directory scanned for app bundles: the writable
+// ~/.exe/apps plus any apps_dirs from config — e.g. a separate git repo of
+// experimental apps that should still appear on this desktop. Earlier roots
+// win name collisions.
+func (s *Server) appRoots() []string {
+	roots := []string{s.appsDir()}
+	for _, d := range s.Config().AppsDirs {
+		if d = expandHome(d); d != "" {
+			roots = append(roots, d)
+		}
+	}
+	return roots
+}
+
+// expandHome resolves a leading ~ so apps_dirs entries stay portable in
+// config.json.
+func expandHome(p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, p[1:])
+		}
+	}
+	return p
+}
+
+// findAppRoot returns the first root holding an app folder of this name.
+func (s *Server) findAppRoot(name string) (string, bool) {
+	if !validAppName(name) {
+		return "", false
+	}
+	for _, root := range s.appRoots() {
+		if fi, err := os.Stat(filepath.Join(root, name)); err == nil && fi.IsDir() {
+			return root, true
+		}
+	}
+	return "", false
+}
 func (s *Server) appDataDir(app string) string {
 	return filepath.Join(s.StateDir, "appdata", app)
 }
@@ -64,8 +102,8 @@ type appMeta struct {
 
 // loadAppMeta reads one bundle's app.json; a folder only counts as an app
 // when the metadata parses and index.html exists.
-func (s *Server) loadAppMeta(name string) (*appMeta, error) {
-	dir := filepath.Join(s.appsDir(), name)
+func (s *Server) loadAppMeta(root, name string) (*appMeta, error) {
+	dir := filepath.Join(root, name)
 	b, err := os.ReadFile(filepath.Join(dir, "app.json"))
 	if err != nil {
 		return nil, err
@@ -88,32 +126,47 @@ func (s *Server) loadAppMeta(name string) (*appMeta, error) {
 }
 
 func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
-	entries, err := os.ReadDir(s.appsDir())
-	if err != nil && !os.IsNotExist(err) {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
 	apps := []*appMeta{}
-	for _, e := range entries {
-		if !e.IsDir() || !validAppName(e.Name()) {
-			continue
-		}
-		m, err := s.loadAppMeta(e.Name())
+	seen := map[string]bool{}
+	for _, root := range s.appRoots() {
+		entries, err := os.ReadDir(root)
 		if err != nil {
-			log.Printf("apps: skipping %s: %v", e.Name(), err)
+			if !os.IsNotExist(err) {
+				log.Printf("apps: reading %s: %v", root, err)
+			}
 			continue
 		}
-		apps = append(apps, m)
+		for _, e := range entries {
+			if !e.IsDir() || !validAppName(e.Name()) || seen[e.Name()] {
+				continue
+			}
+			m, err := s.loadAppMeta(root, e.Name())
+			if err != nil {
+				log.Printf("apps: skipping %s: %v", e.Name(), err)
+				continue
+			}
+			seen[e.Name()] = true
+			apps = append(apps, m)
+		}
 	}
 	sort.Slice(apps, func(i, j int) bool { return apps[i].Title < apps[j].Title })
 	writeJSON(w, http.StatusOK, apps)
 }
 
-// appStatic serves app bundles from disk at /apps/<name>/. os.DirFS is
-// rooted, so requests cannot escape the apps folder; app data lives in a
-// separate tree this handler can never reach.
+// appStatic serves app bundles from disk at /apps/<name>/, resolving each
+// app to whichever configured root holds it. os.DirFS is rooted, so requests
+// cannot escape that root; app data lives in a separate tree this handler
+// can never reach.
 func (s *Server) appStatic() http.Handler {
-	return http.StripPrefix("/apps/", http.FileServerFS(os.DirFS(s.appsDir())))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name, _, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/apps/"), "/")
+		root, ok := s.findAppRoot(name)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		http.StripPrefix("/apps/", http.FileServerFS(os.DirFS(root))).ServeHTTP(w, r)
+	})
 }
 
 // ---- scoped file stores (per-app data + shared workspace) ----
@@ -132,12 +185,10 @@ func scopedPath(root, rel string) (string, error) {
 }
 
 // appDataRoot validates the app name against an installed bundle and returns
-// the app's private data directory.
+// the app's private data directory (always under ~/.exe/appdata, whichever
+// root the bundle itself lives in).
 func (s *Server) appDataRoot(name string) (string, error) {
-	if !validAppName(name) {
-		return "", errors.New("invalid app name")
-	}
-	if fi, err := os.Stat(filepath.Join(s.appsDir(), name)); err != nil || !fi.IsDir() {
+	if _, ok := s.findAppRoot(name); !ok {
 		return "", errors.New("no such app")
 	}
 	return s.appDataDir(name), nil
