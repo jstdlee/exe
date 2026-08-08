@@ -93,6 +93,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/host/terminal", s.handleHostTerminal)
 	mux.HandleFunc("GET /v1/vms/{name}/transcripts", s.handleTranscripts)
 	mux.HandleFunc("GET /v1/vms/{name}/transcripts/{id}", s.handleTranscript)
+	mux.HandleFunc("GET /v1/vms/{name}/notes", s.handleNotesGet)
+	mux.HandleFunc("PUT /v1/vms/{name}/notes", s.handleNotesPut)
 	mux.HandleFunc("GET /v1/apps", s.handleApps)
 	mux.HandleFunc("GET /v1/apps/{app}/data", s.handleAppDataList)
 	mux.HandleFunc("GET /v1/apps/{app}/data/{path...}", s.handleAppDataGet)

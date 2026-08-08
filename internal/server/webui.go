@@ -5,10 +5,13 @@ import (
 	"embed"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -168,6 +171,61 @@ func (s *Server) handleTranscript(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"meta": meta, "log": logText})
+}
+
+// notesPath is the free-form per-VM notes file edited in the detail window.
+// It lives beside the transcripts so it survives VM stop/start and, like
+// them, outlives the VM itself.
+func (s *Server) notesPath(vm string) string {
+	return filepath.Join(s.StateDir, "vms", vm, "notes.md")
+}
+
+// notesMax caps a VM's notes blob.
+const notesMax = 256 << 10
+
+func (s *Server) handleNotesGet(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.VMs.Get(r.Context(), name); err != nil {
+		writeErr(w, errCode(err), err)
+		return
+	}
+	b, err := os.ReadFile(s.notesPath(name))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"notes": string(b)})
+}
+
+func (s *Server) handleNotesPut(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.VMs.Get(r.Context(), name); err != nil {
+		writeErr(w, errCode(err), err)
+		return
+	}
+	var req struct {
+		Notes *string `json:"notes"`
+	}
+	// generous slack over notesMax: the JSON encoding of a maximal note
+	// (escapes, the envelope) is bigger than the note itself
+	if err := json.NewDecoder(io.LimitReader(r.Body, 2*notesMax)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.Notes == nil || len(*req.Notes) > notesMax {
+		writeErr(w, http.StatusBadRequest, errors.New("notes missing or too large"))
+		return
+	}
+	path := s.notesPath(name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := os.WriteFile(path, []byte(*req.Notes), 0o600); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
 func (s *Server) handleConfigGet(w http.ResponseWriter, r *http.Request) {

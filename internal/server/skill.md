@@ -64,6 +64,8 @@ anything inside it.
 | `POST /v1/vms/{name}/start` | — | Boot a stopped VM |
 | `POST /v1/vms/{name}/stop` | — | Graceful power-off (disk persists) |
 | `DELETE /v1/vms/{name}` | — | Delete VM **and its disk** |
+| `GET /v1/vms/{name}/notes` | — | Free-form notes about the VM → `{"notes":"..."}` — read them before working in an unfamiliar VM |
+| `PUT /v1/vms/{name}/notes` | `{"notes":"..."}` | Replace the notes (markdown welcome; also editable in the web UI) |
 
 `POST /v1/vms` and `/start` are **synchronous**: they return only when the VM
 is booted, has an IP, and SSH answers — the returned object is immediately

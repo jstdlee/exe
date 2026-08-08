@@ -673,6 +673,7 @@ td .mono, td.mono { user-select: text; }
           <div class="tab" data-tab="vibe">Agent</div>
           <div class="tab" data-tab="expose">Expose</div>
           <div class="tab" data-tab="tr">Transcripts</div>
+          <div class="tab" data-tab="notes">Notes</div>
         </div>
         <div class="tabpanel">
           <div class="pane" id="pane-svc">
@@ -723,6 +724,14 @@ td .mono, td.mono { user-select: text; }
           <div class="pane" id="pane-tr" hidden>
             <div id="t-list"><span class="muted">No agent runs yet — each run in this VM is logged here.</span></div>
             <pre class="out" id="t-log" hidden></pre>
+          </div>
+
+          <div class="pane" id="pane-notes" hidden>
+            <div class="row" style="margin-bottom:6px">
+              <span class="muted">Notes about this VM — saved automatically.</span>
+              <span class="muted" id="n-status" style="margin-left:auto"></span>
+            </div>
+            <textarea id="n-text" style="min-height:220px" spellcheck="false" placeholder="What runs here, why it exists, how to rebuild it…"></textarea>
           </div>
         </div>
       </div>
@@ -1036,7 +1045,7 @@ function openWin(sel) {
 }
 function closeWin(w) {
   w.hidden = true;
-  if (w.id === "win-detail") { closeTerm(); currentVM = null; }
+  if (w.id === "win-detail") { closeTerm(); flushNotes(); currentVM = null; }
   if (w.id === "win-newvm") $("#c-status").textContent = "";
   if (w.id === "win-log") stopLogStream();
   // a closed Terminal is gone for good: end the shell and drop the window
@@ -1948,6 +1957,7 @@ document.querySelectorAll("#win-detail .tab").forEach(t =>
   t.addEventListener("click", () => showPane(t.dataset.tab)));
 async function openVM(name) {
   if (currentVM !== name) closeTerm();
+  flushNotes();
   currentVM = name;
   $("#d-title").textContent = name;
   $("#a-out").hidden = true;
@@ -1955,6 +1965,7 @@ async function openVM(name) {
   $("#e-result").textContent = "";
   showPane("svc");
   openWin("#win-detail");
+  loadNotes().catch(() => {});
   await refreshDetailHead();
   loadPorts().catch(() => {});
   loadTranscripts().catch(e => toast(e.message));
@@ -2311,6 +2322,45 @@ async function loadTranscripts() {
     box.append(item);
   }
 }
+
+// ---- notes ----
+// Debounced autosave: a PUT fires ~800ms after typing stops, and pending
+// edits flush on blur, tab/window close, and VM switch. notesVM pins each
+// save to the VM whose text is in the box, so a flush that lands after the
+// user has already opened another VM still writes to the right place.
+let notesTimer = null, notesVM = null;
+const notesText = $("#n-text");
+function notesStatus(t) { $("#n-status").textContent = t; }
+async function loadNotes() {
+  clearTimeout(notesTimer);
+  notesTimer = null;
+  notesVM = currentVM;
+  notesText.value = "";
+  notesStatus("");
+  try {
+    const d = await j(`/v1/vms/${notesVM}/notes`);
+    if (notesVM === currentVM) notesText.value = d.notes || "";
+  } catch (e) { notesStatus(e.message); }
+}
+function saveNotes(vm, text) {
+  // keepalive lets a flush fired from pagehide finish after the page is gone
+  api(`/v1/vms/${vm}/notes`, { method: "PUT", json: { notes: text }, keepalive: true })
+    .then(() => { if (vm === notesVM) notesStatus("Saved"); })
+    .catch(e => { if (vm === notesVM) notesStatus("Save failed: " + e.message); });
+}
+function flushNotes() {
+  if (!notesTimer) return;
+  clearTimeout(notesTimer);
+  notesTimer = null;
+  saveNotes(notesVM, notesText.value);
+}
+notesText.addEventListener("input", () => {
+  notesStatus("…");
+  clearTimeout(notesTimer);
+  notesTimer = setTimeout(() => { notesTimer = null; saveNotes(notesVM, notesText.value); }, 800);
+});
+notesText.addEventListener("blur", flushNotes);
+window.addEventListener("pagehide", flushNotes);
 
 // ---- chat ----
 let chatCur = null, chatBusy = false;
