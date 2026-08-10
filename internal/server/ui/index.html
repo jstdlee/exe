@@ -76,15 +76,20 @@ a { color: #202a87; text-decoration: underline; }
   gap: 16px 8px; z-index: 1; }
 .dicon { width: 82px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .dicon svg { filter: drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
+/* integer line-height: the inherited 1.45 makes the label 15.9375px tall,
+   which pushes every following 32px crispEdges glyph onto fractional pixels */
 .dicon .lbl { max-width: 82px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: #fff; text-shadow: 1px 1px 1px #000; padding: 0 4px; font-size: 11px; }
+  color: #fff; text-shadow: 1px 1px 1px #000; padding: 0 4px; font-size: 11px; line-height: 16px; }
 .dicon.sel svg { filter: brightness(.55) saturate(1.3) drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
 .dicon.sel .lbl { background: var(--hl); text-shadow: none; }
 .dicon img { width: 32px; height: 32px; image-rendering: pixelated;
   filter: drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
 .dicon.sel img { filter: brightness(.55) saturate(1.3) drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
-#trash-icon { position: absolute; bottom: 16px; right: 14px; z-index: 1; }
-#chat-icon { position: absolute; bottom: 96px; right: 14px; z-index: 1; }
+/* system icons (Chat, Trash) live in their own bottom-anchored column on
+   the same 8px rail and 16px rhythm as #icons, so both groups share one
+   center axis and pitch; hiding Chat keeps Trash pinned at the bottom */
+#sys-icons { position: absolute; bottom: 16px; right: 8px; z-index: 1;
+  display: flex; flex-direction: column; gap: 16px; }
 
 /* ---------- window chrome (macthemes.garden-accurate) ---------- */
 .window {
@@ -615,21 +620,23 @@ td .mono, td.mono { user-select: text; }
 
 <div id="desktop">
   <div id="icons"></div>
-  <!-- speech balloon in the same pixel style as the Mac icons; hidden until
-       Ollama is detected, like the Windows → Chat menu item -->
-  <div class="dicon" id="chat-icon" title="Chat — double-click to talk to your VM cloud" hidden>
-    <svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
-      <rect x="3.5" y="5.5" width="25" height="15" fill="#DAD5CA" stroke="#000"/>
-      <rect x="4.5" y="6.5" width="23" height="2" fill="#EDEAE2"/>
-      <path d="M9.5 20.5 v6 l6 -6 z" fill="#DAD5CA" stroke="#000"/>
-      <rect x="8" y="10" width="17" height="2" fill="#55524B"/>
-      <rect x="8" y="14" width="11" height="2" fill="#55524B"/>
-    </svg>
-    <span class="lbl">Chat</span>
-  </div>
-  <div class="dicon" id="trash-icon">
-    <svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges"><rect x="13.5" y="2.5" width="5" height="2" fill="#C8C3B8" stroke="#000"/><rect x="8.5" y="4.5" width="15" height="3" fill="#D5D0C5" stroke="#000"/><rect x="9.5" y="7.5" width="13" height="21" fill="#CDC8BD" stroke="#000"/><path d="M12.5 10v16M15.5 10v16M18.5 10v16M21.5 10v16" stroke="#8B867B"/></svg>
-    <span class="lbl">Trash</span>
+  <div id="sys-icons">
+    <!-- speech balloon in the same pixel style as the Mac icons; hidden until
+         Ollama is detected, like the Windows → Chat menu item -->
+    <div class="dicon" id="chat-icon" title="Chat — double-click to talk to your VM cloud" hidden>
+      <svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
+        <rect x="3.5" y="5.5" width="25" height="15" fill="#DAD5CA" stroke="#000"/>
+        <rect x="4.5" y="6.5" width="23" height="2" fill="#EDEAE2"/>
+        <path d="M9.5 20.5 v6 l6 -6 z" fill="#DAD5CA" stroke="#000"/>
+        <rect x="8" y="10" width="17" height="2" fill="#55524B"/>
+        <rect x="8" y="14" width="11" height="2" fill="#55524B"/>
+      </svg>
+      <span class="lbl">Chat</span>
+    </div>
+    <div class="dicon" id="trash-icon">
+      <svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges"><rect x="13.5" y="2.5" width="5" height="2" fill="#C8C3B8" stroke="#000"/><rect x="8.5" y="4.5" width="15" height="3" fill="#D5D0C5" stroke="#000"/><rect x="9.5" y="7.5" width="13" height="21" fill="#CDC8BD" stroke="#000"/><path d="M12.5 10v16M15.5 10v16M18.5 10v16M21.5 10v16" stroke="#8B867B"/></svg>
+      <span class="lbl">Trash</span>
+    </div>
   </div>
 
   <!-- Virtual Machines -->
