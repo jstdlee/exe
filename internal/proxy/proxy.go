@@ -4,6 +4,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -18,6 +19,15 @@ type Proxy struct {
 	mu     sync.RWMutex
 	file   string
 	routes map[string]string // lowercase host (no port) -> backend URL
+
+	// dial, when set, opens backend connections — used when VM IPs only
+	// exist inside the daemon process (Windows). Set before Handler.
+	dial func(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+// SetDial installs a custom backend dialer; call before Handler.
+func (p *Proxy) SetDial(dial func(ctx context.Context, network, addr string) (net.Conn, error)) {
+	p.dial = dial
 }
 
 func New(file string) (*Proxy, error) {
@@ -77,7 +87,14 @@ func (p *Proxy) lookup(hostHeader string) (string, bool) {
 }
 
 func (p *Proxy) Handler() http.Handler {
+	var transport http.RoundTripper
+	if p.dial != nil {
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.DialContext = p.dial
+		transport = tr
+	}
 	rp := &httputil.ReverseProxy{
+		Transport: transport,
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			backend, ok := p.lookup(pr.In.Host)
 			if !ok {

@@ -1,5 +1,6 @@
 // Package vmm manages virtual machines behind a platform-neutral interface.
-// macOS uses Virtualization.framework and Linux uses KVM through Firecracker.
+// macOS uses Virtualization.framework, Linux uses KVM through Firecracker,
+// and Windows uses QEMU on the Windows Hypervisor Platform.
 package vmm
 
 import (
@@ -44,6 +45,22 @@ type ImageEnsurer interface {
 	EnsureImage(ctx context.Context) (string, error)
 }
 
+// GuestDialer is implemented by managers whose guest network lives inside the
+// daemon process (Windows): VM IPs are unreachable through the host's TCP
+// stack, so anything dialing a guest must go through the manager. DialGuest
+// falls back to the host network for addresses outside the guest subnet.
+type GuestDialer interface {
+	DialGuest(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+// PortForwarder is implemented by managers whose guests the host cannot reach
+// directly. ForwardGuestPort publishes a guest port on a host-local address
+// (e.g. "127.0.0.1:53422") so a browser on this machine can open it; forwards
+// live until the VM stops.
+type PortForwarder interface {
+	ForwardGuestPort(name string, port int) (string, error)
+}
+
 type Options struct {
 	StateDir       string
 	ImageURL       string
@@ -51,6 +68,7 @@ type Options struct {
 	AuthorizedKey  string
 	PrivateKeyPath string
 	Firecracker    FirecrackerOptions
+	QEMU           QEMUOptions
 }
 
 type FirecrackerOptions struct {
@@ -59,6 +77,15 @@ type FirecrackerOptions struct {
 	NetworkHelper     string
 	NetworkCIDR       string
 	OutboundInterface string
+}
+
+// QEMUOptions configures the Windows backend: QEMU accelerated by the
+// Windows Hypervisor Platform, with the guest network running inside the
+// daemon process.
+type QEMUOptions struct {
+	Binary      string
+	FirmwareDir string
+	NetworkCIDR string
 }
 
 type vmNetwork struct {

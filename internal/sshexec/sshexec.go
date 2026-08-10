@@ -14,10 +14,16 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// DialFunc opens the TCP connection to a target, overriding net.Dial for
+// backends whose guest network lives inside the daemon process.
+type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
 type Target struct {
 	Host    string
 	User    string
 	KeyPath string
+	// Dialer, when set, replaces the default TCP dial to Host:22.
+	Dialer DialFunc
 }
 
 func (t Target) dial(ctx context.Context) (*ssh.Client, error) {
@@ -35,8 +41,12 @@ func (t Target) dial(ctx context.Context) (*ssh.Client, error) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}
-	d := net.Dialer{Timeout: 10 * time.Second}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(t.Host, "22"))
+	dialTCP := t.Dialer
+	if dialTCP == nil {
+		d := net.Dialer{Timeout: 10 * time.Second}
+		dialTCP = d.DialContext
+	}
+	conn, err := dialTCP(ctx, "tcp", net.JoinHostPort(t.Host, "22"))
 	if err != nil {
 		return nil, err
 	}

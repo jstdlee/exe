@@ -42,6 +42,20 @@ type FirecrackerConfig struct {
 	OutboundInterface string `json:"outbound_interface"`
 }
 
+// QEMUConfig configures the Windows backend: QEMU accelerated by the Windows
+// Hypervisor Platform, with the guest network living inside the daemon.
+type QEMUConfig struct {
+	// Binary is a command on PATH or an absolute path; empty auto-detects
+	// qemu-system-x86_64 (PATH, then C:\Program Files\qemu).
+	Binary string `json:"binary"`
+	// FirmwareDir holds QEMU's EFI firmware (edk2-x86_64-code.fd and
+	// edk2-i386-vars.fd); empty auto-detects the share dir next to the binary.
+	FirmwareDir string `json:"firmware_dir"`
+	// NetworkCIDR is the flat in-process guest subnet; each VM gets one
+	// address, the daemon is the gateway at the first host address.
+	NetworkCIDR string `json:"network_cidr"`
+}
+
 type Config struct {
 	// Listen is the API address. Bind to your Tailscale IP to reach the
 	// daemon from other devices, e.g. "100.x.y.z:7777".
@@ -74,6 +88,7 @@ type Config struct {
 	Ollama      OllamaConfig      `json:"ollama"`
 	Cloudflare  CloudflareConfig  `json:"cloudflare"`
 	Firecracker FirecrackerConfig `json:"firecracker"`
+	QEMU        QEMUConfig        `json:"qemu"`
 }
 
 // Dir returns the state directory (~/.exe, or $EXE_HOME).
@@ -115,6 +130,9 @@ func Default() *Config {
 			KernelURL:     fmt.Sprintf(defaultFirecrackerKernelURLTmpl, firecrackerArch),
 			NetworkHelper: "/usr/local/libexec/exe-net-helper",
 			NetworkCIDR:   "172.30.0.0/16",
+		},
+		QEMU: QEMUConfig{
+			NetworkCIDR: "192.168.127.0/24",
 		},
 	}
 }
@@ -160,6 +178,9 @@ func (c *Config) Normalize() {
 	c.Firecracker.NetworkHelper = strings.TrimSpace(c.Firecracker.NetworkHelper)
 	c.Firecracker.NetworkCIDR = strings.TrimSpace(c.Firecracker.NetworkCIDR)
 	c.Firecracker.OutboundInterface = strings.TrimSpace(c.Firecracker.OutboundInterface)
+	c.QEMU.Binary = strings.TrimSpace(c.QEMU.Binary)
+	c.QEMU.FirmwareDir = strings.TrimSpace(c.QEMU.FirmwareDir)
+	c.QEMU.NetworkCIDR = strings.TrimSpace(c.QEMU.NetworkCIDR)
 }
 
 // Load reads config.json over the defaults; secrets can also come from

@@ -109,7 +109,9 @@ contact.
 
 VM IPs (`.ip`) are private host-local addresses: from **this host** you can
 also `curl http://<vm_ip>:<port>` directly — useful for testing a server you
-just started in the VM.
+just started in the VM. Exception: on Windows hosts VM IPs live inside the
+daemon process; use the per-port `local` addresses from
+`GET /v1/vms/{name}/ports` (e.g. `curl http://127.0.0.1:53422`) instead.
 
 ## Built-in coding agent (vibecode)
 
@@ -133,6 +135,8 @@ gate instead and only reach for this to delegate.
 - `GET /v1/vms/{name}/ports` → `{"ip":"...","ports":[{"port":8000,"process":"python3"}]}` —
   TCP ports listening on non-loopback addresses inside the VM (SSH excluded).
   Servers must bind `0.0.0.0`, not `127.0.0.1`, to be reachable/exposable.
+  On Windows hosts each entry also carries `"local":"127.0.0.1:NNNN"`, a
+  host-reachable forward to that port.
 - `POST /v1/vms/{name}/expose` body `{"port":8000,"subdomain":"guestbook"}` →
   `{"host":"guestbook.<domain>","url":"https://...","backend":"http://<vm_ip>:8000"}`.
   Publishes the VM port through the daemon's reverse proxy and Cloudflare

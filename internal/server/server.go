@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"golang.org/x/term"
@@ -242,6 +241,22 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// guestDial returns the backend's in-process guest dialer when it has one
+// (Windows, where VM IPs only exist inside the daemon); nil means the host
+// network reaches VMs directly.
+func (s *Server) guestDial() sshexec.DialFunc {
+	if gd, ok := s.VMs.(vmm.GuestDialer); ok {
+		return gd.DialGuest
+	}
+	return nil
+}
+
+// vmTarget builds the SSH target for a VM, routed through the backend's
+// guest network when necessary.
+func (s *Server) vmTarget(info *vmm.Info) sshexec.Target {
+	return sshexec.Target{Host: info.IP, User: s.Config().SSHUser, KeyPath: s.KeyPath, Dialer: s.guestDial()}
+}
+
 func (s *Server) runningVM(ctx context.Context, name string) (*vmm.Info, error) {
 	info, err := s.VMs.Get(ctx, name)
 	if err != nil {
@@ -292,7 +307,7 @@ func (s *Server) agentRun(ctx context.Context, info *vmm.Info, name, prompt, mod
 		rec.Append(line)
 		emit(line)
 	}
-	target := sshexec.Target{Host: info.IP, User: cfg.SSHUser, KeyPath: s.KeyPath}
+	target := s.vmTarget(info)
 	logf("[agent] model %s on vm %s (%s)\n", acfg.Model, name, info.IP)
 	runErr := agent.Run(ctx, acfg, target, name, prompt, logf)
 	if runErr != nil {
@@ -539,7 +554,7 @@ func (s *Server) RestartDaemon(delay time.Duration, running []string) {
 	cmd := exec.Command(exePath, os.Args[1:]...)
 	cmd.Env = append(os.Environ(), "EXE_AUTOSTART="+strings.Join(running, ","))
 	cmd.Stdout, cmd.Stderr = restartStdio(s.StateDir)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = restartSysProcAttr()
 	if err := cmd.Start(); err != nil {
 		log.Printf("restart: spawn failed: %v", err)
 		return

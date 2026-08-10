@@ -288,7 +288,7 @@ func (s *Server) execChatTool(ctx context.Context, name string, args map[string]
 		if err != nil {
 			return sshexec.Target{}, err
 		}
-		return sshexec.Target{Host: info.IP, User: cfg.SSHUser, KeyPath: s.KeyPath}, nil
+		return s.vmTarget(info), nil
 	}
 	tctx, cancel := context.WithTimeout(ctx, chatToolTimeout)
 	defer cancel()

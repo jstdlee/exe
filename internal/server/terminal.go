@@ -9,8 +9,6 @@ import (
 
 	"github.com/coder/websocket"
 	"golang.org/x/crypto/ssh"
-
-	"exe/internal/sshexec"
 )
 
 // wsWriter serializes terminal output into binary WebSocket frames.
@@ -33,14 +31,13 @@ func (w *wsWriter) Write(p []byte) (int, error) {
 // the VM. Binary frames carry terminal bytes both ways; text frames carry
 // control messages ({"resize":[cols,rows]}).
 func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
-	cfg := s.Config()
 	name := r.PathValue("name")
 	info, err := s.runningVM(r.Context(), name)
 	if err != nil {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
-	target := sshexec.Target{Host: info.IP, User: cfg.SSHUser, KeyPath: s.KeyPath}
+	target := s.vmTarget(info)
 	dctx, dcancel := context.WithTimeout(r.Context(), 15*time.Second)
 	client, err := target.Dial(dctx)
 	dcancel()

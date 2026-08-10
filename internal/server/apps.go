@@ -24,7 +24,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -380,12 +379,7 @@ func handleDirList(w http.ResponseWriter, root, rel string) {
 	sort.Slice(list, func(i, j int) bool {
 		return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name)
 	})
-	var free int64
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(p, &st); err == nil {
-		free = int64(st.Bavail) * int64(st.Bsize)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"entries": list, "free": free})
+	writeJSON(w, http.StatusOK, map[string]any{"entries": list, "free": diskFree(p)})
 }
 func (s *Server) handleWorkspaceGet(w http.ResponseWriter, r *http.Request) {
 	handleFileGet(w, s.workspaceDir(), r.PathValue("path"))

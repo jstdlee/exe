@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"exe/internal/config"
-	"exe/internal/sshexec"
 	"exe/internal/transcript"
 	"exe/internal/vmm"
 )
@@ -63,15 +62,18 @@ var ssProcessRE = regexp.MustCompile(`users:\(\("([^"]+)"`)
 type vmPort struct {
 	Port    int    `json:"port"`
 	Process string `json:"process,omitempty"`
+	// Local is a host-local "127.0.0.1:NNNN" forward to this port, set when
+	// the backend's guest IPs are unreachable from the host (Windows) so the
+	// UI's Local links still open in a browser on this machine.
+	Local string `json:"local,omitempty"`
 }
 
 // scanPorts lists TCP ports listening on non-loopback addresses inside the
 // VM (SSH excluded); shared by the Services tab and the chat agent.
 func (s *Server) scanPorts(ctx context.Context, info *vmm.Info) ([]vmPort, error) {
-	cfg := s.Config()
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	target := sshexec.Target{Host: info.IP, User: cfg.SSHUser, KeyPath: s.KeyPath}
+	target := s.vmTarget(info)
 	out, code, err := target.Run(ctx, `sudo -n ss -tlnp 2>/dev/null || ss -tln`, 65536)
 	if err != nil {
 		return nil, err
@@ -131,6 +133,13 @@ func (s *Server) handlePorts(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err)
 		return
+	}
+	if pf, ok := s.VMs.(vmm.PortForwarder); ok {
+		for i := range services {
+			if local, err := pf.ForwardGuestPort(info.Name, services[i].Port); err == nil {
+				services[i].Local = local
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ip": info.IP, "ports": services})
 }
@@ -264,6 +273,9 @@ func (s *Server) handleConfigPut(w http.ResponseWriter, r *http.Request) {
 		{"firecracker.network_helper", old.Firecracker.NetworkHelper, nc.Firecracker.NetworkHelper},
 		{"firecracker.network_cidr", old.Firecracker.NetworkCIDR, nc.Firecracker.NetworkCIDR},
 		{"firecracker.outbound_interface", old.Firecracker.OutboundInterface, nc.Firecracker.OutboundInterface},
+		{"qemu.binary", old.QEMU.Binary, nc.QEMU.Binary},
+		{"qemu.firmware_dir", old.QEMU.FirmwareDir, nc.QEMU.FirmwareDir},
+		{"qemu.network_cidr", old.QEMU.NetworkCIDR, nc.QEMU.NetworkCIDR},
 	} {
 		if f.oldV != f.newV {
 			restart = append(restart, f.name)

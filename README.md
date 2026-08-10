@@ -1,9 +1,10 @@
 # exe — a personal VM cloud
 
 A single Go binary inspired by [exe.dev](https://exe.dev): create persistent Linux VMs on
-macOS or Linux, vibecode inside them with models from Ollama Cloud, and publish
+macOS, Linux or Windows, vibecode inside them with models from Ollama Cloud, and publish
 any VM port to a real HTTPS subdomain through your Cloudflare Tunnel. macOS
-uses Virtualization.framework; Linux uses KVM through Firecracker.
+uses Virtualization.framework; Linux uses KVM through Firecracker; Windows
+uses QEMU on the Windows Hypervisor Platform.
 
 ![The web UI — a Mac OS 9 Platinum desktop: sortable VM list and an SSH terminal into a VM](docs/screenshot.png)
 
@@ -23,6 +24,7 @@ phone/laptop ──► exe API (bind to Tailscale IP)
 
 ```sh
 make build        # also builds exe-net-helper on Linux
+                  # Windows: go build -o exe.exe ./cmd/exe
 ./exe init        # writes ~/.exe/config.json
 ./exe serve       # run the daemon
 
@@ -62,6 +64,21 @@ Install Firecracker from its official release archive before starting the
 service. Reapply `setcap` whenever the helper binary is replaced. The
 checked-in Supervisor config is specific to `/www/exe` and
 `/home/livid/.exe`.
+
+### Windows requirements
+
+- An x86-64 host. Enable **Windows Hypervisor Platform** and **Virtual
+  Machine Platform** under *Windows features* (available on Windows Home
+  too), then reboot.
+- QEMU: `winget install SoftwareFreedomConservancy.QEMU`, or set
+  `qemu.binary` if it is not on `PATH` or in `C:\Program Files\qemu`.
+- No admin rights, drivers or TAP devices: the guest network is a userspace
+  TCP/IP stack inside the daemon. VM IPs (default `192.168.127.0/24`) exist
+  only inside `exe serve` — the SSH gate, web terminal, agent and reverse
+  proxy all reach them, and the Services tab publishes per-port
+  `127.0.0.1` forwards for your browser.
+- Consider excluding `%USERPROFILE%\.exe` from Microsoft Defender scanning;
+  first boots are much faster.
 
 ## SSH as an interface (:2222)
 
@@ -140,6 +157,9 @@ daemon). In headless sessions (ssh) the daemon runs without the icon.
 | `firecracker.network_helper` | root-owned, capability-limited helper path |
 | `firecracker.network_cidr` | private IPv4 pool divided into one /30 per VM (default `172.30.0.0/16`) |
 | `firecracker.outbound_interface` | Linux egress interface; empty auto-detects the default IPv4 route |
+| `qemu.binary` | Windows QEMU executable (default `qemu-system-x86_64` from `PATH`, then `C:\Program Files\qemu`) |
+| `qemu.firmware_dir` | folder with `edk2-x86_64-code.fd` + `edk2-i386-vars.fd`; empty auto-detects QEMU's `share` dir |
+| `qemu.network_cidr` | Windows in-process guest subnet (default `192.168.127.0/24`); the daemon is the gateway |
 | `ollama.base_url` | `http://127.0.0.1:11434` to go through your signed-in local Ollama (cloud models like `glm-5.2:cloud` need no key), or `https://ollama.com` + `ollama.api_key` |
 | `ollama.model` | default agent model, e.g. `glm-5.2:cloud` |
 | `cloudflare.*` | see below |
@@ -179,6 +199,16 @@ that filesystem, then direct-boots the configured kernel and connects a per-VM
 TAP to host NAT. Custom images must either be raw ext4 filesystems or GPT images
 with an ext4 root partition, and must support the configured kernel. Firecracker
 serial output is at `~/.exe/vms/<name>/console.log`.
+
+On Windows, VMs are `qemu-system-x86_64 -accel whpx` child processes booting
+the same EFI image as macOS (per-VM EFI variable store, virtio disk/net/rng,
+seed.iso, serial to `console.log`, QEMU messages to `qemu.log`). The guest
+network is a gvisor netstack inside the daemon: each VM's virtio NIC streams
+ethernet frames to the daemon over loopback, a built-in DHCP server hands out
+one deterministic address per VM (MACs are derived from the address), and the
+daemon NATs guests outbound through the host sockets API. A kill-on-close job
+object powers VMs off if the daemon dies. Custom images must be full GPT disk
+images with an EFI partition.
 
 VMs are children of `exe serve`. An exclusive state lock prevents two Linux
 daemons from managing the same VM directory. Graceful daemon shutdown powers

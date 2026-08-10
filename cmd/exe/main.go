@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -135,6 +136,11 @@ func cmdServe() error {
 			NetworkCIDR:       cfg.Firecracker.NetworkCIDR,
 			OutboundInterface: cfg.Firecracker.OutboundInterface,
 		},
+		QEMU: vmm.QEMUOptions{
+			Binary:      cfg.QEMU.Binary,
+			FirmwareDir: cfg.QEMU.FirmwareDir,
+			NetworkCIDR: cfg.QEMU.NetworkCIDR,
+		},
 	})
 	if err != nil {
 		return err
@@ -142,6 +148,11 @@ func cmdServe() error {
 	px, err := proxy.New(filepath.Join(stateDir, "routes.json"))
 	if err != nil {
 		return err
+	}
+	// On backends whose guest network lives inside this process (Windows),
+	// the reverse proxy must dial VM backends through the manager.
+	if gd, ok := mgr.(vmm.GuestDialer); ok {
+		px.SetDial(gd.DialGuest)
 	}
 	srv := server.New(cfg, mgr, px, privKey, stateDir)
 	srv.Logs = logs
@@ -630,16 +641,25 @@ func cmdSSH(args []string) error {
 	if err != nil {
 		return err
 	}
-	if info.IP == "" {
-		return fmt.Errorf("vm %s has no IP (state=%s); `exe start %s` first", name, info.State, name)
-	}
 	keyPath := filepath.Join(config.Dir(), "ssh", "id_ed25519")
 	sshArgs := []string{
 		"-i", keyPath,
 		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "UserKnownHostsFile=" + os.DevNull, // NUL on Windows
 		"-o", "LogLevel=ERROR",
-		cfg.SSHUser + "@" + info.IP,
+	}
+	if runtime.GOOS == "windows" {
+		// VM IPs live inside the daemon process on Windows, so go through
+		// the SSH gate, which auto-starts the VM and bridges to its sshd.
+		if !config.SSHEnabled(cfg.SSHListen) {
+			return fmt.Errorf("VM IPs are only reachable inside the daemon on Windows; enable ssh_listen to use `exe ssh`")
+		}
+		sshArgs = append(sshArgs, "-p", portOf(cfg.SSHListen), name+"@127.0.0.1")
+	} else {
+		if info.IP == "" {
+			return fmt.Errorf("vm %s has no IP (state=%s); `exe start %s` first", name, info.State, name)
+		}
+		sshArgs = append(sshArgs, cfg.SSHUser+"@"+info.IP)
 	}
 	sshArgs = append(sshArgs, rest...)
 	c := exec.Command("ssh", sshArgs...)

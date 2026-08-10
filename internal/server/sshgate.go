@@ -37,6 +37,7 @@ import (
 	"golang.org/x/term"
 
 	"exe/internal/keys"
+	"exe/internal/sshexec"
 	"exe/internal/vmm"
 )
 
@@ -181,7 +182,7 @@ func (g *SSHGate) bridgeVM(sconn *ssh.ServerConn, chans <-chan ssh.NewChannel, r
 			return
 		}
 	}
-	vconn, vchans, vreqs, err := dialVMRaw(ctx, info.IP, cfg.SSHUser, g.s.KeyPath)
+	vconn, vchans, vreqs, err := dialVMRaw(ctx, info.IP, cfg.SSHUser, g.s.KeyPath, g.s.guestDial())
 	if err != nil {
 		failAll(fmt.Errorf("dial: %w", err))
 		return
@@ -199,7 +200,7 @@ func (g *SSHGate) bridgeVM(sconn *ssh.ServerConn, chans <-chan ssh.NewChannel, r
 // dialVMRaw opens an unwrapped SSH client connection so every channel and
 // request stays visible to the bridge (ssh.NewClient would swallow
 // forwarded-tcpip channels for its own forwarding machinery).
-func dialVMRaw(ctx context.Context, host, user, keyPath string) (ssh.Conn, <-chan ssh.NewChannel, <-chan *ssh.Request, error) {
+func dialVMRaw(ctx context.Context, host, user, keyPath string, dial sshexec.DialFunc) (ssh.Conn, <-chan ssh.NewChannel, <-chan *ssh.Request, error) {
 	key, err := os.ReadFile(keyPath)
 	if err != nil {
 		return nil, nil, nil, err
@@ -214,8 +215,11 @@ func dialVMRaw(ctx context.Context, host, user, keyPath string) (ssh.Conn, <-cha
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}
-	d := net.Dialer{Timeout: 10 * time.Second}
-	tc, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, "22"))
+	if dial == nil {
+		d := net.Dialer{Timeout: 10 * time.Second}
+		dial = d.DialContext
+	}
+	tc, err := dial(ctx, "tcp", net.JoinHostPort(host, "22"))
 	if err != nil {
 		return nil, nil, nil, err
 	}
