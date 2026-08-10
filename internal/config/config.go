@@ -4,6 +4,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -57,8 +58,9 @@ type QEMUConfig struct {
 }
 
 type Config struct {
-	// Listen is the API address. Bind to your Tailscale IP to reach the
-	// daemon from other devices, e.g. "100.x.y.z:7777".
+	// Listen is the API address. Defaults to the Tailscale IP when one is
+	// detected ("100.x.y.z:7777") so other devices reach the daemon,
+	// otherwise "127.0.0.1:7777".
 	Listen string `json:"listen"`
 	// ProxyListen is the HTTP reverse-proxy address that the Cloudflare
 	// tunnel (or anything else) forwards traffic to.
@@ -112,8 +114,17 @@ func Default() *Config {
 		arch = "amd64"
 		firecrackerArch = "x86_64"
 	}
+	// On a tailnet the API defaults to the Tailscale IP (the daemon adds a
+	// 127.0.0.1 companion listener) and advertises this machine at it, so
+	// other devices reach the daemon with zero config.
+	listen, advertise := "127.0.0.1:7777", ""
+	if ip := TailscaleIP(); ip != "" {
+		listen = net.JoinHostPort(ip, "7777")
+		advertise = ip
+	}
 	return &Config{
-		Listen:          "127.0.0.1:7777",
+		Listen:          listen,
+		AdvertiseHost:   advertise,
 		ProxyListen:     ":8090",
 		SSHListen:       ":2222",
 		SSHUser:         "dev",
@@ -135,6 +146,25 @@ func Default() *Config {
 			NetworkCIDR: "192.168.127.0/24",
 		},
 	}
+}
+
+// TailscaleIP is this host's Tailscale IPv4, detected as a CGNAT
+// (100.64.0.0/10) address on a local interface — no tailscale CLI needed.
+// Empty when not on a tailnet.
+func TailscaleIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	_, cgnat, _ := net.ParseCIDR("100.64.0.0/10")
+	for _, a := range addrs {
+		if ipn, ok := a.(*net.IPNet); ok {
+			if ip4 := ipn.IP.To4(); ip4 != nil && cgnat.Contains(ip4) {
+				return ip4.String()
+			}
+		}
+	}
+	return ""
 }
 
 // SSHEnabled reports whether addr enables the SSH gate; empty, "off",

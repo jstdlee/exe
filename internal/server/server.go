@@ -580,24 +580,8 @@ func restartStdio(stateDir string) (stdout, stderr *os.File) {
 	return f, f
 }
 
-// TailscaleIP is this host's Tailscale IPv4, detected as a CGNAT
-// (100.64.0.0/10) address on a local interface — no tailscale CLI needed.
-// Empty when not on a tailnet.
-func TailscaleIP() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-	_, cgnat, _ := net.ParseCIDR("100.64.0.0/10")
-	for _, a := range addrs {
-		if ipn, ok := a.(*net.IPNet); ok {
-			if ip4 := ipn.IP.To4(); ip4 != nil && cgnat.Contains(ip4) {
-				return ip4.String()
-			}
-		}
-	}
-	return ""
-}
+// TailscaleIP is this host's Tailscale IPv4; see config.TailscaleIP.
+func TailscaleIP() string { return config.TailscaleIP() }
 
 func (s *Server) handleTailscale(w http.ResponseWriter, r *http.Request) {
 	if ip := TailscaleIP(); ip != "" {

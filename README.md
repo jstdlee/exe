@@ -145,10 +145,10 @@ daemon). In headless sessions (ssh) the daemon runs without the icon.
 
 | key | meaning |
 |---|---|
-| `listen` | API address. `127.0.0.1:7777` default; bind your Tailscale IP (e.g. `100.120.160.126:7777`) to drive it from your phone. When bound to a specific non-loopback IP, the API also stays on `127.0.0.1:<port>` |
+| `listen` | API address. Defaults to your Tailscale IP when one is detected (e.g. `100.120.160.126:7777`) so you can drive it from your phone, otherwise `127.0.0.1:7777`. When bound to a specific non-loopback IP, the API also stays on `127.0.0.1:<port>` |
 | `proxy_listen` | reverse-proxy address the tunnel forwards to (default `:8090`) |
 | `ssh_listen` | SSH gate address (default `:2222`): `ssh -p 2222 exe@mac` = lobby, `ssh -p 2222 <vm>@mac` = the VM. `"off"` disables |
-| `advertise_host` | this Mac as reachable **from the cloudflared host** — LAN IP (e.g. `192.168.1.131`) or Tailscale IP |
+| `advertise_host` | this Mac as reachable **from the cloudflared host** — LAN IP (e.g. `192.168.1.131`) or Tailscale IP (pre-filled with the Tailscale IP when detected) |
 | `api_token` | if set, every API call needs `Authorization: Bearer <token>`. Set it before binding beyond localhost |
 | `ssh_user` | user created in each VM (default `dev`, passwordless sudo) |
 | `image_url` | base image; macOS accepts raw cloud images, while Linux accepts a raw ext4 filesystem or a GPT image containing an ext4 root partition |

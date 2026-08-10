@@ -413,6 +413,7 @@ Fill in:
   cloudflare.tunnel_id     Zero Trust -> Networks -> Tunnels (must be remotely managed)
   cloudflare.domain        e.g. apps.example.com or example.com
   advertise_host           this Mac's LAN or Tailscale IP, reachable from the tunnel host
+                           (pre-filled with the Tailscale IP when detected)
 
 Then: exe serve
 `, p)
