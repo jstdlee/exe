@@ -164,6 +164,11 @@ func (s *Server) appStatic() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		// Apps are edited live on disk; without this, browsers apply
+		// heuristic freshness to the bare Last-Modified and can serve a
+		// stale bundle for minutes after an edit. no-cache still allows
+		// 304 revalidation, so unchanged files stay cheap.
+		w.Header().Set("Cache-Control", "no-cache")
 		http.StripPrefix("/apps/", http.FileServerFS(os.DirFS(root))).ServeHTTP(w, r)
 	})
 }
