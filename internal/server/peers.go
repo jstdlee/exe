@@ -1,0 +1,244 @@
+// Node-to-node sync endpoints. Two families with different auth:
+//
+//	/v1/peers*  — the desktop UI's view (token-guarded like every /v1 call):
+//	              peer list, join codes, joining, leaving, latency.
+//	/v1/peer/*  — daemon-to-daemon (exempt from the API token; each request
+//	              is ed25519-signed by an enrolled peer, except pair, which
+//	              a short-lived join code authenticates). A peer can reach
+//	              ONLY these routes — never VMs, config or the host shell.
+package server
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"exe/internal/config"
+	"exe/internal/peer"
+)
+
+func (s *Server) peerEngine(w http.ResponseWriter) *peer.Engine {
+	if s.Peers == nil {
+		writeErr(w, http.StatusServiceUnavailable, errors.New("node sync unavailable"))
+		return nil
+	}
+	return s.Peers
+}
+
+// ---- UI-facing --------------------------------------------------------------
+
+func (s *Server) handlePeersGet(w http.ResponseWriter, r *http.Request) {
+	e := s.peerEngine(w)
+	if e == nil {
+		return
+	}
+	ip := config.TailscaleIP()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"self": map[string]any{
+			"id": e.SelfID(), "name": e.SelfName(), "ip": ip, "port": e.Port(),
+			"tailscale": ip != "",
+		},
+		"peers": e.Probe(false),
+	})
+}
+
+func (s *Server) handlePeersCode(w http.ResponseWriter, r *http.Request) {
+	e := s.peerEngine(w)
+	if e == nil {
+		return
+	}
+	code, exp := e.MintCode()
+	writeJSON(w, http.StatusOK, map[string]any{"code": code, "expires": exp.UnixMilli()})
+}
+
+func (s *Server) handlePeersJoin(w http.ResponseWriter, r *http.Request) {
+	e := s.peerEngine(w)
+	if e == nil {
+		return
+	}
+	var req struct {
+		Addr string `json:"addr"`
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, errors.New("bad request body"))
+		return
+	}
+	p, err := e.Join(req.Addr, req.Code)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"joined": p})
+}
+
+func (s *Server) handlePeersDelete(w http.ResponseWriter, r *http.Request) {
+	e := s.peerEngine(w)
+	if e == nil {
+		return
+	}
+	if err := e.Leave(r.PathValue("id")); err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "left"})
+}
+
+func (s *Server) handlePeersStatus(w http.ResponseWriter, r *http.Request) {
+	e := s.peerEngine(w)
+	if e == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"peers": e.Probe(r.URL.Query().Has("force"))})
+}
+
+// ---- daemon-to-daemon -------------------------------------------------------
+
+func (s *Server) handlePeerPair(w http.ResponseWriter, r *http.Request) {
+	e := s.peerEngine(w)
+	if e == nil {
+		return
+	}
+	var req peer.PairRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, errors.New("bad request body"))
+		return
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	resp, err := e.HandlePair(host, req)
+	if err != nil {
+		writeErr(w, http.StatusForbidden, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// verifiedPeer reads the (limited) body and authenticates the signature;
+// nil, nil means the response was already written.
+func (s *Server) verifiedPeer(w http.ResponseWriter, r *http.Request, maxBody int64) (*peer.Engine, []byte, bool) {
+	e := s.peerEngine(w)
+	if e == nil {
+		return nil, nil, false
+	}
+	var body []byte
+	if r.Body != nil {
+		b, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
+		if err != nil || int64(len(b)) > maxBody {
+			writeErr(w, http.StatusRequestEntityTooLarge, errors.New("body too large"))
+			return nil, nil, false
+		}
+		body = b
+	}
+	if _, err := e.VerifyPeer(r, body); err != nil {
+		writeErr(w, http.StatusUnauthorized, err)
+		return nil, nil, false
+	}
+	return e, body, true
+}
+
+func (s *Server) handlePeerPing(w http.ResponseWriter, r *http.Request) {
+	e, _, ok := s.verifiedPeer(w, r, 4096)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": e.SelfID(), "name": e.SelfName(), "time": time.Now().UnixMilli(),
+	})
+}
+
+func (s *Server) handlePeerManifest(w http.ResponseWriter, r *http.Request) {
+	e, _, ok := s.verifiedPeer(w, r, 4096)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": e.SelfID(), "name": e.SelfName(), "port": e.Port(),
+		"files": e.ManifestSnapshot(), "peers": e.PeerInfos(),
+	})
+}
+
+func (s *Server) handlePeerUnpair(w http.ResponseWriter, r *http.Request) {
+	e := s.peerEngine(w)
+	if e == nil {
+		return
+	}
+	p, err := e.VerifyPeer(r, nil)
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, err)
+		return
+	}
+	e.Unpair(p.ID)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "unpaired"})
+}
+
+// peerFileKey validates the {app}/{path...} of a peer file request — the
+// same jail rules as the app-data API, minus the installed-bundle check:
+// synced data may arrive before its app does.
+func peerFileKey(r *http.Request) (app, rel string, err error) {
+	app, rel = r.PathValue("app"), r.PathValue("path")
+	if !validAppName(app) {
+		return "", "", errors.New("bad app name")
+	}
+	if rel == "" || !filepath.IsLocal(filepath.FromSlash(rel)) {
+		return "", "", errors.New("bad path")
+	}
+	return app, rel, nil
+}
+
+func (s *Server) handlePeerFileGet(w http.ResponseWriter, r *http.Request) {
+	e, _, ok := s.verifiedPeer(w, r, 4096)
+	if !ok {
+		return
+	}
+	app, rel, err := peerFileKey(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	body, ver, err := e.FileForPeer(app, rel)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, errors.New("not found"))
+		return
+	}
+	w.Header().Set("X-Exe-Ver-Ctr", strconv.FormatInt(ver.Ctr, 10))
+	w.Header().Set("X-Exe-Ver-Origin", ver.Origin)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Write(body)
+}
+
+func (s *Server) handlePeerFilePut(w http.ResponseWriter, r *http.Request) {
+	e, body, ok := s.verifiedPeer(w, r, fileMax)
+	if !ok {
+		return
+	}
+	app, rel, err := peerFileKey(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	ctr, _ := strconv.ParseInt(r.Header.Get("X-Exe-Ver-Ctr"), 10, 64)
+	if ctr <= 0 {
+		writeErr(w, http.StatusBadRequest, errors.New("missing version"))
+		return
+	}
+	rv := peer.Version{
+		Ctr:     ctr,
+		Origin:  r.Header.Get("X-Exe-Ver-Origin"),
+		Deleted: r.Header.Get("X-Exe-Deleted") == "1",
+		MTime:   time.Now().UnixMilli(),
+	}
+	outcome, err := e.ApplyRemote(app+"/"+rel, body, rv)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": outcome})
+}

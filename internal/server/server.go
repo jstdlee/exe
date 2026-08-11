@@ -23,6 +23,7 @@ import (
 	"exe/internal/agent"
 	"exe/internal/cf"
 	"exe/internal/config"
+	"exe/internal/peer"
 	"exe/internal/proxy"
 	"exe/internal/sshexec"
 	"exe/internal/transcript"
@@ -44,6 +45,10 @@ type Server struct {
 	// in-process — VMs live in this process and survive.
 	OnRebind func(listen, proxyListen, sshListen string)
 
+	// Peers, when set by main, is the node-to-node sync engine behind the
+	// /v1/peers* and /v1/peer/* routes and the app-data write hooks.
+	Peers *peer.Engine
+
 	cfg        atomic.Pointer[config.Config]
 	activeRuns sync.Map // transcript id -> struct{}
 
@@ -63,6 +68,16 @@ type Server struct {
 
 	// Shared web UI window layout (see uistate.go).
 	ui uiState
+
+	// App-data change fanout to open desktops (see appevents.go).
+	appEv appEvents
+
+	// appSeq is the last accepted client sequence (X-Exe-Seq, a content
+	// timestamp) per app-data file, so the daemon drops a PUT carrying older
+	// content than one it already stored even if that older PUT's write lands
+	// last — e.g. two of an app's own saves racing on window close.
+	appSeqMu sync.Mutex
+	appSeq   map[string]int64
 }
 
 func New(cfg *config.Config, vms vmm.Manager, px *proxy.Proxy, keyPath, stateDir string) *Server {
@@ -95,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/vms/{name}/notes", s.handleNotesGet)
 	mux.HandleFunc("PUT /v1/vms/{name}/notes", s.handleNotesPut)
 	mux.HandleFunc("GET /v1/apps", s.handleApps)
+	mux.HandleFunc("GET /v1/apps/events", s.handleAppDataEvents)
 	mux.HandleFunc("GET /v1/apps/{app}/data", s.handleAppDataList)
 	mux.HandleFunc("GET /v1/apps/{app}/data/{path...}", s.handleAppDataGet)
 	mux.HandleFunc("PUT /v1/apps/{app}/data/{path...}", s.handleAppDataPut)
@@ -121,6 +137,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/ui/state", s.handleUIStateGet)
 	mux.HandleFunc("PUT /v1/ui/state", s.handleUIStatePut)
 	mux.HandleFunc("GET /v1/ui/events", s.handleUIStateEvents)
+	mux.HandleFunc("GET /v1/peers", s.handlePeersGet)
+	mux.HandleFunc("POST /v1/peers/code", s.handlePeersCode)
+	mux.HandleFunc("POST /v1/peers/join", s.handlePeersJoin)
+	mux.HandleFunc("DELETE /v1/peers/{id}", s.handlePeersDelete)
+	mux.HandleFunc("GET /v1/peers/status", s.handlePeersStatus)
+	mux.HandleFunc("POST /v1/peer/pair", s.handlePeerPair)
+	mux.HandleFunc("GET /v1/peer/ping", s.handlePeerPing)
+	mux.HandleFunc("GET /v1/peer/manifest", s.handlePeerManifest)
+	mux.HandleFunc("POST /v1/peer/unpair", s.handlePeerUnpair)
+	mux.HandleFunc("GET /v1/peer/file/{app}/{path...}", s.handlePeerFileGet)
+	mux.HandleFunc("PUT /v1/peer/file/{app}/{path...}", s.handlePeerFilePut)
 	mux.Handle("GET /apps/", s.appStatic())
 	mux.Handle("GET /ui/", uiStatic)
 	mux.HandleFunc("GET /", s.handleUI)
@@ -128,9 +155,15 @@ func (s *Server) Handler() http.Handler {
 }
 
 // auth guards the API; the static UI page itself is public (it holds no
-// data — every API call it makes carries the token).
+// data — every API call it makes carries the token). /v1/peer/* is exempt:
+// those routes authenticate each request by peer signature (or join code)
+// instead, and expose nothing beyond app-data sync.
 func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v1/peer/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if tok := s.Config().APIToken; tok != "" && strings.HasPrefix(r.URL.Path, "/v1/") {
 			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			if got == "" {

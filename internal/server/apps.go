@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -252,30 +253,32 @@ func handleFileGet(w http.ResponseWriter, root, rel string) {
 	w.Write(b)
 }
 
-func handleFilePut(w http.ResponseWriter, r *http.Request, root, rel string) {
+// handleFilePut reports success so app-data callers can notify the sync
+// engine only for writes that actually landed.
+func handleFilePut(w http.ResponseWriter, r *http.Request, root, rel string) bool {
 	p, err := scopedPath(root, rel)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
-		return
+		return false
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, fileMax+1))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
-		return
+		return false
 	}
 	if len(body) > fileMax {
 		writeErr(w, http.StatusRequestEntityTooLarge, errors.New("file exceeds 10 MB"))
-		return
+		return false
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
-		return
+		return false
 	}
 	// Atomic-ish: temp file in the same directory, then rename over.
 	tmp, err := os.CreateTemp(filepath.Dir(p), ".put-*")
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
-		return
+		return false
 	}
 	if _, err := tmp.Write(body); err == nil {
 		err = tmp.Close()
@@ -288,16 +291,17 @@ func handleFilePut(w http.ResponseWriter, r *http.Request, root, rel string) {
 	if err != nil {
 		os.Remove(tmp.Name())
 		writeErr(w, http.StatusInternalServerError, err)
-		return
+		return false
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "saved", "path": rel, "size": len(body)})
+	return true
 }
 
-func handleFileDelete(w http.ResponseWriter, root, rel string) {
+func handleFileDelete(w http.ResponseWriter, root, rel string) bool {
 	p, err := scopedPath(root, rel)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
-		return
+		return false
 	}
 	if err := os.Remove(p); err != nil {
 		if os.IsNotExist(err) {
@@ -305,9 +309,10 @@ func handleFileDelete(w http.ResponseWriter, root, rel string) {
 		} else {
 			writeErr(w, http.StatusInternalServerError, err)
 		}
-		return
+		return false
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	return true
 }
 
 // ---- route handlers ----
@@ -328,10 +333,71 @@ func (s *Server) handleAppDataGet(w http.ResponseWriter, r *http.Request) {
 	s.withAppData(w, r, func(root string) { handleFileGet(w, root, r.PathValue("path")) })
 }
 func (s *Server) handleAppDataPut(w http.ResponseWriter, r *http.Request) {
-	s.withAppData(w, r, func(root string) { handleFilePut(w, r, root, r.PathValue("path")) })
+	s.withAppData(w, r, func(root string) {
+		app, rel := r.PathValue("app"), r.PathValue("path")
+		// X-Exe-Seq is an optional monotonic content timestamp the app stamps
+		// on each save; it lets us reject a PUT whose content is older than
+		// one already stored, closing the window where two of an app's own
+		// saves race on unload and the older rename lands last.
+		seq, _ := strconv.ParseInt(r.Header.Get("X-Exe-Seq"), 10, 64)
+		// The file write and its versioning run under the sync engine's file
+		// lock so a concurrent ApplyRemote can't clobber a write the API is
+		// about to acknowledge (last-writer-loses race).
+		s.withFileLock(func() {
+			key := app + "/" + rel
+			if seq > 0 && !s.seqNewer(key, seq) {
+				writeJSON(w, http.StatusOK, map[string]any{"status": "stale", "path": rel})
+				return
+			}
+			if handleFilePut(w, r, root, rel) {
+				if seq > 0 {
+					s.recordSeq(key, seq)
+				}
+				if s.Peers != nil {
+					s.Peers.LocalWrite(app, rel)
+				}
+			}
+		})
+	})
+}
+
+// seqNewer reports whether seq is newer than the last accepted content
+// timestamp for key (does not record it).
+func (s *Server) seqNewer(key string, seq int64) bool {
+	s.appSeqMu.Lock()
+	defer s.appSeqMu.Unlock()
+	return seq > s.appSeq[key]
+}
+
+// recordSeq stores seq as the newest accepted content timestamp for key.
+func (s *Server) recordSeq(key string, seq int64) {
+	s.appSeqMu.Lock()
+	defer s.appSeqMu.Unlock()
+	if s.appSeq == nil {
+		s.appSeq = map[string]int64{}
+	}
+	if seq > s.appSeq[key] {
+		s.appSeq[key] = seq
+	}
 }
 func (s *Server) handleAppDataDelete(w http.ResponseWriter, r *http.Request) {
-	s.withAppData(w, r, func(root string) { handleFileDelete(w, root, r.PathValue("path")) })
+	s.withAppData(w, r, func(root string) {
+		s.withFileLock(func() {
+			if handleFileDelete(w, root, r.PathValue("path")) && s.Peers != nil {
+				s.Peers.LocalDelete(r.PathValue("app"), r.PathValue("path"))
+			}
+		})
+	})
+}
+
+// withFileLock runs fn under the sync engine's file lock when sync is active,
+// or directly otherwise.
+func (s *Server) withFileLock(fn func()) {
+	if s.Peers != nil {
+		s.Peers.LockFiles(fn)
+		return
+	}
+	fn()
 }
 
 func (s *Server) handleWorkspaceList(w http.ResponseWriter, r *http.Request) {

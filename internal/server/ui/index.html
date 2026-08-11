@@ -296,6 +296,20 @@ input:focus, textarea:focus, select:focus { outline: 2px solid #9999fe; outline-
 textarea { width: 100%; min-height: 64px; resize: vertical; font-family: var(--mono); font-size: 11px; }
 select { padding: 2px 4px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+
+/* Node Sync dialog: OS 9 etched group boxes with the legend riding the line */
+.join-group { position: relative; border: 1px solid #999; box-shadow: inset 1px 1px 0 #fff;
+  padding: 14px 10px 10px; margin: 14px 0 0; }
+/* the body's own padding already clears the first legend — don't stack */
+.join-group:first-child { margin-top: 2px; }
+.join-group .join-legend { position: absolute; top: -8px; left: 8px; background: var(--g300);
+  padding: 0 5px; font-size: 11px; font-weight: bold; }
+.join-peer { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+/* feedback line only takes space when it has something to say */
+#join-fb { margin-top: 6px; }
+#join-fb:empty { display: none; }
+.join-peer .join-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.join-peer .join-lat { font-size: 11px; color: #555; min-width: 52px; text-align: right; }
 .row:last-child { margin-bottom: 0; }
 /* field + primary-button rows: bottom-align the button with the inputs */
 .row.actions { align-items: flex-end; }
@@ -608,6 +622,8 @@ td .mono, td.mono { user-select: text; }
   <div class="dd-item" data-act="winlog">Daemon Log</div>
 </div>
 <div class="dropdown" id="dd-special" hidden>
+  <div class="dd-item" data-act="join">Join…</div>
+  <div class="dd-sep"></div>
   <div class="dd-item" data-act="cfstatus">Cloudflare Status…</div>
   <div class="dd-item" data-act="cfwizard">Cloudflare Setup Wizard…</div>
   <div class="dd-sep"></div>
@@ -963,6 +979,40 @@ td .mono, td.mono { user-select: text; }
         <div class="row" style="justify-content:space-between; margin-top:18px">
           <button class="ghost" id="sum-recheck">Re-check Now</button>
           <button class="btn" id="sum-restart">Start Over…</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Node Sync / Join (modal) -->
+<div id="join-overlay" class="overlay" hidden>
+  <div class="window modal front">
+    <div class="titlebar"><button class="tbox close" id="join-x"></button><div class="stripe"></div>
+      <div class="title">Node Sync</div>
+      <div class="stripe"></div></div>
+    <div class="win-frame">
+      <div class="win-body">
+        <div class="join-group">
+          <div class="join-legend">Join another node</div>
+          <div class="row" style="margin-bottom:0">
+            <input type="text" id="join-addr" placeholder="Tailscale IP (e.g. 100.64.0.9)" spellcheck="false" style="flex:1; min-width:0">
+            <input type="text" id="join-code" placeholder="Join code" spellcheck="false" style="width:104px">
+            <button class="btn" id="join-go">Join</button>
+          </div>
+          <div class="muted" id="join-fb"></div>
+        </div>
+        <div class="join-group">
+          <div class="join-legend">This node</div>
+          <div id="join-self" class="mono" style="user-select:text">…</div>
+          <div class="row" style="margin:8px 0 0; justify-content:space-between">
+            <span class="mono" id="join-mycode" style="user-select:text"></span>
+            <button class="ghost" id="join-mint">New Join Code</button>
+          </div>
+        </div>
+        <div class="join-group">
+          <div class="join-legend">Joined nodes</div>
+          <div id="join-peers"></div>
         </div>
       </div>
     </div>
@@ -1343,6 +1393,7 @@ const ACTIONS = {
   winlog: openLogWin,
   cfstatus: () => sumOpen(),
   cfwizard: () => wizOpen(false),
+  join: () => joinOpen(),
   token: () => { openWin("#win-token"); tokenInput.focus(); },
   skillguide: () => openSkillWin(),
 };
@@ -2766,6 +2817,7 @@ document.addEventListener("keydown", e => {
   menuClose();
   if (!$("#wiz-overlay").hidden) wizClose();
   if (!$("#sum-overlay").hidden) $("#sum-overlay").hidden = true;
+  if (!$("#join-overlay").hidden) joinClose();
 });
 
 function wizFeedback(kind, text) {
@@ -2946,8 +2998,133 @@ $("#sum-restart").onclick = () => {
 setInterval(() => { if (!document.hidden) cfHeartbeat(false); }, 30000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) cfHeartbeat(false); });
 
+// ---- node sync: Join dialog (Special ▸ Join…) ----
+// Latency refreshes every 5 s while the dialog is open (the daemon probes
+// its peers and caches for 5 s; ?force=1 bypasses that cache), matching the
+// VM list's polling cadence.
+let joinTimer = null;
+function joinOpen() {
+  $("#join-overlay").hidden = false;
+  $("#join-fb").textContent = "";
+  joinRefresh(true);
+  clearInterval(joinTimer);
+  joinTimer = setInterval(() => {
+    if (!document.hidden && !$("#join-overlay").hidden) joinRefresh(false);
+  }, 5000);
+}
+function joinClose() {
+  $("#join-overlay").hidden = true;
+  clearInterval(joinTimer);
+  joinTimer = null;
+}
+$("#join-x").onclick = joinClose;
+
+async function joinRefresh(full) {
+  try {
+    if (full) {
+      const d = await j("/v1/peers");
+      renderJoinSelf(d.self || {});
+      renderJoinPeers(d.peers || []);
+    } else {
+      const d = await j("/v1/peers/status?force=1");
+      renderJoinPeers(d.peers || []);
+    }
+  } catch (e) {
+    $("#join-self").textContent = "Unavailable: " + e.message;
+  }
+}
+
+function renderJoinSelf(self) {
+  const addr = self.ip ? self.ip + ":" + self.port
+    : "no Tailscale IP detected — peers must reach port " + (self.port || "7777");
+  $("#join-self").textContent = (self.name || "this node") + "  ·  " + addr + "  ·  " + (self.id || "");
+}
+
+function renderJoinPeers(peers) {
+  const box = $("#join-peers");
+  box.replaceChildren();
+  if (!peers.length) {
+    box.append(el("div", { class: "muted" }, "Not joined with any node yet."));
+    return;
+  }
+  for (const p of peers) {
+    const leave = el("button", { class: "ghost sm" }, "Leave");
+    leave.onclick = () => {
+      if (!leave.classList.contains("armed")) {
+        leave.classList.add("armed");
+        leave.textContent = "Sure?";
+        setTimeout(() => { leave.classList.remove("armed"); leave.textContent = "Leave"; }, 3000);
+        return;
+      }
+      api("/v1/peers/" + encodeURIComponent(p.id), { method: "DELETE" })
+        .then(() => { toast("Left " + (p.name || p.id)); joinRefresh(true); })
+        .catch(e => toast(e.message));
+    };
+    const dot = el("span", { class: "dot", title: p.online ? "online" : (p.error || "offline") });
+    dot.style.background = p.online ? "var(--green)" : "var(--gray)";
+    box.append(el("div", { class: "join-peer" },
+      dot,
+      el("span", { class: "join-name", title: p.id + (p.addr ? " · " + p.addr : "") }, p.name || p.id),
+      el("span", { class: "mono muted" }, p.addr || ""),
+      el("span", { class: "join-lat" }, p.online ? p.latency_ms + " ms" : "—"),
+      leave));
+  }
+}
+
+$("#join-mint").onclick = async () => {
+  try {
+    const d = await j("/v1/peers/code", { method: "POST" });
+    $("#join-mycode").textContent = d.code;
+    $("#join-mycode").title = "Single use, valid 10 minutes — type it into the other node's Join dialog";
+  } catch (e) { toast(e.message); }
+};
+
+$("#join-go").onclick = async () => {
+  const addr = $("#join-addr").value.trim(), code = $("#join-code").value.trim();
+  const fb = $("#join-fb");
+  if (!addr || !code) { fb.textContent = "Enter the other node's IP and its join code."; return; }
+  $("#join-go").disabled = true;
+  fb.textContent = "Joining…";
+  try {
+    const d = await j("/v1/peers/join", { method: "POST", json: { addr: addr, code: code } });
+    fb.textContent = "Joined " + ((d.joined && d.joined.name) || addr) + " — syncing.";
+    $("#join-addr").value = ""; $("#join-code").value = "";
+    joinRefresh(true);
+  } catch (e) {
+    fb.textContent = e.message;
+  }
+  $("#join-go").disabled = false;
+};
+
+// ---- app-data sync events -> open app windows ----
+// When the sync engine lands a peer's change on disk, the daemon announces
+// it over SSE; forward it into the matching app's iframe so an open window
+// reloads/merges instead of clobbering the synced-in doc with stale memory.
+let appES = null;
+function appDataSubscribe() {
+  if (appES) appES.close();
+  const tok = tokenInput.value ? "?token=" + encodeURIComponent(tokenInput.value) : "";
+  appES = new EventSource("/v1/apps/events" + tok);
+  appES.onmessage = e => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch (err) { return; }
+    if (!ev || !ev.app) return;
+    // Forward even to a closed window: closeWin only hides the iframe, which
+    // keeps running, so a hidden app must still hear the change or it would
+    // reopen with stale in-memory state and clobber the synced-in doc.
+    const w = document.getElementById("win-app-" + ev.app);
+    const fr = w && w.querySelector(".app-frame");
+    if (fr && fr.contentWindow) {
+      fr.contentWindow.postMessage(
+        { exe: "data-changed", path: ev.path, deleted: !!ev.deleted }, location.origin);
+    }
+  };
+}
+tokenInput.addEventListener("change", () => { if (appES) appDataSubscribe(); });
+
 // ---- boot ----
 winRestore();
+appDataSubscribe();
 renderVMHead();
 loadVMs().catch(e => toast(e.message));
 loadApps().catch(() => {});

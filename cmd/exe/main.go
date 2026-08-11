@@ -28,6 +28,7 @@ import (
 	"exe/internal/agent"
 	"exe/internal/config"
 	"exe/internal/keys"
+	"exe/internal/peer"
 	"exe/internal/proxy"
 	"exe/internal/server"
 	"exe/internal/vmm"
@@ -159,6 +160,27 @@ func cmdServe() error {
 	gate, err := server.NewSSHGate(srv)
 	if err != nil {
 		return err
+	}
+
+	// Node-to-node sync: identity + engine. Failure only disables sync, the
+	// daemon still serves everything else.
+	var eng *peer.Engine
+	if ident, perr := peer.LoadIdentity(stateDir); perr != nil {
+		log.Printf("peer identity: %v — node sync disabled", perr)
+	} else if eng, perr = peer.NewEngine(peer.EngineConfig{
+		StateDir: stateDir,
+		DataDir:  filepath.Join(stateDir, "appdata"),
+		Self:     ident,
+		PortFn:   func() string { return portOf(srv.Config().Listen) },
+		OnApply:  srv.BroadcastAppData,
+		Logf:     log.Printf,
+	}); perr != nil {
+		log.Printf("peer sync: %v — node sync disabled", perr)
+		eng = nil
+	} else {
+		srv.Peers = eng
+		eng.Start()
+		log.Printf("node sync: this node is %s (%s)", ident.ID, ident.Name)
 	}
 
 	if ie, ok := mgr.(vmm.ImageEnsurer); ok {
@@ -340,6 +362,9 @@ func cmdServe() error {
 	shutdown := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		if eng != nil {
+			eng.Stop()
+		}
 		srvMu.Lock()
 		apiSrv.Shutdown(ctx)
 		proxySrv.Shutdown(ctx)
