@@ -131,6 +131,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /v1/config", s.handleConfigPut)
 	mux.HandleFunc("POST /v1/daemon/restart", s.handleDaemonRestart)
 	mux.HandleFunc("GET /v1/tailscale", s.handleTailscale)
+	mux.HandleFunc("GET /v1/hostinfo", s.handleHostInfo)
 	mux.HandleFunc("GET /v1/routes", s.handleRoutes)
 	mux.HandleFunc("DELETE /v1/routes/{host}", s.handleRouteDelete)
 	mux.HandleFunc("GET /v1/logs", s.handleLogs)
@@ -622,6 +623,18 @@ func (s *Server) handleTailscale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detected": false})
+}
+
+// handleHostInfo reports this host's identity for the About window: hostname,
+// LAN IPv4, and the Tailscale IPv4 when on a tailnet.
+func (s *Server) handleHostInfo(w http.ResponseWriter, r *http.Request) {
+	host, _ := os.Hostname()
+	ts := config.TailscaleIP()
+	lan := config.LANIP()
+	if lan == ts {
+		lan = "" // the default route is the tailnet; don't show the same IP twice
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hostname": host, "lan_ip": lan, "tailscale_ip": ts})
 }
 
 func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request) {

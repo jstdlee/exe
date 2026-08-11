@@ -167,6 +167,33 @@ func TailscaleIP() string {
 	return ""
 }
 
+// LANIP returns this host's primary private LAN IPv4 — the address the OS
+// would use for its default route — excluding loopback and the Tailscale
+// CGNAT range. Empty when none is found. The UDP "connect" sends no packets;
+// it only makes the kernel pick the outbound source address.
+func LANIP() string {
+	_, cgnat, _ := net.ParseCIDR("100.64.0.0/10")
+	if conn, err := net.Dial("udp", "8.8.8.8:80"); err == nil {
+		defer conn.Close()
+		if a, ok := conn.LocalAddr().(*net.UDPAddr); ok {
+			if ip4 := a.IP.To4(); ip4 != nil && !ip4.IsLoopback() && !cgnat.Contains(ip4) {
+				return ip4.String()
+			}
+		}
+	}
+	// No usable default route: fall back to the first private IPv4 on any
+	// interface (skips CGNAT via IsPrivate).
+	addrs, _ := net.InterfaceAddrs()
+	for _, a := range addrs {
+		if ipn, ok := a.(*net.IPNet); ok {
+			if ip4 := ipn.IP.To4(); ip4 != nil && ip4.IsPrivate() {
+				return ip4.String()
+			}
+		}
+	}
+	return ""
+}
+
 // SSHEnabled reports whether addr enables the SSH gate; empty, "off",
 // "none" and "disabled" turn it off.
 func SSHEnabled(addr string) bool {

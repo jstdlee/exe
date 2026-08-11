@@ -34,6 +34,9 @@ body {
 a { color: #202a87; text-decoration: underline; }
 .muted { color: #555; font-size: 11px; }
 .mono { font-family: var(--mono); font-size: 11px; }
+/* click-to-copy IP in the About box */
+.ip-copy { color: var(--hl); cursor: pointer; text-decoration: underline; }
+.ip-copy:active { color: #000; }
 
 /* ---------- menu bar ---------- */
 #menubar {
@@ -926,6 +929,7 @@ td .mono, td.mono { user-select: text; }
           One click later, it's live at a real https address.
         </div>
         <div style="margin-top:12px"><a href="https://github.com/livid/exe" target="_blank" rel="noopener">github.com/livid/exe</a></div>
+        <div id="about-host" class="mono" style="margin-top:14px; line-height:1.9"></div>
       </div>
     </div>
   </div>
@@ -1383,7 +1387,7 @@ document.addEventListener("mousedown", e => {
   if (openMenuEl && !e.target.closest(".menu,.dropdown")) menuClose();
 });
 const ACTIONS = {
-  about: () => openWin("#win-about"),
+  about: () => openAboutWin(),
   newvm: () => { openWin("#win-newvm"); $("#c-name").focus(); },
   closewin: closeFrontWindow,
   refresh: () => { Promise.all([loadVMs(), loadApps()]).then(() => toast("Refreshed")).catch(e => toast(e.message)); },
@@ -1400,6 +1404,42 @@ const ACTIONS = {
 document.querySelectorAll(".dd-item").forEach(it => {
   it.addEventListener("click", () => { menuClose(); const a = ACTIONS[it.dataset.act]; if (a) a(); });
 });
+
+// ---- Apple → About: show this host's name and IPs, click an IP to copy ----
+async function openAboutWin() {
+  openWin("#win-about");
+  const box = $("#about-host");
+  box.replaceChildren(el("span", { class: "muted" }, "…"));
+  try {
+    const h = await j("/v1/hostinfo");
+    box.replaceChildren();
+    const row = (label, val, copy) => {
+      const v = copy
+        ? el("span", { class: "ip-copy", title: "Click to copy", onclick: () => copyIP(val) }, val)
+        : document.createTextNode(val);
+      return el("div", {}, el("span", { class: "muted" }, label + " "), v);
+    };
+    if (h.hostname) box.append(row("Host", h.hostname, false));
+    if (h.lan_ip) box.append(row("LAN", h.lan_ip, true));
+    if (h.tailscale_ip) box.append(row("Tailscale", h.tailscale_ip, true));
+    if (h.lan_ip || h.tailscale_ip)
+      box.append(el("div", { class: "muted", style: "margin-top:6px; font-size:10px" }, "click an IP to copy"));
+  } catch (e) {
+    box.replaceChildren(el("span", { class: "muted" }, "host info unavailable"));
+  }
+}
+async function copyIP(ip) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(ip); ok = true; }
+  catch (e) { // plain-http origins have no clipboard API — fall back to execCommand
+    const ta = document.createElement("textarea");
+    ta.value = ip; ta.style.position = "fixed"; ta.style.top = "-1000px";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e2) {}
+    ta.remove();
+  }
+  toast(ok ? "Copied IP " + ip : "Copy failed — select and copy " + ip);
+}
 
 // ---- Help → Agent Skill Guide ----
 function skillSnippet() {
