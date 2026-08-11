@@ -1413,17 +1413,18 @@ async function openAboutWin() {
   try {
     const h = await j("/v1/hostinfo");
     box.replaceChildren();
-    const row = (label, val, copy) => {
-      const v = copy
-        ? el("span", { class: "ip-copy", title: "Click to copy", onclick: () => copyIP(val) }, val)
-        : document.createTextNode(val);
-      return el("div", {}, el("span", { class: "muted" }, label + " "), v);
+    if (h.hostname)
+      box.append(el("div", {}, el("span", { class: "muted" }, "Host "), document.createTextNode(h.hostname)));
+    // LAN and Tailscale IPs share one row, middot-separated; each is click-to-copy
+    const ips = el("div", {});
+    const addIP = (label, ip) => {
+      if (ips.childNodes.length) ips.append(document.createTextNode(" · "));
+      ips.append(el("span", { class: "muted" }, label + " "),
+        el("span", { class: "ip-copy", title: "Click to copy", onclick: () => copyIP(ip) }, ip));
     };
-    if (h.hostname) box.append(row("Host", h.hostname, false));
-    if (h.lan_ip) box.append(row("LAN", h.lan_ip, true));
-    if (h.tailscale_ip) box.append(row("Tailscale", h.tailscale_ip, true));
-    if (h.lan_ip || h.tailscale_ip)
-      box.append(el("div", { class: "muted", style: "margin-top:6px; font-size:10px" }, "click an IP to copy"));
+    if (h.lan_ip) addIP("LAN", h.lan_ip);
+    if (h.tailscale_ip) addIP("Tailscale", h.tailscale_ip);
+    if (ips.childNodes.length) box.append(ips);
   } catch (e) {
     box.replaceChildren(el("span", { class: "muted" }, "host info unavailable"));
   }
