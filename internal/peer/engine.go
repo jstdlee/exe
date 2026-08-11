@@ -3,6 +3,8 @@ package peer
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,11 +16,25 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+// EncodeVector renders a version's vector for the X-Exe-Ver wire header
+// (base64 of its JSON), and ParseVersion reconstructs it on the other side.
+func EncodeVector(v Version) string {
+	b, _ := json.Marshal(v.Vec)
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+func ParseVersion(verB64 string, deleted bool) Version {
+	vec := map[string]int64{}
+	if b, err := base64.StdEncoding.DecodeString(verB64); err == nil {
+		json.Unmarshal(b, &vec)
+	}
+	return Version{Vec: vec, Deleted: deleted}
+}
 
 // EngineConfig wires the engine into the daemon.
 type EngineConfig struct {
@@ -479,8 +495,7 @@ func (e *Engine) pushTo(p *Peer, key string) {
 	if err != nil {
 		return
 	}
-	req.Header.Set(hdrCtr, strconv.FormatInt(v.Ctr, 10))
-	req.Header.Set(hdrOrigin, v.Origin)
+	req.Header.Set(hdrVer, EncodeVector(v))
 	if v.Deleted {
 		req.Header.Set(hdrDeleted, "1")
 	}
@@ -522,10 +537,9 @@ func (e *Engine) fetchFrom(p *Peer, key string, rv Version) {
 	if err != nil || len(body) > 10<<20 {
 		return
 	}
-	ctr, _ := strconv.ParseInt(resp.Header.Get(hdrCtr), 10, 64)
-	got := Version{Ctr: ctr, Origin: resp.Header.Get(hdrOrigin)}
-	if got.Ctr == 0 {
-		got = rv // older peer that doesn't echo version headers
+	got := ParseVersion(resp.Header.Get(hdrVer), false)
+	if len(got.Vec) == 0 {
+		got = rv // response carried no version header; use the manifest one
 	}
 	if _, err := e.ApplyRemote(key, body, got); err != nil {
 		e.cfg.Logf("peer: apply %s from %s: %v", key, p.Name, err)
@@ -548,16 +562,21 @@ func (e *Engine) FileForPeer(app, rel string) ([]byte, Version, error) {
 
 // ---- applying remote changes ------------------------------------------------
 
-// ApplyRemote lands a peer's version of key locally. Outcomes:
+// ApplyRemote lands a peer's version of key locally, using the version
+// vectors to separate causal order from concurrency:
 //
-//	applied — remote was newer, adopted verbatim (LWW or merge-equal)
-//	merged  — item-level merge produced new content; we claim a fresh
-//	          version ordering after both inputs and push it back out
-//	stale   — we already have this or newer; sender will get ours instead
+//	stale       — we already dominate the remote; the sender takes ours
+//	applied     — remote strictly dominated ours; adopted verbatim
+//	merged      — concurrent mergeable docs unioned item-by-item
+//	resolved    — concurrent non-mergeable conflict; deterministic winner
+//	              kept, the loser preserved under ~/.exe/sync-conflicts
+//	kept-live   — concurrent delete vs. our live file; the live file survives
+//	resurrected — concurrent live remote vs. our tombstone; content restored
 //
-// Mergeable documents merge whenever the versions differ at all — even a
-// "stale" remote may carry records we lack, because Lamport order between
-// concurrent edits is a tiebreak, not causality.
+// Every concurrency resolution sets the version to the pointwise max of both
+// inputs (no self-increment), so all nodes converge on the same vector with
+// no ping-pong. A delete only wins when it causally dominates the local
+// version, so a stale tombstone can never delete concurrent real data.
 func (e *Engine) ApplyRemote(key string, body []byte, rv Version) (string, error) {
 	if !validKey(key) {
 		return "", errors.New("invalid sync key")
@@ -568,29 +587,31 @@ func (e *Engine) ApplyRemote(key string, body []byte, rv Version) (string, error
 	local, exists := e.man.Get(key)
 	// Version any on-disk content the manifest hasn't seen yet — data that
 	// predates pairing, or direct edits under ~/.exe/appdata — BEFORE
-	// comparing, so a push that races the first scan can never LWW-clobber
-	// unversioned local work.
+	// comparing, so a push racing the first scan can't clobber unversioned
+	// local work (it becomes a concurrent version, not a dominated one).
 	if fi, err := os.Stat(p); err == nil {
 		if !exists || !e.man.Fingerprint(key, fi.Size(), fi.ModTime().UnixNano()) {
 			local = e.man.Bump(key, e.cfg.Self.ID, false, fi.Size(), fi.ModTime().UnixNano())
 			exists = true
 		}
 	}
-	if exists && rv.Same(local) {
-		return "stale", nil
-	}
-
-	if Mergeable(key) && exists && !rv.Deleted && !local.Deleted {
-		if outcome, err, handled := e.tryMerge(key, p, body, rv, local); handled {
-			return outcome, err
-		}
-	}
-
-	// whole-file last-writer-wins
-	if exists && !rv.Newer(local) {
-		return "stale", nil
-	}
 	app, rel, _ := strings.Cut(key, "/")
+	if !exists {
+		return e.adoptRemote(key, app, rel, p, body, rv)
+	}
+	switch {
+	case local.SameVersion(rv), local.Dominates(rv):
+		return "stale", nil
+	case rv.Dominates(local):
+		return e.adoptRemote(key, app, rel, p, body, rv)
+	default:
+		return e.resolveConcurrent(key, app, rel, p, body, rv, local)
+	}
+}
+
+// adoptRemote takes the remote version verbatim — it dominates ours, or we
+// had nothing: its bytes for a write, or a delete of our copy.
+func (e *Engine) adoptRemote(key, app, rel, p string, body []byte, rv Version) (string, error) {
 	if rv.Deleted {
 		os.Remove(p)
 		e.man.Apply(key, rv, 0, 0)
@@ -606,55 +627,142 @@ func (e *Engine) ApplyRemote(key string, body []byte, rv Version) (string, error
 	return "applied", nil
 }
 
-// tryMerge is the item-level path of ApplyRemote; handled=false falls back
-// to LWW (our own copy is unparseable/missing, so there is nothing to
-// protect). A parseable local is never clobbered by an unparseable remote —
-// e.g. a peer still running the legacy Todo app that PUTs a bare v1 array
-// must not overwrite a merged v2 document.
-func (e *Engine) tryMerge(key, p string, body []byte, rv, local Version) (outcome string, err error, handled bool) {
+// resolveConcurrent handles a genuine conflict — neither version has seen the
+// other. The result carries the pointwise-max vector (dominating both), so
+// every node converges; then we push so peers that resolved differently or
+// not yet catch up.
+func (e *Engine) resolveConcurrent(key, app, rel, p string, body []byte, rv, local Version) (string, error) {
+	max := Version{Vec: MaxVec(local.Vec, rv.Vec)}
+
+	// delete vs. live: the live side always survives, so a stale tombstone
+	// never deletes data the deleting node had not seen.
+	if local.Deleted != rv.Deleted {
+		if rv.Deleted { // we are live, remote deleted -> keep ours
+			fi, _ := os.Stat(p)
+			e.man.Apply(key, max, sizeOf(fi), mtimeOf(fi))
+			go e.pushAll(key)
+			return "kept-live", nil
+		}
+		if err := writeFileAtomic(p, body); err != nil { // we are a tombstone -> restore
+			return "", err
+		}
+		fi, _ := os.Stat(p)
+		e.man.Apply(key, max, fi.Size(), fi.ModTime().UnixNano())
+		e.notifyApply(app, rel, false)
+		go e.pushAll(key)
+		return "resurrected", nil
+	}
+	if local.Deleted { // both tombstones -> converge the vector, stay deleted
+		e.man.Apply(key, Version{Vec: max.Vec, Deleted: true}, 0, 0)
+		return "stale", nil
+	}
+
+	// both live and mergeable: union the records item-by-item
+	if Mergeable(key) {
+		if out, err, handled := e.mergeConcurrent(key, app, rel, p, body, max); handled {
+			return out, err
+		}
+	}
+
+	// non-mergeable (or unparseable) both-live conflict: deterministic winner
+	// by content hash; the loser is preserved under sync-conflicts.
+	localBytes, _ := os.ReadFile(p)
+	if bytes.Equal(localBytes, body) { // same content, just converge the vector
+		fi, _ := os.Stat(p)
+		e.man.Apply(key, max, sizeOf(fi), mtimeOf(fi))
+		go e.pushAll(key)
+		return "stale", nil
+	}
+	if contentHash(body) > contentHash(localBytes) { // remote wins
+		e.backupConflict(app, rel, localBytes)
+		if err := writeFileAtomic(p, body); err != nil {
+			return "", err
+		}
+		fi, _ := os.Stat(p)
+		e.man.Apply(key, max, fi.Size(), fi.ModTime().UnixNano())
+		e.notifyApply(app, rel, false)
+		go e.pushAll(key)
+		return "resolved", nil
+	}
+	e.backupConflict(app, rel, body) // local wins; remote copy preserved
+	fi, _ := os.Stat(p)
+	e.man.Apply(key, max, sizeOf(fi), mtimeOf(fi))
+	go e.pushAll(key)
+	return "resolved", nil
+}
+
+// mergeConcurrent unions two mergeable docs. handled=false when our own copy
+// won't parse, so the caller falls through to the content-hash path; a
+// remote that won't parse (a legacy v1 blob) never erases our v2 doc.
+func (e *Engine) mergeConcurrent(key, app, rel, p string, body []byte, max Version) (string, error, bool) {
 	localBytes, err := os.ReadFile(p)
 	if err != nil {
 		return "", nil, false
 	}
-	canonLocal, lok := CanonicalFile(key, localBytes)
-	if !lok {
-		return "", nil, false // our copy is legacy/garbage; let LWW replace it
+	if _, lok := CanonicalFile(key, localBytes); !lok {
+		return "", nil, false
 	}
-	canonRemote, rok := CanonicalFile(key, body)
-	if !rok {
-		return "stale", nil, true // remote is legacy/garbage; keep ours
+	if _, rok := CanonicalFile(key, body); !rok { // keep our parseable content
+		fi, _ := os.Stat(p)
+		e.man.Apply(key, max, sizeOf(fi), mtimeOf(fi))
+		go e.pushAll(key)
+		return "kept-live", nil, true
 	}
-	merged, ok := MergeFile(key, localBytes, body)
+	mergedBytes, ok := MergeFile(key, localBytes, body)
 	if !ok {
 		return "", nil, false
 	}
-	app, rel, _ := strings.Cut(key, "/")
-	switch {
-	case bytes.Equal(merged, canonLocal) && !rv.Newer(local):
-		// our content already contains everything the remote has
-		return "stale", nil, true
-	case bytes.Equal(merged, canonRemote) && rv.Newer(local):
-		// remote strictly contains us: adopt its bytes and version verbatim
-		if err := writeFileAtomic(p, body); err != nil {
-			return "", err, true
-		}
+	if bytes.Equal(mergedBytes, localBytes) { // nothing new from the remote
 		fi, _ := os.Stat(p)
-		e.man.Apply(key, rv, fi.Size(), fi.ModTime().UnixNano())
-		e.notifyApply(app, rel, false)
-		return "applied", nil, true
-	default:
-		// genuine concurrent edits: write the merged doc and claim a version
-		// ordering after both inputs, then push so every node converges
-		if err := writeFileAtomic(p, merged); err != nil {
-			return "", err, true
-		}
-		ctr := max(local.Ctr, rv.Ctr) + 1
-		fi, _ := os.Stat(p)
-		e.man.Claim(key, e.cfg.Self.ID, ctr, false, fi.Size(), fi.ModTime().UnixNano())
-		e.notifyApply(app, rel, false)
+		e.man.Apply(key, max, sizeOf(fi), mtimeOf(fi))
 		go e.pushAll(key)
-		return "merged", nil, true
+		return "stale", nil, true
 	}
+	if err := writeFileAtomic(p, mergedBytes); err != nil {
+		return "", err, true
+	}
+	fi, _ := os.Stat(p)
+	e.man.Apply(key, max, fi.Size(), fi.ModTime().UnixNano())
+	e.notifyApply(app, rel, false)
+	go e.pushAll(key)
+	return "merged", nil, true
+}
+
+func sizeOf(fi os.FileInfo) int64 {
+	if fi == nil {
+		return 0
+	}
+	return fi.Size()
+}
+
+func mtimeOf(fi os.FileInfo) int64 {
+	if fi == nil {
+		return 0
+	}
+	return fi.ModTime().UnixNano()
+}
+
+func contentHash(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// backupConflict preserves the losing side of a non-mergeable conflict under
+// ~/.exe/sync-conflicts/<app>/, outside appdata so it never itself syncs.
+func (e *Engine) backupConflict(app, rel string, body []byte) {
+	if len(body) == 0 {
+		return
+	}
+	dir := filepath.Join(e.cfg.StateDir, "sync-conflicts", app)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	name := fmt.Sprintf("%s.%d.bak", strings.ReplaceAll(rel, "/", "_"), time.Now().UnixNano())
+	if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+		e.cfg.Logf("peer: conflict backup %s/%s failed: %v", app, rel, err)
+		return
+	}
+	e.cfg.Logf("peer: conflict on %s/%s — losing copy saved to sync-conflicts/%s/%s", app, rel, app, name)
 }
 
 func (e *Engine) notifyApply(app, rel string, deleted bool) {
@@ -734,17 +842,15 @@ func (e *Engine) reconcile(p *Peer) {
 			continue
 		}
 		lv, ok := localFiles[key]
-		switch {
-		case !ok || rv.Newer(lv):
-			e.fetchFrom(p, key, rv)
-		case !rv.Same(lv) && Mergeable(key) && !rv.Deleted && !lv.Deleted:
-			// concurrent versions of a mergeable doc: pull it in so the
-			// merge path can union the records
+		// pull anything we don't have, the peer strictly newer, or a
+		// concurrent version we must resolve
+		if !ok || rv.Dominates(lv) || rv.Concurrent(lv) {
 			e.fetchFrom(p, key, rv)
 		}
 	}
 	for key, lv := range localFiles {
-		if rv, ok := mr.Files[key]; !ok || lv.Newer(rv) {
+		rv, ok := mr.Files[key]
+		if !ok || lv.Dominates(rv) || lv.Concurrent(rv) {
 			e.pushTo(p, key)
 		}
 	}
@@ -752,20 +858,28 @@ func (e *Engine) reconcile(p *Peer) {
 
 func (e *Engine) setStatus(p *Peer, latency time.Duration, err error) {
 	e.statusMu.Lock()
-	defer e.statusMu.Unlock()
 	st := e.status[p.ID]
 	if st == nil {
 		st = &Status{}
 		e.status[p.ID] = st
 	}
+	wasOnline := st.Online
 	st.ID, st.Name, st.Addr = p.ID, p.Name, p.Addr
 	if err != nil {
 		st.Online, st.Error = false, err.Error()
+		e.statusMu.Unlock()
 		return
 	}
 	st.Online, st.Error = true, ""
 	st.LatencyMS = latency.Milliseconds()
 	st.LastSeen = time.Now().UnixMilli()
+	e.statusMu.Unlock()
+	// A peer that just came back (e.g. a laptop woke) shouldn't wait up to a
+	// full reconcile interval — kick an immediate pass. The latency Probe
+	// (every 5s while the Join dialog is open) also drives this transition.
+	if !wasOnline {
+		e.ReconcileNow()
+	}
 }
 
 // ---- status / latency -------------------------------------------------------

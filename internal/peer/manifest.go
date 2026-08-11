@@ -8,28 +8,74 @@ import (
 	"time"
 )
 
-// Version orders writes of one file across nodes: a per-file Lamport
-// counter with the origin node as tiebreak. Browser wall clocks never
-// participate — the daemon stamps versions itself, so skew between
-// machines can't reorder history. MTime is wall time for display only.
+// Version is a per-file version vector: origin node id -> the number of
+// writes that node has made to this file. It captures causality, so two
+// versions can be compared as one-happened-before-the-other or genuinely
+// concurrent. Browser wall clocks never participate — the daemon stamps
+// versions itself. MTime is wall time for display only.
+//
+// A single Lamport counter (the previous design) could not tell a delete
+// that causally followed your edit from a delete concurrent with it, so a
+// stale tombstone with a high counter would silently delete a fresh node's
+// real data. Vectors make that concurrency visible, and the apply logic
+// then lets a live file survive a concurrent delete.
 type Version struct {
-	Ctr     int64  `json:"ctr"`
-	Origin  string `json:"origin"`
-	Deleted bool   `json:"deleted,omitempty"`
-	MTime   int64  `json:"mtime"` // unix ms, informational
+	Vec     map[string]int64 `json:"vec"`
+	Deleted bool             `json:"deleted,omitempty"`
+	MTime   int64            `json:"mtime"` // unix ms, informational
 }
 
-// Newer reports whether v should replace o.
-func (v Version) Newer(o Version) bool {
-	if v.Ctr != o.Ctr {
-		return v.Ctr > o.Ctr
+func cloneVec(v map[string]int64) map[string]int64 {
+	out := make(map[string]int64, len(v))
+	for k, c := range v {
+		if c != 0 {
+			out[k] = c
+		}
 	}
-	return v.Origin > o.Origin
+	return out
 }
 
-// Same reports version identity, ignoring the informational MTime.
-func (v Version) Same(o Version) bool {
-	return v.Ctr == o.Ctr && v.Origin == o.Origin && v.Deleted == o.Deleted
+// vecLeq reports a <= b pointwise (missing entries count as 0).
+func vecLeq(a, b map[string]int64) bool {
+	for o, c := range a {
+		if b[o] < c {
+			return false
+		}
+	}
+	return true
+}
+
+// MaxVec returns the pointwise maximum of two vectors — the version that has
+// seen everything both inputs have seen.
+func MaxVec(a, b map[string]int64) map[string]int64 {
+	out := cloneVec(a)
+	for o, c := range b {
+		if c > out[o] {
+			out[o] = c
+		}
+	}
+	return out
+}
+
+// DominatesOrEqual reports whether v has seen everything o has (v happened
+// at-or-after o).
+func (v Version) DominatesOrEqual(o Version) bool { return vecLeq(o.Vec, v.Vec) }
+
+// Dominates reports whether v strictly supersedes o (v knows everything o
+// knows and strictly more).
+func (v Version) Dominates(o Version) bool {
+	return vecLeq(o.Vec, v.Vec) && !vecLeq(v.Vec, o.Vec)
+}
+
+// Concurrent reports that neither version has seen the other — a genuine
+// conflict that must be merged or resolved rather than ordered.
+func (v Version) Concurrent(o Version) bool {
+	return !vecLeq(o.Vec, v.Vec) && !vecLeq(v.Vec, o.Vec)
+}
+
+// SameVersion reports vector identity (ignoring informational MTime).
+func (v Version) SameVersion(o Version) bool {
+	return vecLeq(v.Vec, o.Vec) && vecLeq(o.Vec, v.Vec) && v.Deleted == o.Deleted
 }
 
 // fileState is a manifest entry: the version plus a filesystem fingerprint
@@ -57,14 +103,36 @@ func LoadManifest(stateDir string) (*Manifest, error) {
 	} else if err != nil {
 		return nil, err
 	}
+	// Load struct accepts both the new vector form and the legacy single-
+	// counter form ({ctr, origin}), migrating the latter to a one-entry
+	// vector so an in-place upgrade keeps its history.
 	var f struct {
-		Files map[string]*fileState `json:"files"`
+		Files map[string]struct {
+			Vec       map[string]int64 `json:"vec"`
+			Ctr       int64            `json:"ctr"`
+			Origin    string           `json:"origin"`
+			Deleted   bool             `json:"deleted"`
+			MTime     int64            `json:"mtime"`
+			Size      int64            `json:"size"`
+			DiskMTime int64            `json:"disk_mtime"`
+		} `json:"files"`
 	}
 	if err := json.Unmarshal(b, &f); err != nil {
 		return nil, err
 	}
-	if f.Files != nil {
-		m.files = f.Files
+	for k, e := range f.Files {
+		vec := e.Vec
+		if len(vec) == 0 && e.Origin != "" && e.Ctr > 0 {
+			vec = map[string]int64{e.Origin: e.Ctr}
+		}
+		if vec == nil {
+			vec = map[string]int64{}
+		}
+		m.files[k] = &fileState{
+			Version:   Version{Vec: vec, Deleted: e.Deleted, MTime: e.MTime},
+			Size:      e.Size,
+			DiskMTime: e.DiskMTime,
+		}
 	}
 	return m, nil
 }
@@ -100,39 +168,29 @@ func (m *Manifest) Get(key string) (Version, bool) {
 	return Version{}, false
 }
 
-// Bump records a local write: the file's counter advances past everything
-// this node has seen for it, with this node as origin.
+// Bump records a genuine local write: this node's own component advances,
+// producing a version that dominates everything previously known for the
+// file.
 func (m *Manifest) Bump(key, origin string, deleted bool, size, diskMTime int64) Version {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	st := m.files[key]
 	if st == nil {
-		st = &fileState{}
+		st = &fileState{Version: Version{Vec: map[string]int64{}}}
 		m.files[key] = st
 	}
-	st.Version = Version{Ctr: st.Ctr + 1, Origin: origin, Deleted: deleted, MTime: time.Now().UnixMilli()}
+	vec := cloneVec(st.Vec)
+	vec[origin]++
+	st.Version = Version{Vec: vec, Deleted: deleted, MTime: time.Now().UnixMilli()}
 	st.Size, st.DiskMTime = size, diskMTime
 	m.saveLocked()
 	return st.Version
 }
 
-// Claim sets an explicit local version — used after a merge, where the
-// result must order after BOTH inputs: ctr = max(local, remote)+1.
-func (m *Manifest) Claim(key, origin string, ctr int64, deleted bool, size, diskMTime int64) Version {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	st := m.files[key]
-	if st == nil {
-		st = &fileState{}
-		m.files[key] = st
-	}
-	st.Version = Version{Ctr: ctr, Origin: origin, Deleted: deleted, MTime: time.Now().UnixMilli()}
-	st.Size, st.DiskMTime = size, diskMTime
-	m.saveLocked()
-	return st.Version
-}
-
-// Apply records a remote version we adopted verbatim.
+// Apply records a version arrived at by adopting or resolving a remote one:
+// the vector is taken verbatim (a conflict resolution passes the pointwise
+// max, which dominates both inputs, so both nodes converge on the same
+// vector without a divergent self-increment).
 func (m *Manifest) Apply(key string, v Version, size, diskMTime int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -141,7 +199,7 @@ func (m *Manifest) Apply(key string, v Version, size, diskMTime int64) {
 		st = &fileState{}
 		m.files[key] = st
 	}
-	st.Version = v
+	st.Version = Version{Vec: cloneVec(v.Vec), Deleted: v.Deleted, MTime: time.Now().UnixMilli()}
 	st.Size, st.DiskMTime = size, diskMTime
 	m.saveLocked()
 }

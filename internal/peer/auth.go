@@ -24,18 +24,21 @@ const (
 	hdrTo      = "X-Exe-To"
 	hdrTS      = "X-Exe-Ts"
 	hdrSig     = "X-Exe-Sig"
-	hdrCtr     = "X-Exe-Ver-Ctr"
-	hdrOrigin  = "X-Exe-Ver-Origin"
+	hdrVer     = "X-Exe-Ver" // base64(json) of the file's version vector
 	hdrDeleted = "X-Exe-Deleted"
 
-	maxSkew = 2 * time.Minute
+	// Personal machines (laptops that sleep) drift; a generous window keeps
+	// sync working across modest skew. Replay is already defanged by the
+	// recipient binding below and by the versioned, idempotent nature of
+	// file writes, so a wider window trades little.
+	maxSkew = 10 * time.Minute
 )
 
 // canonical binds a request to its sender, its intended recipient (to), the
 // timestamp, the body and the version headers — so a signature captured by
 // one peer cannot be replayed against a different daemon.
-func canonical(method, path, to, ts, bodySum, ctr, origin, deleted string) []byte {
-	return []byte(strings.Join([]string{method, path, to, ts, bodySum, ctr, origin, deleted}, "\n"))
+func canonical(method, path, to, ts, bodySum, ver, deleted string) []byte {
+	return []byte(strings.Join([]string{method, path, to, ts, bodySum, ver, deleted}, "\n"))
 }
 
 func bodySum(body []byte) string {
@@ -51,7 +54,7 @@ func SignRequest(id *Identity, r *http.Request, body []byte, to string) {
 	r.Header.Set(hdrTo, to)
 	r.Header.Set(hdrTS, ts)
 	msg := canonical(r.Method, r.URL.Path, to, ts, bodySum(body),
-		r.Header.Get(hdrCtr), r.Header.Get(hdrOrigin), r.Header.Get(hdrDeleted))
+		r.Header.Get(hdrVer), r.Header.Get(hdrDeleted))
 	r.Header.Set(hdrSig, id.Sign(msg))
 }
 
@@ -74,7 +77,7 @@ func VerifyRequest(store *Store, r *http.Request, body []byte, selfID string) (*
 		return nil, errors.New("bad timestamp")
 	}
 	if d := time.Since(time.UnixMilli(ms)); d > maxSkew || d < -maxSkew {
-		return nil, fmt.Errorf("timestamp skew %s exceeds %s (are both clocks synced?)", d.Round(time.Second), maxSkew)
+		return nil, fmt.Errorf("timestamp skew %s exceeds %s (are both clocks synced? check NTP)", d.Round(time.Second), maxSkew)
 	}
 	key, err := p.Key()
 	if err != nil {
@@ -85,7 +88,7 @@ func VerifyRequest(store *Store, r *http.Request, body []byte, selfID string) (*
 		return nil, errors.New("bad signature encoding")
 	}
 	msg := canonical(r.Method, r.URL.Path, selfID, ts, bodySum(body),
-		r.Header.Get(hdrCtr), r.Header.Get(hdrOrigin), r.Header.Get(hdrDeleted))
+		r.Header.Get(hdrVer), r.Header.Get(hdrDeleted))
 	if !ed25519.Verify(key, msg, sig) {
 		return nil, errors.New("bad signature")
 	}

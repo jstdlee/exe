@@ -259,6 +259,39 @@ func TestAppDataSeqDropsOlderContent(t *testing.T) {
 	}
 }
 
+func TestConcurrentDeleteVsLivePreservesData(t *testing.T) {
+	// The hello scenario end-to-end: node B independently deleted a file that
+	// node A has real data for. The versions are concurrent (they were never
+	// paired), so A's data must survive and propagate to B — a stale tombstone
+	// must never delete data the deleting node hadn't seen.
+	a, b := newTestNode(t), newTestNode(t)
+	a.installBundle(t, "Todo")
+	b.installBundle(t, "Todo")
+
+	// A has real todos
+	real := todosDoc("real", "keep me", 100)
+	req, _ := http.NewRequest("PUT", a.ts.URL+"/v1/apps/Todo/data/todos.json", strings.NewReader(real))
+	resp, _ := http.DefaultClient.Do(req)
+	resp.Body.Close()
+
+	// B independently creates then deletes its own todos (a concurrent tombstone)
+	req, _ = http.NewRequest("PUT", b.ts.URL+"/v1/apps/Todo/data/todos.json", strings.NewReader(todosDoc("btmp", "scratch", 50)))
+	resp, _ = http.DefaultClient.Do(req)
+	resp.Body.Close()
+	req, _ = http.NewRequest("DELETE", b.ts.URL+"/v1/apps/Todo/data/todos.json", nil)
+	resp, _ = http.DefaultClient.Do(req)
+	resp.Body.Close()
+
+	pairNodes(t, a, b)
+
+	waitFor(t, "A's real data to survive and reach B", func() bool {
+		ga, ea := os.ReadFile(a.dataFile("Todo", "todos.json"))
+		gb, eb := os.ReadFile(b.dataFile("Todo", "todos.json"))
+		return ea == nil && eb == nil && bytes.Contains(ga, []byte("keep me")) &&
+			bytes.Contains(gb, []byte("keep me")) && bytes.Equal(ga, gb)
+	})
+}
+
 func TestPeerRoutesRejectOutsiders(t *testing.T) {
 	a := newTestNode(t)
 	// unsigned manifest request must 401

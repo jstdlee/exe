@@ -147,17 +147,31 @@ func TestMergeNotesDropsLegacySel(t *testing.T) {
 	}
 }
 
-func TestVersionOrdering(t *testing.T) {
-	a := Version{Ctr: 2, Origin: "aa"}
-	b := Version{Ctr: 1, Origin: "zz"}
-	if !a.Newer(b) || b.Newer(a) {
-		t.Fatal("higher ctr must win")
+func TestVersionVectorOrdering(t *testing.T) {
+	v := func(m map[string]int64) Version { return Version{Vec: m} }
+	base := v(map[string]int64{"a": 1})
+	after := v(map[string]int64{"a": 2}) // a made another edit
+	if !after.Dominates(base) || base.Dominates(after) {
+		t.Fatal("a longer history must dominate")
 	}
-	c := Version{Ctr: 2, Origin: "bb"}
-	if !c.Newer(a) || a.Newer(c) {
-		t.Fatal("origin must break ties one way")
+	if after.Concurrent(base) || base.Concurrent(after) {
+		t.Fatal("causally-ordered versions are not concurrent")
 	}
-	if !a.Same(Version{Ctr: 2, Origin: "aa", MTime: 999}) {
-		t.Fatal("Same must ignore MTime")
+	// independent edits on two nodes: neither has seen the other
+	x := v(map[string]int64{"a": 1})
+	y := v(map[string]int64{"b": 1})
+	if x.Dominates(y) || y.Dominates(x) {
+		t.Fatal("independent edits must not dominate")
+	}
+	if !x.Concurrent(y) || !y.Concurrent(x) {
+		t.Fatal("independent edits must be concurrent")
+	}
+	// the merge of both dominates each
+	m := v(MaxVec(x.Vec, y.Vec))
+	if !m.Dominates(x) || !m.Dominates(y) {
+		t.Fatal("pointwise max must dominate both inputs")
+	}
+	if !after.SameVersion(v(map[string]int64{"a": 2})) {
+		t.Fatal("SameVersion must ignore MTime and match equal vectors")
 	}
 }

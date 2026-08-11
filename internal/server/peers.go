@@ -15,7 +15,6 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"exe/internal/config"
@@ -208,8 +207,7 @@ func (s *Server) handlePeerFileGet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, errors.New("not found"))
 		return
 	}
-	w.Header().Set("X-Exe-Ver-Ctr", strconv.FormatInt(ver.Ctr, 10))
-	w.Header().Set("X-Exe-Ver-Origin", ver.Origin)
+	w.Header().Set("X-Exe-Ver", peer.EncodeVector(ver))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Write(body)
 }
@@ -224,16 +222,10 @@ func (s *Server) handlePeerFilePut(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	ctr, _ := strconv.ParseInt(r.Header.Get("X-Exe-Ver-Ctr"), 10, 64)
-	if ctr <= 0 {
+	rv := peer.ParseVersion(r.Header.Get("X-Exe-Ver"), r.Header.Get("X-Exe-Deleted") == "1")
+	if len(rv.Vec) == 0 {
 		writeErr(w, http.StatusBadRequest, errors.New("missing version"))
 		return
-	}
-	rv := peer.Version{
-		Ctr:     ctr,
-		Origin:  r.Header.Get("X-Exe-Ver-Origin"),
-		Deleted: r.Header.Get("X-Exe-Deleted") == "1",
-		MTime:   time.Now().UnixMilli(),
 	}
 	outcome, err := e.ApplyRemote(app+"/"+rel, body, rv)
 	if err != nil {
