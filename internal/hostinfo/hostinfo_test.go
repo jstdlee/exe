@@ -7,6 +7,7 @@ func TestCombine(t *testing.T) {
 		{"Alienware", "Alienware 18 Area-51", "Alienware 18 Area-51"}, // no vendor dup
 		{"Dell Inc.", "XPS 15 9520", "Dell Inc. XPS 15 9520"},
 		{"NVIDIA", "", "NVIDIA"},
+		{"NVIDIA", "NVIDIA_DGX_Spark", "NVIDIA DGX Spark"}, // DMI underscores -> spaces, no vendor dup
 		{"", "MacBook Pro", "MacBook Pro"},
 		{"To Be Filled By O.E.M.", "System Product Name", ""}, // both placeholders
 	}

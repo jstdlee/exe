@@ -53,10 +53,11 @@ func dropTrailingSKU(s string) string {
 	return s
 }
 
-// clean normalizes whitespace and discards the OEM placeholder strings that
-// firmware ships with when a field was never programmed.
+// clean normalizes whitespace (DMI often uses underscores for spaces, e.g.
+// "NVIDIA_DGX_Spark") and discards the OEM placeholder strings that firmware
+// ships with when a field was never programmed.
 func clean(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
+	s = strings.Join(strings.Fields(strings.ReplaceAll(s, "_", " ")), " ")
 	switch strings.ToLower(s) {
 	case "", "to be filled by o.e.m.", "system product name", "system manufacturer",
 		"system version", "default string", "not specified", "not applicable",
