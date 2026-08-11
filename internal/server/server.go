@@ -23,6 +23,7 @@ import (
 	"exe/internal/agent"
 	"exe/internal/cf"
 	"exe/internal/config"
+	"exe/internal/hostinfo"
 	"exe/internal/peer"
 	"exe/internal/proxy"
 	"exe/internal/sshexec"
@@ -626,7 +627,7 @@ func (s *Server) handleTailscale(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHostInfo reports this host's identity for the About window: hostname,
-// LAN IPv4, and the Tailscale IPv4 when on a tailnet.
+// machine model, LAN IPv4, and the Tailscale IPv4 when on a tailnet.
 func (s *Server) handleHostInfo(w http.ResponseWriter, r *http.Request) {
 	host, _ := os.Hostname()
 	ts := config.TailscaleIP()
@@ -634,7 +635,9 @@ func (s *Server) handleHostInfo(w http.ResponseWriter, r *http.Request) {
 	if lan == ts {
 		lan = "" // the default route is the tailnet; don't show the same IP twice
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"hostname": host, "lan_ip": lan, "tailscale_ip": ts})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"hostname": host, "machine": hostinfo.Model(), "lan_ip": lan, "tailscale_ip": ts,
+	})
 }
 
 func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request) {

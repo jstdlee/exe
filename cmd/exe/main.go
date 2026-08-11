@@ -27,6 +27,7 @@ import (
 
 	"exe/internal/agent"
 	"exe/internal/config"
+	"exe/internal/hostinfo"
 	"exe/internal/keys"
 	"exe/internal/peer"
 	"exe/internal/proxy"
@@ -120,6 +121,7 @@ func cmdServe() error {
 		log.Printf("daemon.log: %v (log will not survive restarts)", err)
 	}
 	stateDir := config.Dir()
+	go hostinfo.Model() // warm the machine-model cache for the About window
 	privKey, pubKey, err := keys.Ensure(stateDir)
 	if err != nil {
 		return err

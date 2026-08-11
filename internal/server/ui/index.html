@@ -922,7 +922,7 @@ td .mono, td.mono { user-select: text; }
       <div class="win-body" style="text-align:center; padding:22px 18px">
         <div id="about-icon"></div>
         <div style="font-weight:bold; font-size:14px; margin-top:8px">exe</div>
-        <div class="muted" style="margin-top:2px">your personal cloud, right on this Mac</div>
+        <div class="muted" id="about-tagline" style="margin-top:2px">your personal cloud, right on this machine</div>
         <div style="margin-top:12px; line-height:1.7">
           Create a fresh Linux machine in seconds.<br>
           Tell the agent what to build — it does the work inside.<br>
@@ -1412,6 +1412,7 @@ async function openAboutWin() {
   box.replaceChildren(el("span", { class: "muted" }, "…"));
   try {
     const h = await j("/v1/hostinfo");
+    $("#about-tagline").textContent = "your personal cloud, right on this " + (h.machine || "machine");
     box.replaceChildren();
     if (h.hostname)
       box.append(el("div", {}, el("span", { class: "muted" }, "Host "), document.createTextNode(h.hostname)));
