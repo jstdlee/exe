@@ -3116,7 +3116,8 @@ function appDataSubscribe() {
     const fr = w && w.querySelector(".app-frame");
     if (fr && fr.contentWindow) {
       fr.contentWindow.postMessage(
-        { exe: "data-changed", path: ev.path, deleted: !!ev.deleted }, location.origin);
+        { exe: "data-changed", path: ev.path, deleted: !!ev.deleted, client: ev.client || "" },
+        location.origin);
     }
   };
 }

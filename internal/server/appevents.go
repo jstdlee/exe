@@ -10,18 +10,22 @@ import (
 )
 
 // appEvents fans app-data change notifications out to connected desktops
-// over SSE (GET /v1/apps/events). The peer sync engine fires one whenever a
-// remote change lands on disk; the desktop forwards it into the matching
-// app's iframe via postMessage so an open window reloads instead of
-// clobbering the synced-in document with its stale in-memory copy.
+// over SSE (GET /v1/apps/events). Both a peer sync landing a remote change
+// and a node's own API write fire one; the desktop forwards it into the
+// matching app's iframe via postMessage so any OTHER open window reloads
+// instead of showing stale data. The event carries the writer's client tag
+// so the window that made the write ignores its own echo (the same scheme
+// the window-layout sync uses), which matters because apps auto-save on
+// every keystroke.
 type appEvents struct {
 	mu   sync.Mutex
 	subs map[chan []byte]struct{}
 }
 
-// BroadcastAppData announces a change to app's stored file rel.
-func (s *Server) BroadcastAppData(app, rel string, deleted bool) {
-	ev, _ := json.Marshal(map[string]any{"app": app, "path": rel, "deleted": deleted})
+// BroadcastAppData announces a change to app's stored file rel. client is the
+// X-Exe-Client tag of the writer (empty for a peer-applied remote change).
+func (s *Server) BroadcastAppData(app, rel string, deleted bool, client string) {
+	ev, _ := json.Marshal(map[string]any{"app": app, "path": rel, "deleted": deleted, "client": client})
 	s.appEv.mu.Lock()
 	defer s.appEv.mu.Unlock()
 	for ch := range s.appEv.subs {

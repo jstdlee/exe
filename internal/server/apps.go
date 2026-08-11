@@ -340,6 +340,7 @@ func (s *Server) handleAppDataPut(w http.ResponseWriter, r *http.Request) {
 		// one already stored, closing the window where two of an app's own
 		// saves race on unload and the older rename lands last.
 		seq, _ := strconv.ParseInt(r.Header.Get("X-Exe-Seq"), 10, 64)
+		wrote := false
 		// The file write and its versioning run under the sync engine's file
 		// lock so a concurrent ApplyRemote can't clobber a write the API is
 		// about to acknowledge (last-writer-loses race).
@@ -350,6 +351,7 @@ func (s *Server) handleAppDataPut(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if handleFilePut(w, r, root, rel) {
+				wrote = true
 				if seq > 0 {
 					s.recordSeq(key, seq)
 				}
@@ -358,6 +360,11 @@ func (s *Server) handleAppDataPut(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		})
+		// Notify any OTHER open window on this node; the writing window
+		// ignores its own echo via the client tag.
+		if wrote {
+			s.BroadcastAppData(app, rel, false, r.Header.Get("X-Exe-Client"))
+		}
 	})
 }
 
@@ -382,11 +389,19 @@ func (s *Server) recordSeq(key string, seq int64) {
 }
 func (s *Server) handleAppDataDelete(w http.ResponseWriter, r *http.Request) {
 	s.withAppData(w, r, func(root string) {
+		app, rel := r.PathValue("app"), r.PathValue("path")
+		deleted := false
 		s.withFileLock(func() {
-			if handleFileDelete(w, root, r.PathValue("path")) && s.Peers != nil {
-				s.Peers.LocalDelete(r.PathValue("app"), r.PathValue("path"))
+			if handleFileDelete(w, root, rel) {
+				deleted = true
+				if s.Peers != nil {
+					s.Peers.LocalDelete(app, rel)
+				}
 			}
 		})
+		if deleted {
+			s.BroadcastAppData(app, rel, true, r.Header.Get("X-Exe-Client"))
+		}
 	})
 }
 

@@ -172,7 +172,8 @@ func cmdServe() error {
 		DataDir:  filepath.Join(stateDir, "appdata"),
 		Self:     ident,
 		PortFn:   func() string { return portOf(srv.Config().Listen) },
-		OnApply:  srv.BroadcastAppData,
+		// a peer-applied remote change has no local writer, so an empty client tag
+		OnApply:  func(app, rel string, deleted bool) { srv.BroadcastAppData(app, rel, deleted, "") },
 		Logf:     log.Printf,
 	}); perr != nil {
 		log.Printf("peer sync: %v — node sync disabled", perr)

@@ -52,7 +52,7 @@ func newTestNode(t *testing.T) *testNode {
 		DataDir:  filepath.Join(dir, "appdata"),
 		Self:     ident,
 		PortFn:   func() string { return *port },
-		OnApply:  srv.BroadcastAppData,
+		OnApply:  func(app, rel string, deleted bool) { srv.BroadcastAppData(app, rel, deleted, "") },
 		Logf:     t.Logf,
 	})
 	if err != nil {
