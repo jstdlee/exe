@@ -216,6 +216,18 @@ a { color: #202a87; text-decoration: underline; }
   font: 12px/1.4 var(--mono); min-height: 0; resize: none; }
 .ed-text:focus { outline: none; }
 
+/* image viewer windows, modeled on PictureViewer: a platinum info bar
+   (colon path, dimensions, size) over the picture at natural size on
+   white — centered when smaller than the window, scrollable when bigger */
+.iv-info { background: var(--g300); border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+  padding: 5px 8px 4px; font-size: 12px;
+  display: flex; justify-content: space-between; gap: 8px; }
+.iv-info span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iv-info .iv-dims { flex: none; }
+.iv-box { background: #fff; height: 300px; display: grid; }
+.iv-box img { display: block; margin: auto; }
+
 /* sunken content frame, inset 4px into the platinum chrome */
 .win-frame { margin: 0 4px 4px; border: 1px solid var(--black); background: var(--g300);
   position: relative;
@@ -616,7 +628,8 @@ body.mobile .tbox.close::before { content: ""; position: absolute; inset: -9px; 
 /* grow-box-resizable content tracks the viewport instead of a saved height */
 body.mobile .win-frame > .app-frame,
 body.mobile .win-frame > .finder-icons,
-body.mobile .win-frame > .ed-text { flex: 1; min-height: 0; height: auto !important; }
+body.mobile .win-frame > .ed-text,
+body.mobile .win-frame > .iv-box { flex: 1; min-height: 0; height: auto !important; }
 body.mobile #log-out { height: 100% !important; }
 body.mobile .term-window .hostterm-box { height: 100%; }
 body.mobile #term-box { height: calc(100dvh - 260px); min-height: 180px; }
@@ -1214,7 +1227,7 @@ function mobileSwapIn(w) {
 // name, carried alongside.
 const MOB_RESTORE = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-trash", "win-detail"]);
 const mobRestorable = id => MOB_RESTORE.has(id)
-  || id.startsWith("win-app-") || id.startsWith("win-ws-") || id.startsWith("win-ed-");
+  || id.startsWith("win-app-") || id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-");
 function mobSave() {
   const vis = [...document.querySelectorAll("#desktop .window")].find(w => !w.hidden && !MOB_DIALOG.has(w.id));
   localStorage.setItem("exe_mobile_winstate", JSON.stringify({
@@ -1234,6 +1247,7 @@ function mobRestore() {
     else if (id.startsWith("win-app-")) openAppWin(id.slice(8));
     else if (id.startsWith("win-ws-")) openFinderWin(decodeURIComponent(id.slice(7)));
     else if (id.startsWith("win-ed-")) openEditorWin(decodeURIComponent(id.slice(7)));
+    else if (id.startsWith("win-iv-")) openImageWin(decodeURIComponent(id.slice(7)));
     else (WIN_OPENERS[id] || (() => openWin("#" + id)))();
   }
 }
@@ -1400,8 +1414,8 @@ function winSnapshot() {
       z: +w.style.zIndex || 0,
       open: !w.hidden, shaded: w.classList.contains("shaded"),
     };
-    // app, Finder, editor, chat and terminal windows are also resizable
-    const g = w.querySelector(".app-frame, .finder-icons, .ed-text, .chat-wrap");
+    // app, Finder, editor, image, chat and terminal windows are also resizable
+    const g = w.querySelector(".app-frame, .finder-icons, .ed-text, .iv-box, .chat-wrap");
     if (g) st[w.id].h = parseInt(g.style.height) || g.offsetHeight || 0;
   });
   st["win-log"].h = parseInt($("#log-out").style.height) || $("#log-out").offsetHeight || 380;
@@ -1422,10 +1436,11 @@ function applyWinState(st) {
         else if (w && !v.open && !w.hidden) closeWin(w);
         continue;
       }
-      if (id.startsWith("win-ws-") || id.startsWith("win-ed-")) {
-        // Finder folder / editor windows: same on-demand pattern as app
-        // windows, with the path recovered from the id
-        const open = id.startsWith("win-ws-") ? openFinderWin : openEditorWin;
+      if (id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-")) {
+        // Finder folder / editor / image windows: same on-demand pattern as
+        // app windows, with the path recovered from the id
+        const open = id.startsWith("win-ws-") ? openFinderWin
+          : id.startsWith("win-ed-") ? openEditorWin : openImageWin;
         if (v.open && !w) open(decodeURIComponent(id.slice(7)));
         else if (w && v.open && w.hidden) openWin(w);
         else if (w && !v.open && !w.hidden) closeWin(w);
@@ -1448,8 +1463,8 @@ function applyWinState(st) {
       w.classList.toggle("shaded", !!v.shaded);
       if (id === "win-log" && v.h) $("#log-out").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-chat" && v.h) $(".chat-wrap").style.height = Math.max(240, Math.min(window.innerHeight - 190, v.h)) + "px";
-      if ((id.startsWith("win-ws-") || id.startsWith("win-ed-")) && v.h) {
-        const g = w.querySelector(".finder-icons, .ed-text");
+      if ((id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-")) && v.h) {
+        const g = w.querySelector(".finder-icons, .ed-text, .iv-box");
         if (g) g.style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       }
       if (id.startsWith("win-app-") && v.h) {
@@ -1900,6 +1915,7 @@ async function loadFinder(w) {
 }
 function openEntry(en, rel, w) {
   if (en.dir) openFinderWin(rel, w);
+  else if (isImageFile(en.name)) openImageWin(rel, w);
   else if (isTextFile(en.name) && en.size < 1 << 20) openEditorWin(rel, w);
   else openWorkspaceFile(rel);
 }
@@ -2052,6 +2068,75 @@ async function loadEditor(w) {
     const en = data.entries.find(x => x.name === path.split("/").pop());
     if (en) w.querySelector(".ed-saved").textContent = "Last Saved: " + edFmtDate(en.modified);
   } catch (e) {}
+}
+// ---- image viewer windows, modeled on PictureViewer ----
+// Pictures double-clicked in a Finder window open here instead of a browser
+// tab, one spatial window per file (id win-iv-<encoded path>, geometry in
+// the snapshot). SVG stays with the text editor: it's markup.
+const IMG_EXT = new Set("png jpg jpeg gif webp bmp ico avif".split(" "));
+function isImageFile(name) {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && IMG_EXT.has(name.slice(dot + 1).toLowerCase());
+}
+function openImageWin(path, fromWin) {
+  const id = "win-iv-" + encodeURIComponent(path);
+  let w = document.getElementById(id);
+  if (!w) {
+    w = el("div", { class: "window grow image-window", id });
+    if (fromWin) {
+      w.style.left = (parseInt(fromWin.style.left) || 130) + 24 + "px";
+      w.style.top = (parseInt(fromWin.style.top) || 60) + 24 + "px";
+      // a user-opened window sizes itself to the picture once it loads;
+      // snapshot restores (no fromWin) keep their saved geometry instead
+      w.dataset.fit = "1";
+    } else {
+      const n = document.querySelectorAll("#desktop .image-window").length;
+      w.style.left = (170 + n * 26) + "px";
+      w.style.top = (90 + n * 22) + "px";
+    }
+    w.style.width = "520px";
+    w.innerHTML = `<div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
+      <div class="title"></div>
+      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="win-frame">
+        <div class="iv-info"><span class="iv-path"></span><span class="iv-dims">…</span></div>
+        <div class="iv-box doc-scroll"></div>
+        ${GROW_TILE}
+      </div>`;
+    w.querySelector(".title").textContent = path.split("/").pop();
+    w.querySelector(".iv-path").textContent = "Workspace :" + path.split("/").join(" :");
+    w.dataset.path = path;
+    wireGrow(w.querySelector(".grow-box"), w, w.querySelector(".iv-box"), 240, { minH: 120 });
+    $("#desktop").append(w);
+    initWindow(w);
+  }
+  openWin(w);
+  loadImage(w);
+}
+async function loadImage(w) {
+  const path = w.dataset.path, box = w.querySelector(".iv-box"), dims = w.querySelector(".iv-dims");
+  try {
+    const r = await api(wsUrl(path));
+    const blob = await r.blob();
+    if (w._imgURL) URL.revokeObjectURL(w._imgURL); // reopen refetches — drop the old blob
+    w._imgURL = URL.createObjectURL(blob);
+    const img = el("img", { alt: path.split("/").pop() });
+    img.onload = () => {
+      dims.textContent = `${img.naturalWidth} × ${img.naturalHeight} · ${fmtBytes(blob.size)}`;
+      if (w.dataset.fit) {
+        // PictureViewer opened windows at picture size: clamp to the
+        // viewport; 25/15 cover the frame inset and always-on scrollbars
+        delete w.dataset.fit;
+        if (!IS_MOBILE) {
+          w.style.width = Math.max(240, Math.min(window.innerWidth - 80, img.naturalWidth + 25)) + "px";
+          box.style.height = Math.max(120, Math.min(window.innerHeight - 200, img.naturalHeight + 15)) + "px";
+          winSave();
+        }
+      }
+    };
+    img.src = w._imgURL;
+    box.replaceChildren(img);
+  } catch (e) { dims.textContent = e.message; }
 }
 $("#desktop").addEventListener("mousedown", e => {
   if (e.target === $("#desktop") || e.target === $("#icons")) {
