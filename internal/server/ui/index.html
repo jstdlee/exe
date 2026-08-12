@@ -279,7 +279,7 @@ button.btn, button.ghost {
 }
 /* OS 9 draws the black ring only around a dialog's default button; window
    content buttons are plain (Extensions Manager's Duplicate Set… has none) */
-.window.modal .btn, #win-newvm .btn, #win-token .btn {
+.window.modal .btn, #win-newvm .btn, #win-token .btn, #win-upload .btn {
   outline: 2px solid var(--black); outline-offset: 1px; border-radius: 4px; }
 button.btn:active, button.ghost:active {
   background: #666; color: #fff;
@@ -666,6 +666,7 @@ body.mobile th.sorted {
 </div>
 <div class="dropdown" id="dd-file" hidden>
   <div class="dd-item" data-act="newvm">New VM…</div>
+  <div class="dd-item" data-act="upload">Upload to Workspace…</div>
   <div class="dd-item" data-act="closewin">Close Window</div>
   <div class="dd-sep"></div>
   <div class="dd-item" data-act="refresh">Refresh</div>
@@ -949,6 +950,28 @@ body.mobile th.sorted {
     </div>
   </div>
 
+  <!-- Upload to Workspace dialog -->
+  <div class="window" id="win-upload" style="left:240px; top:130px; width:330px;" hidden>
+    <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
+      <div class="title">Upload to Workspace</div>
+      <div class="stripe"></div></div>
+    <div class="win-frame">
+      <div class="win-body">
+        <div class="muted" style="margin-bottom:8px">Lands in the Workspace folder shared with apps and VMs. 10 MB max.</div>
+        <div class="row" style="flex-wrap:nowrap">
+          <button class="ghost" id="up-choose">Choose File…</button>
+          <span class="muted" id="up-name" style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">no file selected</span>
+        </div>
+        <input id="up-file" type="file" hidden>
+        <div class="muted" id="up-status" style="min-height:16px"></div>
+        <div class="row" style="justify-content:flex-end; gap:11px; margin:10px 0 2px">
+          <button class="ghost" id="up-cancel">Cancel</button>
+          <button class="btn" id="up-go">Upload</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- API token dialog -->
   <div class="window" id="win-token" style="left:260px; top:150px; width:330px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
@@ -1227,6 +1250,11 @@ function closeWin(w) {
   w.hidden = true;
   if (w.id === "win-detail") { closeTerm(); flushNotes(); currentVM = null; }
   if (w.id === "win-newvm") $("#c-status").textContent = "";
+  if (w.id === "win-upload") {
+    $("#up-status").textContent = "";
+    $("#up-file").value = "";
+    $("#up-name").textContent = "no file selected";
+  }
   if (w.id === "win-log") stopLogStream();
   // a closed Terminal is gone for good: end the shell and drop the window
   if (w.classList.contains("term-window")) { w._teardown(); w.remove(); }
@@ -1522,6 +1550,7 @@ document.addEventListener("mousedown", e => {
 const ACTIONS = {
   about: () => openAboutWin(),
   newvm: () => { openWin("#win-newvm"); $("#c-name").focus(); },
+  upload: () => openWin("#win-upload"),
   closewin: closeFrontWindow,
   refresh: () => { Promise.all([loadVMs(), loadApps()]).then(() => toast("Refreshed")).catch(e => toast(e.message)); },
   winvms: () => openWin("#win-vms"),
@@ -2177,6 +2206,30 @@ $("#c-go").onclick = async () => {
   $("#c-go").disabled = false;
   $("#c-status").textContent = "";
   loadVMs();
+};
+
+// ---- File → Upload to Workspace ----
+$("#up-choose").onclick = () => $("#up-file").click();
+$("#up-file").onchange = () => {
+  const f = $("#up-file").files[0];
+  $("#up-name").textContent = f ? f.name + " (" + fmtBytes(f.size) + ")" : "no file selected";
+};
+$("#up-cancel").onclick = () => closeWin($("#win-upload"));
+$("#up-go").onclick = async () => {
+  const f = $("#up-file").files[0];
+  if (!f) { toast("choose a file first"); return; }
+  if (f.size > 10 << 20) { toast("file exceeds 10 MB"); return; }
+  $("#up-go").disabled = true;
+  $("#up-status").textContent = "uploading…";
+  try {
+    await api(wsUrl(f.name), { method: "PUT", body: f });
+    toast("Uploaded " + f.name);
+    closeWin($("#win-upload"));
+    const ws = document.getElementById("win-ws-"); // root Workspace window, if open
+    if (ws && !ws.hidden) loadFinder(ws);
+  } catch (e) { toast(e.message); }
+  $("#up-go").disabled = false;
+  $("#up-status").textContent = "";
 };
 
 // ---- vm detail ----
