@@ -73,6 +73,7 @@ func (s *Server) handlePeersJoin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err)
 		return
 	}
+	s.PostNews("node", "Node joined", "Now syncing with "+p.Name+".")
 	writeJSON(w, http.StatusOK, map[string]any{"joined": p})
 }
 
@@ -81,10 +82,19 @@ func (s *Server) handlePeersDelete(w http.ResponseWriter, r *http.Request) {
 	if e == nil {
 		return
 	}
-	if err := e.Leave(r.PathValue("id")); err != nil {
+	id := r.PathValue("id")
+	name := id
+	for _, p := range e.ListPeers() {
+		if p.ID == id {
+			name = p.Name
+			break
+		}
+	}
+	if err := e.Leave(id); err != nil {
 		writeErr(w, http.StatusNotFound, err)
 		return
 	}
+	s.PostNews("node", "Node left", "No longer syncing with "+name+".")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "left"})
 }
 
@@ -117,6 +127,7 @@ func (s *Server) handlePeerPair(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, err)
 		return
 	}
+	s.PostNews("node", "Node joined", "Now syncing with "+req.Name+".")
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -175,6 +186,7 @@ func (s *Server) handlePeerUnpair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e.Unpair(p.ID)
+	s.PostNews("node", "Node left", "No longer syncing with "+p.Name+".")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "unpaired"})
 }
 

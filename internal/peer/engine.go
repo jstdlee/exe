@@ -55,7 +55,10 @@ type EngineConfig struct {
 	// OnApply fires after a remote change lands on disk so the server can
 	// tell open app windows to reload (SSE -> desktop -> iframe).
 	OnApply func(app, rel string, deleted bool)
-	Logf    func(format string, args ...any)
+	// OnConflict fires on its own goroutine after a concurrent-edit conflict
+	// was resolved and the losing copy preserved under sync-conflicts.
+	OnConflict func(app, rel string)
+	Logf       func(format string, args ...any)
 }
 
 // Engine syncs ~/.exe/appdata and ~/.exe/workspace with every enrolled peer:
@@ -856,6 +859,11 @@ func (e *Engine) backupConflict(app, rel string, body []byte) {
 		return
 	}
 	e.cfg.Logf("peer: conflict on %s/%s — losing copy saved to sync-conflicts/%s/%s", app, rel, app, name)
+	if e.cfg.OnConflict != nil {
+		// own goroutine: the hook may write app data (the Newsfeed journal),
+		// which takes the file lock this apply path already holds
+		go e.cfg.OnConflict(app, rel)
+	}
 }
 
 func (e *Engine) notifyApply(app, rel string, deleted bool) {

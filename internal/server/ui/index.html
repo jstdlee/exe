@@ -386,11 +386,20 @@ pre.out { background: #10120f; color: #cfe3cf; border: 1px solid var(--black); p
    (.grow + .grow-box); the bottom strip is a plain status area like
    classic IE/Netscape. 15px total (border-box) so the strip's border-top
    is the same line as the grow box tile's top separator row. */
-#win-log .statusbar, #win-chat .statusbar, .term-window .statusbar { height: 15px; padding: 0 25px 0 8px; }
+#win-log .statusbar, #win-chat .statusbar, #win-news .statusbar, .term-window .statusbar { height: 15px; padding: 0 25px 0 8px; }
 /* edge to edge in the frame: the win-frame draws the outline, the pre
    keeps only its inner text padding, and only a vertical bar renders */
 #log-out { margin: 0; height: 380px; max-height: none; border: 0; box-shadow: none;
   overflow-y: scroll; overflow-x: hidden; }
+/* Newsfeed: one entry per event on paper, split by single hairlines (only
+   between items — the statusbar draws the bottom frame line); the small
+   gray last line is the byline: which node posted it, and when */
+#news-list { height: 380px; overflow-y: scroll; overflow-x: hidden; }
+.news-item { padding: 6px 10px 5px; }
+.news-item + .news-item { border-top: 1px solid var(--g500); }
+.news-title { font-weight: bold; }
+.news-body { margin-top: 1px; white-space: pre-wrap; overflow-wrap: break-word; user-select: text; }
+.news-meta { margin-top: 3px; font-size: 10px; color: #777; }
 /* sunken white list, like a Finder list view */
 .listbox { background: #fff; border: 1px solid var(--black); max-height: 240px; overflow: auto;
   box-shadow: -1px -1px 0 var(--g600), -1px 0 0 var(--g600), 0 -1px 0 var(--g600),
@@ -632,6 +641,7 @@ body.mobile .win-frame > .finder-icons,
 body.mobile .win-frame > .ed-text,
 body.mobile .win-frame > .iv-box { flex: 1; min-height: 0; height: auto !important; }
 body.mobile #log-out { height: 100% !important; }
+body.mobile #news-list { height: 100% !important; }
 body.mobile .term-window .hostterm-box { height: 100%; }
 body.mobile #term-box { height: calc(100dvh - 260px); min-height: 180px; }
 /* chat: sessions become a strip on top, messages fill the rest */
@@ -688,6 +698,7 @@ body.mobile th.sorted {
 <div class="dropdown" id="dd-windows" hidden>
   <div class="dd-item" data-act="winvms">Virtual Machines</div>
   <div class="dd-item" data-act="winchat" id="dd-chat-item" hidden>Chat</div>
+  <div class="dd-item" data-act="winnews">Newsfeed</div>
   <div class="dd-item" data-act="winconfig">Configuration</div>
   <div class="dd-item" data-act="winlog">Daemon Log</div>
 </div>
@@ -707,6 +718,18 @@ body.mobile th.sorted {
 <div id="desktop">
   <div id="icons"></div>
   <div id="sys-icons">
+    <!-- newspaper in the same pixel style: masthead, photo block, text
+         columns — notable events from every joined node land here -->
+    <div class="dicon" id="news-icon" title="Newsfeed — notable events from every joined node">
+      <svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
+        <rect x="3.5" y="4.5" width="25" height="23" fill="#DAD5CA" stroke="#000"/>
+        <rect x="4.5" y="5.5" width="23" height="2" fill="#EDEAE2"/>
+        <rect x="6" y="8" width="20" height="3" fill="#55524B"/>
+        <rect x="6" y="13" width="8" height="6" fill="#8B867B"/>
+        <path d="M16 13h10M16 15h10M16 17h10M6 21h20M6 23h20M6 25h14" stroke="#55524B"/>
+      </svg>
+      <span class="lbl">Newsfeed</span>
+    </div>
     <!-- speech balloon in the same pixel style as the Mac icons; hidden until
          Ollama is detected, like the Windows → Chat menu item -->
     <div class="dicon" id="chat-icon" title="Chat — double-click to talk to your VM cloud" hidden>
@@ -887,6 +910,27 @@ body.mobile th.sorted {
            which in a real window belongs to the frame bevel (the .grow
            corner rules merge the face into the chrome there). -->
       <svg id="log-grow" class="grow-box" width="15" height="15" viewBox="0 0 15 15" shape-rendering="crispEdges">
+        <rect width="15" height="15" fill="#ccc"/>
+        <path fill="#000" d="M0 0h15v1H0zM0 1h1v14H0z"/>
+        <path fill="#fff" d="M1 1h14v1H1zM1 2h1v13H1z"/>
+        <path fill="#fff" d="M9 4h2v1H9zM8 5h1v1H8zM7 6h1v1H7zM6 7h1v1H6zM5 8h1v1H5zM4 9h1v1H4zM11 6h2v1h-2zM10 7h1v1h-1zM9 8h1v1H9zM8 9h1v1H8zM7 10h1v1H7zM6 11h1v1H6zM13 8h2v1h-2zM12 9h1v1h-1zM11 10h1v1h-1zM10 11h1v1h-1zM9 12h1v1H9zM8 13h1v1H8z"/>
+        <path fill="#777" d="M10 5h1v1h-1zM9 6h1v1H9zM8 7h1v1H8zM7 8h1v1H7zM6 9h1v1H6zM5 10h1v1H5zM12 7h1v1h-1zM11 8h1v1h-1zM10 9h1v1h-1zM9 10h1v1H9zM8 11h1v1H8zM7 12h1v1H7zM14 9h1v1h-1zM13 10h1v1h-1zM12 11h1v1h-1zM11 12h1v1h-1zM10 13h1v1h-1zM9 14h1v1H9z"/>
+        <path fill="#aaa" d="M4 10h1v1H4zM6 12h1v1H6zM8 14h1v1H8z"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Newsfeed -->
+  <div class="window grow" id="win-news" style="left:170px; top:70px; width:430px;" hidden>
+    <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
+      <div class="title">Newsfeed</div>
+      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+    <div class="win-frame paper">
+      <div class="win-body" style="padding:0">
+        <div id="news-list"></div>
+      </div>
+      <div class="statusbar"><span id="news-count">…</span></div>
+      <svg id="news-grow" class="grow-box" width="15" height="15" viewBox="0 0 15 15" shape-rendering="crispEdges">
         <rect width="15" height="15" fill="#ccc"/>
         <path fill="#000" d="M0 0h15v1H0zM0 1h1v14H0z"/>
         <path fill="#fff" d="M1 1h14v1H1zM1 2h1v13H1z"/>
@@ -1227,7 +1271,7 @@ function mobileSwapIn(w) {
 // local only, never mixed into the shared desktop layout snapshot. Live
 // terminals and transient dialogs don't restore; win-detail needs the VM
 // name, carried alongside.
-const MOB_RESTORE = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-trash", "win-detail"]);
+const MOB_RESTORE = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-news", "win-trash", "win-detail"]);
 const mobRestorable = id => MOB_RESTORE.has(id)
   || id.startsWith("win-app-") || id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-");
 function mobSave() {
@@ -1378,6 +1422,7 @@ function wireGrow(grip, w, body, minW, opts = {}) {
   });
 }
 wireGrow($("#chat-grow"), $("#win-chat"), $(".chat-wrap"), 560, { minH: 240, stickEl: $("#chat-msgs") });
+wireGrow($("#news-grow"), $("#win-news"), $("#news-list"), 320, { minH: 160 });
 
 // overflow-y:auto scrollers whose frame line must stay single: the border
 // yields to the scrollbar's own black edge whenever the bar is present
@@ -1400,8 +1445,8 @@ autoVBar($("#chat-sessions"));
 const WIN_CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
 // windows whose open/closed state is restored and synced; win-detail needs a
 // current VM and the dialogs are transient, so those only keep geometry
-const WIN_SYNC_OPEN = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-trash"]);
-const WIN_OPENERS = { "win-log": () => openLogWin(), "win-chat": () => openChatWin(), "win-config": () => openConfigWin() };
+const WIN_SYNC_OPEN = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-news", "win-trash"]);
+const WIN_OPENERS = { "win-log": () => openLogWin(), "win-chat": () => openChatWin(), "win-news": () => openNewsWin(), "win-config": () => openConfigWin() };
 let winApplying = false; // applying a stored/remote snapshot — don't echo it back
 let winDragging = null;  // window under the local pointer — remote moves lose
 let winRev = 0;
@@ -1421,6 +1466,7 @@ function winSnapshot() {
     if (g) st[w.id].h = parseInt(g.style.height) || g.offsetHeight || 0;
   });
   st["win-log"].h = parseInt($("#log-out").style.height) || $("#log-out").offsetHeight || 380;
+  st["win-news"].h = parseInt($("#news-list").style.height) || $("#news-list").offsetHeight || 380;
   return st;
 }
 function applyWinState(st) {
@@ -1464,6 +1510,7 @@ function applyWinState(st) {
       if (v.z) { w.style.zIndex = v.z; maxZ = Math.max(maxZ, v.z); }
       w.classList.toggle("shaded", !!v.shaded);
       if (id === "win-log" && v.h) $("#log-out").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
+      if (id === "win-news" && v.h) $("#news-list").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-chat" && v.h) $(".chat-wrap").style.height = Math.max(240, Math.min(window.innerHeight - 190, v.h)) + "px";
       if ((id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-")) && v.h) {
         const g = w.querySelector(".finder-icons, .ed-text, .iv-box");
@@ -1572,6 +1619,7 @@ const ACTIONS = {
   refresh: () => { Promise.all([loadVMs(), loadApps()]).then(() => toast("Refreshed")).catch(e => toast(e.message)); },
   winvms: () => openWin("#win-vms"),
   winchat: () => openChatWin(),
+  winnews: () => openNewsWin(),
   winconfig: openConfigWin,
   winlog: openLogWin,
   cfstatus: () => sumOpen(),
@@ -2157,6 +2205,10 @@ const chatIcon = $("#chat-icon");
 chatIcon.addEventListener("click", e => { e.stopPropagation(); chatIcon.classList.add("sel"); selectedIcon = null; });
 tapOpen(chatIcon, () => openChatWin());
 document.addEventListener("mousedown", e => { if (!e.target.closest("#chat-icon")) chatIcon.classList.remove("sel"); });
+const newsIcon = $("#news-icon");
+newsIcon.addEventListener("click", e => { e.stopPropagation(); newsIcon.classList.add("sel"); selectedIcon = null; });
+tapOpen(newsIcon, () => openNewsWin());
+document.addEventListener("mousedown", e => { if (!e.target.closest("#news-icon")) newsIcon.classList.remove("sel"); });
 
 // OS 9 scrollbar end-merge: thumbs render with the leading border merged into
 // the frame (the unscrolled default); flag elements once they scroll away so
@@ -2745,6 +2797,33 @@ window.addEventListener("pagehide", flushNotes);
 // ---- chat ----
 let chatCur = null, chatBusy = false;
 const chatMsgs = $("#chat-msgs"), chatInput = $("#chat-input");
+
+// ---- newsfeed ----
+// The merged cross-node event feed (newsfeed.go): every node appends to its
+// own synced journal and GET /v1/newsfeed folds them together, so the same
+// timeline shows on every desk. The byline under each item says which node
+// posted it and when.
+function openNewsWin() {
+  openWin("#win-news");
+  loadNews().catch(e => toast(e.message));
+}
+async function loadNews() {
+  const d = await j("/v1/newsfeed");
+  const items = d.items || [];
+  const list = $("#news-list");
+  list.replaceChildren();
+  if (!items.length) {
+    list.append(el("div", { class: "muted", style: "padding:10px" },
+      "No news yet — VM launches, sync conflicts and node changes from every joined node land here."));
+  }
+  for (const it of items) {
+    const row = el("div", { class: "news-item" }, el("div", { class: "news-title" }, it.title || ""));
+    if (it.body) row.append(el("div", { class: "news-body" }, it.body));
+    row.append(el("div", { class: "news-meta" }, (it.host || "?") + " · " + new Date(it.time).toLocaleString()));
+    list.append(row);
+  }
+  $("#news-count").textContent = items.length === 1 ? "1 item" : items.length + " items";
+}
 
 // the Chat window only appears once the Ollama endpoint answers /api/version
 async function chatDetect(force) {
@@ -3432,6 +3511,8 @@ function appDataSubscribe() {
     try { ev = JSON.parse(e.data); } catch (err) { return; }
     if (!ev || !ev.app) return;
     if (ev.app === "@workspace") { workspaceChanged(ev.path, !!ev.deleted, ev.client || ""); return; }
+    // a feed item landed (posted here or synced in) — refresh an open window
+    if (ev.app === "Newsfeed") { if (!$("#win-news").hidden) loadNews().catch(() => {}); return; }
     // Forward even to a closed window: closeWin only hides the iframe, which
     // keeps running, so a hidden app must still hear the change or it would
     // reopen with stale in-memory state and clobber the synced-in doc.

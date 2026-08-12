@@ -79,6 +79,10 @@ type Server struct {
 	// last — e.g. two of an app's own saves racing on window close.
 	appSeqMu sync.Mutex
 	appSeq   map[string]int64
+
+	// One-writer guard for this node's Newsfeed journal (see newsfeed.go).
+	newsMu  sync.Mutex
+	newsSeq int64
 }
 
 func New(cfg *config.Config, vms vmm.Manager, px *proxy.Proxy, keyPath, stateDir string) *Server {
@@ -121,6 +125,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /v1/workspace/{path...}", s.handleWorkspacePut)
 	mux.HandleFunc("POST /v1/workspace/{path...}", s.handleWorkspaceMove)
 	mux.HandleFunc("DELETE /v1/workspace/{path...}", s.handleWorkspaceDelete)
+	mux.HandleFunc("GET /v1/newsfeed", s.handleNewsfeedGet)
+	mux.HandleFunc("POST /v1/newsfeed", s.handleNewsfeedPost)
 	mux.HandleFunc("GET /v1/chat/status", s.handleChatStatus)
 	mux.HandleFunc("GET /v1/chat/sessions", s.handleChatSessions)
 	mux.HandleFunc("GET /v1/chat/sessions/{id}", s.handleChatSession)
@@ -239,6 +245,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errCode(err), err)
 		return
 	}
+	s.PostNews("vm", "VM created", vmNewsLine(spec))
 	writeJSON(w, http.StatusCreated, info)
 }
 
@@ -273,6 +280,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errCode(err), err)
 		return
 	}
+	s.PostNews("vm", "VM deleted", r.PathValue("name")+" and its disk were removed.")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 

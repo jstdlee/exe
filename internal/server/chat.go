@@ -299,7 +299,11 @@ func (s *Server) execChatTool(ctx context.Context, name string, args map[string]
 	case "create_vm":
 		spec := vmm.Spec{Name: str("name"), CPUs: num("cpus"), MemoryMB: num("memory_mb"), DiskGB: num("disk_gb")}
 		s.fillSpec(&spec)
-		return asJSON(s.VMs.Create(tctx, spec))
+		info, err := s.VMs.Create(tctx, spec)
+		if err == nil {
+			s.PostNews("vm", "VM created", vmNewsLine(spec))
+		}
+		return asJSON(info, err)
 	case "start_vm":
 		return asJSON(s.VMs.Start(tctx, str("name")))
 	case "stop_vm":
@@ -311,6 +315,7 @@ func (s *Server) execChatTool(ctx context.Context, name string, args map[string]
 		if err := s.VMs.Delete(tctx, str("name")); err != nil {
 			return "error: " + err.Error()
 		}
+		s.PostNews("vm", "VM deleted", str("name")+" and its disk were removed.")
 		return "deleted"
 	case "bash":
 		t, err := target(tctx)

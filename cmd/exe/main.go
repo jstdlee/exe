@@ -177,7 +177,15 @@ func cmdServe() error {
 		PortFn:       func() string { return portOf(srv.Config().Listen) },
 		// a peer-applied remote change has no local writer, so an empty client tag
 		OnApply: func(app, rel string, deleted bool) { srv.BroadcastAppData(app, rel, deleted, "") },
-		Logf:    log.Printf,
+		OnConflict: func(app, rel string) {
+			where := app + "/" + rel
+			if app == peer.WorkspaceNS {
+				where = "Workspace/" + rel
+			}
+			srv.PostNews("sync", "Sync conflict",
+				where+" was edited on two nodes at once — this node kept the winning copy and saved the other under sync-conflicts.")
+		},
+		Logf: log.Printf,
 	}); perr != nil {
 		log.Printf("peer sync: %v — node sync disabled", perr)
 		eng = nil
