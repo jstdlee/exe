@@ -1316,6 +1316,10 @@ function mobRestore() {
   let st = null;
   try { st = JSON.parse(localStorage.getItem("exe_mobile_winstate") || "null"); } catch (e) {}
   if (!st) { openWin("#win-vms"); return; } // first visit — no state yet
+  // #win-vms ships visible in the markup; hide it before the replay so a
+  // state where the user closed it stays closed, and it can't sneak into
+  // the rebuilt stack under whatever window opens on top of it
+  $("#win-vms").hidden = true;
   for (const id of [...(st.stack || []), st.top].filter(Boolean).filter(mobRestorable)) {
     if (id === "win-detail") { if (st.vm) openVM(st.vm); }
     else if (id.startsWith("win-app-")) openAppWin(id.slice(8));
