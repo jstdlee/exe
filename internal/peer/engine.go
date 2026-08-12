@@ -36,22 +36,32 @@ func ParseVersion(verB64 string, deleted bool) Version {
 	return Version{Vec: vec, Deleted: deleted}
 }
 
+// WorkspaceNS is the manifest namespace for the shared workspace tree.
+// App names can't start with "@" (validAppName), so workspace keys
+// ("@workspace/rel") can never collide with app-data keys ("App/rel").
+const WorkspaceNS = "@workspace"
+
+// maxSyncFile caps what sync will carry per file — the same 10 MB the file
+// APIs enforce, so a scan never pushes something the receiving side rejects.
+const maxSyncFile = 10 << 20
+
 // EngineConfig wires the engine into the daemon.
 type EngineConfig struct {
-	StateDir string
-	DataDir  string // ~/.exe/appdata — the tree being synced
-	Self     *Identity
-	PortFn   func() string // our API port; peers dial <tailscale-ip>:<port>
+	StateDir     string
+	DataDir      string // ~/.exe/appdata — the app-data tree being synced
+	WorkspaceDir string // ~/.exe/workspace — synced under WorkspaceNS; empty disables
+	Self         *Identity
+	PortFn       func() string // our API port; peers dial <tailscale-ip>:<port>
 	// OnApply fires after a remote change lands on disk so the server can
 	// tell open app windows to reload (SSE -> desktop -> iframe).
 	OnApply func(app, rel string, deleted bool)
 	Logf    func(format string, args ...any)
 }
 
-// Engine syncs ~/.exe/appdata with every enrolled peer: local writes push
-// immediately, a reconcile loop diffs manifests to catch anything missed,
-// and mergeable documents (todos.json, notes.json) union item-by-item
-// instead of last-writer-wins.
+// Engine syncs ~/.exe/appdata and ~/.exe/workspace with every enrolled peer:
+// local writes push immediately, a reconcile loop diffs manifests to catch
+// anything missed, and mergeable app documents (todos.json, notes.json)
+// union item-by-item instead of last-writer-wins.
 type Engine struct {
 	cfg   EngineConfig
 	peers *Store
@@ -72,15 +82,28 @@ type Engine struct {
 	stop chan struct{}
 }
 
-// validKey guards every remote-driven file path: a sync key must be
-// "App/relpath" with a filesystem-local relative portion. Peer manifests are
-// untrusted input, so a "../config.json" key that would escape DataDir is
-// rejected before it ever reaches filePath/os.Remove/writeFileAtomic.
-func validKey(key string) bool {
-	if !strings.Contains(key, "/") {
+// validKey guards every file path sync touches: a key must be "App/relpath"
+// (or "@workspace/relpath") with a filesystem-local relative portion. Peer
+// manifests are untrusted input, so a "../config.json" key that would escape
+// DataDir is rejected before it ever reaches filePath/os.Remove/
+// writeFileAtomic. Hidden segments are rejected too — dot paths (.Trash,
+// .put-* temp files) are node-local by the same rule the scanner uses, so a
+// peer can neither plant them nor tombstone them.
+func (e *Engine) validKey(key string) bool {
+	if !strings.Contains(key, "/") || !filepath.IsLocal(filepath.FromSlash(key)) {
 		return false
 	}
-	return filepath.IsLocal(filepath.FromSlash(key))
+	for _, seg := range strings.Split(key, "/") {
+		if strings.HasPrefix(seg, ".") {
+			return false
+		}
+	}
+	// "@" first segments are reserved for non-appdata namespaces; only the
+	// workspace one exists, and only while a workspace dir is configured.
+	if ns, _, _ := strings.Cut(key, "/"); strings.HasPrefix(ns, "@") {
+		return ns == WorkspaceNS && e.cfg.WorkspaceDir != ""
+	}
+	return true
 }
 
 // Status is one row of the Join dialog's peer table.
@@ -390,13 +413,20 @@ func (e *Engine) Unpair(id string) error {
 // ---- local writes -----------------------------------------------------------
 
 func (e *Engine) filePath(key string) string {
+	if rel, ok := strings.CutPrefix(key, WorkspaceNS+"/"); ok {
+		return filepath.Join(e.cfg.WorkspaceDir, filepath.FromSlash(rel))
+	}
 	return filepath.Join(e.cfg.DataDir, filepath.FromSlash(key))
 }
 
-// LocalWrite versions a write that just landed through the app-data API and
-// pushes it to every peer.
+// LocalWrite versions a write that just landed through the app-data or
+// workspace API (app is WorkspaceNS for the latter) and pushes it to every
+// peer. Hidden paths (a move into .Trash) stay node-local.
 func (e *Engine) LocalWrite(app, rel string) {
 	key := app + "/" + rel
+	if !e.validKey(key) {
+		return
+	}
 	fi, err := os.Stat(e.filePath(key))
 	if err != nil {
 		return
@@ -408,24 +438,90 @@ func (e *Engine) LocalWrite(app, rel string) {
 // LocalDelete versions an API delete (tombstoned in the manifest).
 func (e *Engine) LocalDelete(app, rel string) {
 	key := app + "/" + rel
+	if !e.validKey(key) {
+		return
+	}
 	e.man.Bump(key, e.cfg.Self.ID, true, 0, 0)
 	go e.pushAll(key)
 }
 
 // ScanLocal picks up changes that bypassed the API: files edited or dropped
-// directly in ~/.exe/appdata (agents do this), plus first-boot inventory.
+// directly in ~/.exe/appdata or ~/.exe/workspace (agents and VMs do this),
+// plus first-boot inventory.
 func (e *Engine) ScanLocal() {
 	e.fileMu.Lock()
 	defer e.fileMu.Unlock()
+	e.migrateWorkspaceStrays()
 	seen := map[string]bool{}
-	root := e.cfg.DataDir
+	e.scanRoot(e.cfg.DataDir, "", seen)
+	if e.cfg.WorkspaceDir != "" {
+		e.scanRoot(e.cfg.WorkspaceDir, WorkspaceNS+"/", seen)
+	}
+	for key, v := range e.man.Snapshot() {
+		if v.Deleted || seen[key] {
+			continue
+		}
+		if e.cfg.WorkspaceDir == "" && strings.HasPrefix(key, WorkspaceNS+"/") {
+			continue // workspace sync off: don't tombstone what we didn't scan
+		}
+		e.man.Bump(key, e.cfg.Self.ID, true, 0, 0)
+		go e.pushAll(key)
+	}
+}
+
+// migrateWorkspaceStrays heals a tree written by a pre-workspace-sync
+// binary: its engine pulled an upgraded peer's @workspace keys and, knowing
+// no namespaces, landed the files under appdata/@workspace/. Left there,
+// the upgraded scanner would find those manifest keys in neither tree and
+// sweep them as deletions — propagating deletes that erase every node's
+// real workspace files. Renames keep size+mtime, so the recorded
+// fingerprints stay valid and nothing re-versions.
+func (e *Engine) migrateWorkspaceStrays() {
+	if e.cfg.WorkspaceDir == "" {
+		return
+	}
+	src := filepath.Join(e.cfg.DataDir, WorkspaceNS)
+	if _, err := os.Stat(src); err != nil {
+		return
+	}
+	var dirs []string
+	filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			dirs = append(dirs, p)
+			return nil
+		}
+		rel, err := filepath.Rel(src, p)
+		if err != nil {
+			return nil
+		}
+		dst := filepath.Join(e.cfg.WorkspaceDir, rel)
+		if _, err := os.Stat(dst); err == nil {
+			return nil // the workspace already has one; leave the stray be
+		}
+		if os.MkdirAll(filepath.Dir(dst), 0o755) == nil && os.Rename(p, dst) == nil {
+			e.cfg.Logf("peer: moved stray appdata/%s/%s into the workspace", WorkspaceNS, filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	for i := len(dirs) - 1; i >= 0; i-- {
+		os.Remove(dirs[i]) // children first; fails harmlessly when not empty
+	}
+}
+
+// scanRoot inventories one synced tree. prefix "" is appdata, whose keys are
+// App/rel (so a stray file at the root is skipped); WorkspaceNS+"/" prefixes
+// workspace keys, where root-level files are the norm.
+func (e *Engine) scanRoot(root, prefix string, seen map[string]bool) {
 	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 		if strings.HasPrefix(d.Name(), ".") {
 			if d.IsDir() {
-				return filepath.SkipDir
+				return filepath.SkipDir // .Trash and friends stay node-local
 			}
 			return nil // temp files (.put-*, .sync-*) are never inventory
 		}
@@ -436,14 +532,17 @@ func (e *Engine) ScanLocal() {
 		if err != nil {
 			return nil
 		}
-		key := filepath.ToSlash(rel)
-		if !strings.Contains(key, "/") {
-			return nil // stray file at the appdata root; not app data
+		key := prefix + filepath.ToSlash(rel)
+		if prefix == "" && (!strings.Contains(key, "/") || strings.HasPrefix(key, "@")) {
+			return nil // appdata strays: root-level files, reserved-@ leftovers
 		}
 		seen[key] = true
 		fi, err := d.Info()
 		if err != nil {
 			return nil
+		}
+		if fi.Size() > maxSyncFile {
+			return nil // stays local (but seen, so never tombstoned)
 		}
 		if !e.man.Fingerprint(key, fi.Size(), fi.ModTime().UnixNano()) {
 			e.man.Bump(key, e.cfg.Self.ID, false, fi.Size(), fi.ModTime().UnixNano())
@@ -451,12 +550,6 @@ func (e *Engine) ScanLocal() {
 		}
 		return nil
 	})
-	for key, v := range e.man.Snapshot() {
-		if !v.Deleted && !seen[key] {
-			e.man.Bump(key, e.cfg.Self.ID, true, 0, 0)
-			go e.pushAll(key)
-		}
-	}
 }
 
 // ---- push / fetch -----------------------------------------------------------
@@ -533,8 +626,8 @@ func (e *Engine) fetchFrom(p *Peer, key string, rv Version) {
 	if resp.StatusCode != http.StatusOK {
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20+1))
-	if err != nil || len(body) > 10<<20 {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSyncFile+1))
+	if err != nil || len(body) > maxSyncFile {
 		return
 	}
 	got := ParseVersion(resp.Header.Get(hdrVer), false)
@@ -578,7 +671,7 @@ func (e *Engine) FileForPeer(app, rel string) ([]byte, Version, error) {
 // no ping-pong. A delete only wins when it causally dominates the local
 // version, so a stale tombstone can never delete concurrent real data.
 func (e *Engine) ApplyRemote(key string, body []byte, rv Version) (string, error) {
-	if !validKey(key) {
+	if !e.validKey(key) {
 		return "", errors.New("invalid sync key")
 	}
 	e.fileMu.Lock()
@@ -837,7 +930,7 @@ func (e *Engine) reconcile(p *Peer) {
 	}
 	localFiles := e.man.Snapshot()
 	for key, rv := range mr.Files {
-		if !validKey(key) {
+		if !e.validKey(key) {
 			e.cfg.Logf("peer: %s offered invalid sync key %q — ignored", p.Name, key)
 			continue
 		}

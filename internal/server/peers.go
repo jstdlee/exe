@@ -180,10 +180,11 @@ func (s *Server) handlePeerUnpair(w http.ResponseWriter, r *http.Request) {
 
 // peerFileKey validates the {app}/{path...} of a peer file request — the
 // same jail rules as the app-data API, minus the installed-bundle check:
-// synced data may arrive before its app does.
+// synced data may arrive before its app does. The reserved @workspace
+// namespace addresses the shared workspace tree.
 func peerFileKey(r *http.Request) (app, rel string, err error) {
 	app, rel = r.PathValue("app"), r.PathValue("path")
-	if !validAppName(app) {
+	if app != peer.WorkspaceNS && !validAppName(app) {
 		return "", "", errors.New("bad app name")
 	}
 	if rel == "" || !filepath.IsLocal(filepath.FromSlash(rel)) {

@@ -170,13 +170,14 @@ func cmdServe() error {
 	if ident, perr := peer.LoadIdentity(stateDir); perr != nil {
 		log.Printf("peer identity: %v — node sync disabled", perr)
 	} else if eng, perr = peer.NewEngine(peer.EngineConfig{
-		StateDir: stateDir,
-		DataDir:  filepath.Join(stateDir, "appdata"),
-		Self:     ident,
-		PortFn:   func() string { return portOf(srv.Config().Listen) },
+		StateDir:     stateDir,
+		DataDir:      filepath.Join(stateDir, "appdata"),
+		WorkspaceDir: filepath.Join(stateDir, "workspace"),
+		Self:         ident,
+		PortFn:       func() string { return portOf(srv.Config().Listen) },
 		// a peer-applied remote change has no local writer, so an empty client tag
-		OnApply:  func(app, rel string, deleted bool) { srv.BroadcastAppData(app, rel, deleted, "") },
-		Logf:     log.Printf,
+		OnApply: func(app, rel string, deleted bool) { srv.BroadcastAppData(app, rel, deleted, "") },
+		Logf:    log.Printf,
 	}); perr != nil {
 		log.Printf("peer sync: %v — node sync disabled", perr)
 		eng = nil

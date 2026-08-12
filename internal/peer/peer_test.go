@@ -333,3 +333,159 @@ func TestApplyRemoteVersionsUnseenLocalFile(t *testing.T) {
 		t.Fatalf("merged version should dominate both inputs: %+v", v)
 	}
 }
+
+func newWorkspaceEngine(t *testing.T) (*Engine, string) {
+	t.Helper()
+	dir := t.TempDir()
+	ident, _ := LoadIdentity(dir)
+	eng, err := NewEngine(EngineConfig{
+		StateDir: dir, DataDir: filepath.Join(dir, "appdata"),
+		WorkspaceDir: filepath.Join(dir, "workspace"),
+		Self:         ident, PortFn: func() string { return "0" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return eng, dir
+}
+
+func TestWorkspaceKeysRouteToWorkspaceDir(t *testing.T) {
+	eng, dir := newWorkspaceEngine(t)
+	outcome, err := eng.ApplyRemote("@workspace/pics/cat.png", []byte("CAT"), Version{Vec: map[string]int64{"other": 1}})
+	if err != nil || outcome != "applied" {
+		t.Fatalf("apply: outcome=%s err=%v", outcome, err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "workspace", "pics", "cat.png"))
+	if err != nil || string(got) != "CAT" {
+		t.Fatalf("workspace file: %q err=%v", got, err)
+	}
+	// the namespace maps, it doesn't nest under appdata
+	if _, err := os.Stat(filepath.Join(dir, "appdata", "@workspace")); !os.IsNotExist(err) {
+		t.Fatal("workspace key leaked into appdata")
+	}
+	// a dominating delete tombstones it
+	if outcome, err := eng.ApplyRemote("@workspace/pics/cat.png", nil,
+		Version{Vec: map[string]int64{"other": 2}, Deleted: true}); err != nil || outcome != "applied" {
+		t.Fatalf("delete: outcome=%s err=%v", outcome, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "workspace", "pics", "cat.png")); !os.IsNotExist(err) {
+		t.Fatal("dominating delete should remove the workspace file")
+	}
+}
+
+func TestWorkspaceKeysRejectedWhenDisabled(t *testing.T) {
+	dir := t.TempDir()
+	ident, _ := LoadIdentity(dir)
+	eng, err := NewEngine(EngineConfig{
+		StateDir: dir, DataDir: filepath.Join(dir, "appdata"), Self: ident,
+		PortFn: func() string { return "0" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rv := Version{Vec: map[string]int64{"other": 1}}
+	if _, err := eng.ApplyRemote("@workspace/x.txt", []byte("x"), rv); err == nil {
+		t.Fatal("workspace key must be rejected when WorkspaceDir is unset")
+	}
+}
+
+func TestHiddenSegmentsNeverSync(t *testing.T) {
+	eng, dir := newWorkspaceEngine(t)
+	rv := Version{Vec: map[string]int64{"other": 1}}
+	rvDel := Version{Vec: map[string]int64{"other": 1}, Deleted: true}
+	for _, key := range []string{"@workspace/.Trash/doc.txt", "@workspace/sub/.git/config", "Todo/.hidden"} {
+		if _, err := eng.ApplyRemote(key, []byte("x"), rv); err == nil {
+			t.Fatalf("key %q must be rejected", key)
+		}
+		if _, err := eng.ApplyRemote(key, nil, rvDel); err == nil {
+			t.Fatalf("delete key %q must be rejected", key)
+		}
+	}
+	// the local-write hooks skip hidden paths too (a move into .Trash)
+	trash := filepath.Join(dir, "workspace", ".Trash")
+	os.MkdirAll(trash, 0o755)
+	os.WriteFile(filepath.Join(trash, "doc.txt"), []byte("x"), 0o644)
+	eng.LocalWrite(WorkspaceNS, ".Trash/doc.txt")
+	if _, ok := eng.man.Get("@workspace/.Trash/doc.txt"); ok {
+		t.Fatal("hidden path must not be versioned by LocalWrite")
+	}
+	eng.LocalDelete(WorkspaceNS, ".Trash/doc.txt")
+	if _, ok := eng.man.Get("@workspace/.Trash/doc.txt"); ok {
+		t.Fatal("hidden path must not be tombstoned by LocalDelete")
+	}
+}
+
+func TestScanLocalInventoriesWorkspace(t *testing.T) {
+	eng, dir := newWorkspaceEngine(t)
+	ws := filepath.Join(dir, "workspace")
+	os.MkdirAll(filepath.Join(ws, "sub"), 0o755)
+	os.MkdirAll(filepath.Join(ws, ".Trash"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "appdata"), 0o755)
+	os.WriteFile(filepath.Join(ws, "readme.txt"), []byte("hello"), 0o644)
+	os.WriteFile(filepath.Join(ws, "sub", "a.bin"), []byte("aa"), 0o644)
+	os.WriteFile(filepath.Join(ws, ".Trash", "gone.txt"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(ws, "huge.bin"), make([]byte, maxSyncFile+1), 0o644)
+	os.WriteFile(filepath.Join(dir, "appdata", "stray.txt"), []byte("x"), 0o644)
+
+	eng.ScanLocal()
+	for _, key := range []string{"@workspace/readme.txt", "@workspace/sub/a.bin"} {
+		if v, ok := eng.man.Get(key); !ok || v.Deleted {
+			t.Fatalf("scan should inventory %s: %+v %v", key, v, ok)
+		}
+	}
+	for _, key := range []string{"@workspace/.Trash/gone.txt", "@workspace/huge.bin", "stray.txt"} {
+		if _, ok := eng.man.Get(key); ok {
+			t.Fatalf("scan must skip %s", key)
+		}
+	}
+	// a workspace file removed on disk gets tombstoned on the next scan
+	os.Remove(filepath.Join(ws, "readme.txt"))
+	eng.ScanLocal()
+	if v, ok := eng.man.Get("@workspace/readme.txt"); !ok || !v.Deleted {
+		t.Fatalf("removed workspace file should tombstone: %+v %v", v, ok)
+	}
+	// the oversized file never tombstones either — it's seen, just not carried
+	eng.ScanLocal()
+	if _, ok := eng.man.Get("@workspace/huge.bin"); ok {
+		t.Fatal("oversized file must stay out of the manifest")
+	}
+}
+
+func TestWorkspaceFilesAreNotMergeable(t *testing.T) {
+	if Mergeable("@workspace/todos.json") || Mergeable("@workspace/sub/notes.json") {
+		t.Fatal("workspace files must sync whole-file, never item-merge")
+	}
+	if !Mergeable("Todo/todos.json") {
+		t.Fatal("app todos.json must stay mergeable")
+	}
+}
+
+func TestStrayWorkspaceFilesMigrateOnScan(t *testing.T) {
+	// A pre-workspace binary that pulled from an upgraded peer landed
+	// workspace files under appdata/@workspace/. The scan must move them into
+	// the real workspace — NOT sweep their manifest keys as deletions.
+	eng, dir := newWorkspaceEngine(t)
+	stray := filepath.Join(dir, "appdata", WorkspaceNS, "pics")
+	os.MkdirAll(stray, 0o755)
+	os.WriteFile(filepath.Join(stray, "cat.png"), []byte("CAT"), 0o644)
+	fi, _ := os.Stat(filepath.Join(stray, "cat.png"))
+	eng.man.Apply("@workspace/pics/cat.png",
+		Version{Vec: map[string]int64{"other": 1}}, fi.Size(), fi.ModTime().UnixNano())
+
+	eng.ScanLocal()
+	got, err := os.ReadFile(filepath.Join(dir, "workspace", "pics", "cat.png"))
+	if err != nil || string(got) != "CAT" {
+		t.Fatalf("stray should move into the workspace: %q err=%v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "appdata", WorkspaceNS)); !os.IsNotExist(err) {
+		t.Fatal("emptied stray tree should be removed")
+	}
+	v, ok := eng.man.Get("@workspace/pics/cat.png")
+	if !ok || v.Deleted {
+		t.Fatalf("migrated file must stay live in the manifest: %+v %v", v, ok)
+	}
+	// the rename kept size+mtime, so the version must not have re-bumped
+	if v.Vec["other"] != 1 || len(v.Vec) != 1 {
+		t.Fatalf("migration should not re-version: %+v", v)
+	}
+}

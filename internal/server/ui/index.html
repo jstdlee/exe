@@ -1181,6 +1181,7 @@ tokenInput.addEventListener("change", () => localStorage.setItem("exe_token", to
 async function api(path, opts = {}) {
   opts.headers = Object.assign({}, opts.headers);
   if (tokenInput.value) opts.headers["Authorization"] = "Bearer " + tokenInput.value;
+  opts.headers["X-Exe-Client"] = WIN_CLIENT; // lets change events skip our own echo
   if (opts.json !== undefined) {
     opts.body = JSON.stringify(opts.json);
     opts.headers["Content-Type"] = "application/json";
@@ -3430,6 +3431,7 @@ function appDataSubscribe() {
     let ev;
     try { ev = JSON.parse(e.data); } catch (err) { return; }
     if (!ev || !ev.app) return;
+    if (ev.app === "@workspace") { workspaceChanged(ev.path, !!ev.deleted, ev.client || ""); return; }
     // Forward even to a closed window: closeWin only hides the iframe, which
     // keeps running, so a hidden app must still hear the change or it would
     // reopen with stale in-memory state and clobber the synced-in doc.
@@ -3443,6 +3445,18 @@ function appDataSubscribe() {
   };
 }
 tokenInput.addEventListener("change", () => { if (appES) appDataSubscribe(); });
+
+// A workspace change landed — a peer's file synced in, or another window on
+// this node wrote one. Refresh every open Workspace window, plus any editor
+// (unless it holds unsaved typing) or picture viewer on the changed file.
+function workspaceChanged(path, deleted, client) {
+  if (client && client === WIN_CLIENT) return; // our own write; already refreshed
+  document.querySelectorAll('[id^="win-ws-"]').forEach(w => { if (!w.hidden) loadFinder(w); });
+  const ed = document.getElementById("win-ed-" + encodeURIComponent(path));
+  if (ed && !ed.hidden && !deleted) loadEditor(ed);
+  const iv = document.getElementById("win-iv-" + encodeURIComponent(path));
+  if (iv && !iv.hidden && !deleted) loadImage(iv);
+}
 
 // ---- boot ----
 if (IS_MOBILE) $("#vm-hint").textContent = "tap a VM to open it";

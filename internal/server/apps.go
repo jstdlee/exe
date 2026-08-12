@@ -26,6 +26,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"exe/internal/peer"
 )
 
 func (s *Server) appsDir() string      { return filepath.Join(s.StateDir, "apps") }
@@ -470,11 +472,40 @@ func handleDirList(w http.ResponseWriter, root, rel string) {
 func (s *Server) handleWorkspaceGet(w http.ResponseWriter, r *http.Request) {
 	handleFileGet(w, s.workspaceDir(), r.PathValue("path"))
 }
+
+// Workspace writes version + push like app-data writes, under the reserved
+// @workspace namespace (the engine itself skips hidden paths like .Trash).
+// The broadcast rides the same SSE stream app data uses; the desktop
+// refreshes open Workspace windows on it.
 func (s *Server) handleWorkspacePut(w http.ResponseWriter, r *http.Request) {
-	handleFilePut(w, r, s.workspaceDir(), r.PathValue("path"))
+	rel := r.PathValue("path")
+	wrote := false
+	s.withFileLock(func() {
+		if handleFilePut(w, r, s.workspaceDir(), rel) {
+			wrote = true
+			if s.Peers != nil {
+				s.Peers.LocalWrite(peer.WorkspaceNS, rel)
+			}
+		}
+	})
+	if wrote {
+		s.BroadcastAppData(peer.WorkspaceNS, rel, false, r.Header.Get("X-Exe-Client"))
+	}
 }
 func (s *Server) handleWorkspaceDelete(w http.ResponseWriter, r *http.Request) {
-	handleFileDelete(w, s.workspaceDir(), r.PathValue("path"))
+	rel := r.PathValue("path")
+	deleted := false
+	s.withFileLock(func() {
+		if handleFileDelete(w, s.workspaceDir(), rel) {
+			deleted = true
+			if s.Peers != nil {
+				s.Peers.LocalDelete(peer.WorkspaceNS, rel)
+			}
+		}
+	})
+	if deleted {
+		s.BroadcastAppData(peer.WorkspaceNS, rel, true, r.Header.Get("X-Exe-Client"))
+	}
 }
 
 // handleWorkspaceMove renames/moves a file or folder inside the workspace
@@ -499,13 +530,34 @@ func (s *Server) handleWorkspaceMove(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
+	moved := false
+	s.withFileLock(func() {
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		if err := os.Rename(src, dst); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		moved = true
+		// A file move syncs as delete-at-src + write-at-dst; the engine drops
+		// the hidden half of a trash move or restore on its own. A folder move
+		// is many files — leave it to the scanner, kicked to run now.
+		if s.Peers != nil {
+			if fi, serr := os.Stat(dst); serr == nil && !fi.IsDir() {
+				s.Peers.LocalDelete(peer.WorkspaceNS, r.PathValue("path"))
+				s.Peers.LocalWrite(peer.WorkspaceNS, body.To)
+			} else {
+				s.Peers.ReconcileNow()
+			}
+		}
+	})
+	if !moved {
 		return
 	}
-	if err := os.Rename(src, dst); err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
+	client := r.Header.Get("X-Exe-Client")
+	s.BroadcastAppData(peer.WorkspaceNS, r.PathValue("path"), true, client)
+	s.BroadcastAppData(peer.WorkspaceNS, body.To, false, client)
 	writeJSON(w, http.StatusOK, map[string]any{"moved": filepath.ToSlash(body.To)})
 }

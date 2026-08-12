@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"path"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -23,8 +24,13 @@ import (
 
 const tombstoneTTL = 30 * 24 * time.Hour
 
-// Mergeable reports whether key ("App/file") gets item-level merging.
+// Mergeable reports whether key ("App/file") gets item-level merging. A
+// workspace file that happens to be named todos.json is just a file — only
+// app data carries the record schemas.
 func Mergeable(key string) bool {
+	if strings.HasPrefix(key, WorkspaceNS+"/") {
+		return false
+	}
 	switch path.Base(key) {
 	case "todos.json", "notes.json":
 		return true
