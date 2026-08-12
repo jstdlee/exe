@@ -626,6 +626,14 @@ body.mobile .chat-side { width: auto; }
 body.mobile .chat-sessions { flex: none; max-height: 88px; }
 /* six trapezoid tabs overflow a phone — let them wrap */
 body.mobile .tabbar { flex-wrap: wrap; }
+/* the About window floats like the Cloudflare status modal instead of
+   going fullscreen: centered, content-sized, dimming what's below */
+body.mobile #desktop #win-about { inset: auto !important;
+  left: 50% !important; top: 50% !important; transform: translate(-50%, -50%);
+  width: min(92vw, 410px) !important; display: block;
+  border-top: 1px solid var(--black);
+  box-shadow: 2px 2px 0 var(--black), 0 0 0 100vmax rgba(0,0,0,.15); }
+body.mobile #desktop #win-about .win-frame { display: block; }
 /* same rule for list headers: the #666 top row would stack a second dark
    line under the frame's black border, the #333/#444 bottom shadow rows
    would stack one onto the black bar line above the first list row, and
@@ -1101,6 +1109,12 @@ const IS_MOBILE = new URLSearchParams(location.search).has("mobile")
   : /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(navigator.userAgent)
     || (matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) < 700);
 if (IS_MOBILE) document.body.classList.add("mobile");
+// iOS Safari auto-zooms into focused inputs whose font is under 16px;
+// maximum-scale=1 disables only that auto-zoom (pinch zoom still works
+// since iOS 10), keeping the 12px Platinum type. Scoped to iOS — the same
+// clamp would take away Android's pinch zoom entirely.
+if (IS_MOBILE && /iPhone|iPod|iPad/i.test(navigator.userAgent))
+  document.querySelector('meta[name="viewport"]').content = "width=device-width, initial-scale=1, maximum-scale=1";
 // icons and list rows open on double-click on the desktop, single tap on
 // mobile — double-tap is the browser's zoom gesture and fires unreliably
 const tapOpen = (n, fn) => n.addEventListener(IS_MOBILE ? "click" : "dblclick", fn);
@@ -1158,18 +1172,55 @@ function focusWin(w) {
 // on screen and remembers it, so closing walks back through the stack like
 // a phone's back button; closing the last one lands on the desktop icons.
 let mobileStack = [];
+// dialog-ish windows float centered over the current window like the
+// Cloudflare status modal instead of going fullscreen; they never enter
+// the back-stack and just vanish when the user switches windows
+const MOB_DIALOG = new Set(["win-about"]);
 function mobileSwapIn(w) {
   mobileStack = mobileStack.filter(id => id !== w.id);
   document.querySelectorAll("#desktop .window").forEach(x => {
-    if (x !== w && !x.hidden) { x.hidden = true; mobileStack.push(x.id); }
+    if (x !== w && !x.hidden) {
+      x.hidden = true;
+      if (!MOB_DIALOG.has(x.id)) mobileStack.push(x.id);
+    }
   });
+}
+// Mobile UI state survives reloads via its own localStorage key — phone-
+// local only, never mixed into the shared desktop layout snapshot. Live
+// terminals and transient dialogs don't restore; win-detail needs the VM
+// name, carried alongside.
+const MOB_RESTORE = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-trash", "win-detail"]);
+const mobRestorable = id => MOB_RESTORE.has(id)
+  || id.startsWith("win-app-") || id.startsWith("win-ws-") || id.startsWith("win-ed-");
+function mobSave() {
+  const vis = [...document.querySelectorAll("#desktop .window")].find(w => !w.hidden && !MOB_DIALOG.has(w.id));
+  localStorage.setItem("exe_mobile_winstate", JSON.stringify({
+    stack: mobileStack.filter(mobRestorable),
+    top: vis && mobRestorable(vis.id) ? vis.id : null,
+    vm: currentVM,
+  }));
+}
+// reopen the remembered stack bottom-up, then the visible window — each
+// open re-stacks the one before it, rebuilding mobileStack as it goes
+function mobRestore() {
+  let st = null;
+  try { st = JSON.parse(localStorage.getItem("exe_mobile_winstate") || "null"); } catch (e) {}
+  if (!st) { openWin("#win-vms"); return; } // first visit — no state yet
+  for (const id of [...(st.stack || []), st.top].filter(Boolean).filter(mobRestorable)) {
+    if (id === "win-detail") { if (st.vm) openVM(st.vm); }
+    else if (id.startsWith("win-app-")) openAppWin(id.slice(8));
+    else if (id.startsWith("win-ws-")) openFinderWin(decodeURIComponent(id.slice(7)));
+    else if (id.startsWith("win-ed-")) openEditorWin(decodeURIComponent(id.slice(7)));
+    else (WIN_OPENERS[id] || (() => openWin("#" + id)))();
+  }
 }
 function openWin(sel) {
   const w = typeof sel === "string" ? $(sel) : sel;
-  if (IS_MOBILE) mobileSwapIn(w);
+  if (IS_MOBILE && !MOB_DIALOG.has(w.id)) mobileSwapIn(w);
   w.hidden = false;
   w.classList.remove("shaded");
   focusWin(w);
+  if (IS_MOBILE) mobSave();
   return w;
 }
 function closeWin(w) {
@@ -1180,8 +1231,11 @@ function closeWin(w) {
   // a closed Terminal is gone for good: end the shell and drop the window
   if (w.classList.contains("term-window")) { w._teardown(); w.remove(); }
   if (IS_MOBILE) {
-    const prev = document.getElementById(mobileStack.pop() || "");
-    if (prev) { prev.hidden = false; focusWin(prev); }
+    if (!MOB_DIALOG.has(w.id)) {
+      const prev = document.getElementById(mobileStack.pop() || "");
+      if (prev) { prev.hidden = false; focusWin(prev); }
+    }
+    mobSave();
   }
   winSave();
 }
@@ -1425,8 +1479,8 @@ function winSubscribe() {
 }
 tokenInput.addEventListener("change", () => { if (winES) winSubscribe(); });
 function winRestore() {
-  // mobile starts fresh on the VM list and never subscribes to layout events
-  if (IS_MOBILE) { openWin("#win-vms"); return; }
+  // mobile restores its own phone-local state, never the desktop snapshot
+  if (IS_MOBILE) { mobRestore(); return; }
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem("exe_winstate") || "null"); } catch (e) {}
   if (cached) applyWinState(cached); else openWin("#win-vms");
@@ -1485,10 +1539,11 @@ document.querySelectorAll(".dd-item").forEach(it => {
 });
 
 // ---- Apple → About: show this host's name and IPs, click an IP to copy ----
+// hostinfo is fetched BEFORE the window shows so it opens at its final
+// size — filling it in afterwards grew the window and made it jump
+// (worst on mobile, where the dialog is centered on its own height)
 async function openAboutWin() {
-  openWin("#win-about");
   const box = $("#about-host");
-  box.replaceChildren(el("span", { class: "muted" }, "…"));
   try {
     const h = await j("/v1/hostinfo");
     $("#about-tagline").textContent = "your personal cloud, right on this " + (h.machine || "machine");
@@ -1508,6 +1563,7 @@ async function openAboutWin() {
   } catch (e) {
     box.replaceChildren(el("span", { class: "muted" }, "host info unavailable"));
   }
+  openWin("#win-about");
 }
 async function copyIP(ip) {
   let ok = false;
