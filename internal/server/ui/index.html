@@ -217,16 +217,17 @@ a { color: #202a87; text-decoration: underline; }
 .ed-text:focus { outline: none; }
 
 /* image viewer windows, modeled on PictureViewer: a platinum info bar
-   (colon path, dimensions, size) over the picture at natural size on
-   white — centered when smaller than the window, scrollable when bigger */
+   (colon path, dimensions, size) over the picture on white — natural size
+   when it fits, scaled down (aspect kept) to fit the window when bigger */
 .iv-info { background: var(--g300); border-bottom: 1px solid var(--black);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
   padding: 5px 8px 4px; font-size: 12px;
   display: flex; justify-content: space-between; gap: 8px; }
 .iv-info span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .iv-info .iv-dims { flex: none; }
-.iv-box { background: #fff; height: 300px; display: grid; }
-.iv-box img { display: block; margin: auto; }
+.iv-box { background: #fff; height: 300px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; }
+.iv-box img { display: block; max-width: 100%; max-height: 100%; }
 
 /* sunken content frame, inset 4px into the platinum chrome */
 .win-frame { margin: 0 4px 4px; border: 1px solid var(--black); background: var(--g300);
@@ -2100,7 +2101,7 @@ function openImageWin(path, fromWin) {
       <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
       <div class="win-frame">
         <div class="iv-info"><span class="iv-path"></span><span class="iv-dims">…</span></div>
-        <div class="iv-box doc-scroll"></div>
+        <div class="iv-box"></div>
         ${GROW_TILE}
       </div>`;
     w.querySelector(".title").textContent = path.split("/").pop();
@@ -2124,12 +2125,15 @@ async function loadImage(w) {
     img.onload = () => {
       dims.textContent = `${img.naturalWidth} × ${img.naturalHeight} · ${fmtBytes(blob.size)}`;
       if (w.dataset.fit) {
-        // PictureViewer opened windows at picture size: clamp to the
-        // viewport; 25/15 cover the frame inset and always-on scrollbars
+        // PictureViewer opened windows at picture size: scale the picture
+        // to the viewport if needed and hug the scaled size, so the window
+        // never letterboxes (+10 is the frame inset)
         delete w.dataset.fit;
         if (!IS_MOBILE) {
-          w.style.width = Math.max(240, Math.min(window.innerWidth - 80, img.naturalWidth + 25)) + "px";
-          box.style.height = Math.max(120, Math.min(window.innerHeight - 200, img.naturalHeight + 15)) + "px";
+          const scale = Math.min((window.innerWidth - 90) / img.naturalWidth,
+            (window.innerHeight - 200) / img.naturalHeight, 1);
+          w.style.width = Math.max(240, Math.round(img.naturalWidth * scale) + 10) + "px";
+          box.style.height = Math.max(120, Math.round(img.naturalHeight * scale)) + "px";
           winSave();
         }
       }
