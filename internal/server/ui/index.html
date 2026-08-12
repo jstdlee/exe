@@ -2837,6 +2837,12 @@ async function loadNews() {
     if (IS_MOBILE) {
       row.append(el("button", { class: "news-del", onclick: () => deleteNews(it.id) }, "Delete"));
       wireNewsSwipe(row, wrap);
+    } else {
+      // desktop: the shared OS 9 contextual menu instead of a swipe
+      row.addEventListener("contextmenu", e => {
+        e.preventDefault();
+        showCtxMenu(e.clientX, e.clientY, [{ label: "Delete", act: () => deleteNews(it.id) }]);
+      });
     }
     row.append(wrap);
     list.append(row);
