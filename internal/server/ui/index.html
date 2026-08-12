@@ -899,6 +899,9 @@ body.mobile th.sorted {
           <b>Where:</b><span id="gi-where"></span>
           <b>Modified:</b><span id="gi-mod"></span>
         </div>
+        <div class="row" style="margin-top:12px; justify-content:flex-end">
+          <button class="btn" id="gi-download">Download</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1810,6 +1813,26 @@ const DOC_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" shape-renderin
   <path fill="#fff" stroke="#000" d="M7.5 3.5h11l6 6v19h-17z"/>
   <path fill="#ccc" stroke="#000" d="M18.5 3.5v6h6z"/>
 </svg>`;
+// image document: the page with a framed landscape — sun over two hills
+const IMAGE_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <path fill="#fff" stroke="#000" d="M7.5 3.5h11l6 6v19h-17z"/>
+  <path fill="#ccc" stroke="#000" d="M18.5 3.5v6h6z"/>
+  <rect x="9.5" y="12.5" width="13" height="12" fill="#9cf" stroke="#000"/>
+  <path fill="#ff3" d="M12 14h2v1h-2zM12 15h2v1h-2z"/>
+  <path fill="#7b7" d="M14 18h1v1h-1zM13 19h3v1h-3zM12 20h5v1h-5zM11 21h7v1h-7zM10 22h9v1h-9zM10 23h10v1h-10z"/>
+  <path fill="#363" d="M18 17h1v1h-1zM17 18h3v1h-3zM16 19h5v1h-5zM15 20h7v1h-7zM14 21h8v1h-8zM13 22h9v1h-9zM12 23h10v1h-10z"/>
+</svg>`;
+// archive document (zip/dmg/rar/7z): the page with a zipper down the middle
+const ARCHIVE_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <path fill="#fff" stroke="#000" d="M7.5 3.5h11l6 6v19h-17z"/>
+  <path fill="#ccc" stroke="#000" d="M18.5 3.5v6h6z"/>
+  <rect x="11.5" y="3.5" width="5" height="25" fill="#eee" stroke="#000"/>
+  <path fill="#888" d="M12 5h2v1h-2zM14 7h2v1h-2zM12 9h2v1h-2zM14 11h2v1h-2zM14 15h2v1h-2zM12 17h2v1h-2zM14 19h2v1h-2zM12 21h2v1h-2zM14 23h2v1h-2zM12 25h2v1h-2zM14 27h2v1h-2z"/>
+  <path fill="#444" d="M12 13h4v2h-4zM13 15h2v1h-2z"/>
+</svg>`;
+const fileIcon = en => en.dir ? FOLDER_ICON
+  : isImageFile(en.name) ? IMAGE_ICON
+  : isArchiveFile(en.name) ? ARCHIVE_ICON : DOC_ICON;
 // host Terminal: the compact Mac with a dark screen showing a green prompt
 const TERMINAL_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
   <rect x="6.5" y="1.5" width="19" height="24" fill="#DAD5CA" stroke="#000"/>
@@ -1952,7 +1975,7 @@ async function loadFinder(w) {
   box.replaceChildren();
   for (const en of data.entries) {
     const it = el("div", { class: "fitem", title: en.name });
-    it.innerHTML = en.dir ? FOLDER_ICON : DOC_ICON;
+    it.innerHTML = fileIcon(en);
     it.append(el("span", { class: "lbl" }, en.name));
     const select = () => {
       box.querySelectorAll(".fitem").forEach(d => d.classList.remove("sel"));
@@ -1970,6 +1993,7 @@ async function loadFinder(w) {
         "-",
         { label: "Get Info", act: () => showGetInfo(en, rel) },
         { label: "Duplicate", act: () => wsDuplicate(en, rel, w), dis: !!en.dir },
+        { label: "Download", act: () => wsDownload(en, rel), dis: !!en.dir },
       ]);
     });
     box.append(it);
@@ -2018,6 +2042,14 @@ async function wsTrash(rel, w) {
   } catch (e) {}
   loadFinder(w);
 }
+// Download fetches with the auth header, then hands the blob to an <a download>
+async function wsDownload(en, rel) {
+  try {
+    const u = URL.createObjectURL(await (await api(wsUrl(rel))).blob());
+    el("a", { href: u, download: en.name }).click();
+    setTimeout(() => URL.revokeObjectURL(u), 60000);
+  } catch (e) {}
+}
 async function wsDuplicate(en, rel, w) {
   try {
     const blob = await (await api(wsUrl(rel))).blob();
@@ -2033,13 +2065,16 @@ async function wsDuplicate(en, rel, w) {
 }
 function showGetInfo(en, rel) {
   $("#win-getinfo .title").textContent = en.name + " Info";
-  $("#gi-icon").innerHTML = en.dir ? FOLDER_ICON : DOC_ICON;
+  $("#gi-icon").innerHTML = fileIcon(en);
   $("#gi-name").textContent = en.name;
   $("#gi-kind").textContent = en.dir ? "folder" : "document";
   $("#gi-size").textContent = en.dir ? "—" : `${fmtBytes(en.size || 0)} (${(en.size || 0).toLocaleString()} bytes)`;
   const dir = rel.split("/").slice(0, -1).join("/");
   $("#gi-where").textContent = "Workspace" + (dir ? " :" + dir.split("/").join(" :") : "");
   $("#gi-mod").textContent = edFmtDate(en.modified);
+  const dl = $("#gi-download");
+  dl.disabled = !!en.dir;
+  dl.onclick = () => wsDownload(en, rel); // singleton dialog: reassign, don't stack listeners
   openWin("#win-getinfo");
 }
 
@@ -2139,6 +2174,11 @@ const IMG_EXT = new Set("png jpg jpeg gif webp bmp ico avif".split(" "));
 function isImageFile(name) {
   const dot = name.lastIndexOf(".");
   return dot > 0 && IMG_EXT.has(name.slice(dot + 1).toLowerCase());
+}
+const ARC_EXT = new Set("zip dmg rar 7z tar gz tgz bz2 xz".split(" "));
+function isArchiveFile(name) {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && ARC_EXT.has(name.slice(dot + 1).toLowerCase());
 }
 function openImageWin(path, fromWin) {
   const id = "win-iv-" + encodeURIComponent(path);
