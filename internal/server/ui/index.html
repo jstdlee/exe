@@ -633,6 +633,12 @@ body.mobile #desktop .window > .win-frame { flex: 1; min-height: 0;
   display: flex; flex-direction: column; }
 body.mobile .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
 body.mobile .tbox.zoom, body.mobile .tbox.shade, body.mobile .grow-box { display: none; }
+/* the grow tile is hidden, so keep the frame corner intact: drop the 2px
+   chrome-merge strips that erase the border/bevel for the tile, and give
+   the statusbar its tile-clearance right padding back */
+body.mobile .window.grow .win-frame::before, body.mobile .window.grow .win-frame::after { content: none; }
+body.mobile #win-log .statusbar, body.mobile #win-chat .statusbar, body.mobile #win-news .statusbar,
+body.mobile .term-window .statusbar { padding-right: 8px; }
 /* enlarge the 13px close box's touch target without changing its pixels */
 body.mobile .tbox.close::before { content: ""; position: absolute; inset: -9px; }
 /* grow-box-resizable content tracks the viewport instead of a saved height */
