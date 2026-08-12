@@ -61,6 +61,8 @@ a { color: #202a87; text-decoration: underline; }
 .dropdown {
   position: fixed; top: 20px; z-index: 3001; min-width: 200px;
   background: var(--g200); border: 1px solid var(--black); padding: 2px 1px;
+  /* single-line seam: the menubar's border-bottom is the menu's top line */
+  border-top: 0;
   box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--g500), 2px 2px 0 rgba(38,38,38,.85);
 }
 .dd-item { padding: 3px 22px 3px 18px; white-space: nowrap; }
@@ -70,7 +72,8 @@ a { color: #202a87; text-decoration: underline; }
 .dd-sep { height: 1px; background: var(--g600); margin: 3px 2px; box-shadow: 0 1px 0 #fff; }
 /* Finder contextual menu, sampled from a real OS 9 capture: #ddd face
    (menubar menus are lighter), same groove separators and hard shadow */
-#ctx-menu { top: auto; background: var(--g300); min-width: 170px; z-index: 5000; }
+#ctx-menu { top: auto; background: var(--g300); min-width: 170px; z-index: 5000;
+  border-top: 1px solid var(--black); /* floats at the cursor, away from the menubar line */ }
 
 /* ---------- desktop icons ---------- */
 #desktop { position: fixed; inset: 20px 0 0 0; }
@@ -591,6 +594,47 @@ td .mono, td.mono { user-select: text; }
 ::-webkit-scrollbar-button:horizontal:increment:disabled {
   background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="8" shape-rendering="crispEdges"><path fill="%23888888" d="M0 0h1v8h-1z M1 1h1v6h-1z M2 2h1v4h-1z M3 3h1v2h-1z"/></svg>'); }
 ::-webkit-scrollbar-corner { background: var(--g300); }
+
+/* ---------- mobile mode (body.mobile, set at boot on phones) ----------
+   One app at a time: the open window fills the viewport below the menu
+   bar, and drag / grow / zoom / shade are gone — openWin swaps fullscreen
+   windows the way a phone OS switches apps. Desktop icons become a
+   home-screen grid and everything opens on a single tap. */
+body.mobile { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+body.mobile #icons { left: 8px; right: 8px; top: 14px; bottom: 130px;
+  flex-flow: row wrap; align-content: flex-start; justify-content: flex-start; gap: 18px 6px; }
+body.mobile #desktop .window { position: fixed; inset: 20px 0 0 0 !important;
+  width: auto !important; min-width: 0; box-shadow: none;
+  border-top: 0; /* the menu bar's bottom border is the separator — two stacked black lines otherwise */
+  display: flex; flex-direction: column; }
+body.mobile #desktop .window > .win-frame { flex: 1; min-height: 0;
+  display: flex; flex-direction: column; }
+body.mobile .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
+body.mobile .tbox.zoom, body.mobile .tbox.shade, body.mobile .grow-box { display: none; }
+/* enlarge the 13px close box's touch target without changing its pixels */
+body.mobile .tbox.close::before { content: ""; position: absolute; inset: -9px; }
+/* grow-box-resizable content tracks the viewport instead of a saved height */
+body.mobile .win-frame > .app-frame,
+body.mobile .win-frame > .finder-icons,
+body.mobile .win-frame > .ed-text { flex: 1; min-height: 0; height: auto !important; }
+body.mobile #log-out { height: 100% !important; }
+body.mobile .term-window .hostterm-box { height: 100%; }
+body.mobile #term-box { height: calc(100dvh - 260px); min-height: 180px; }
+/* chat: sessions become a strip on top, messages fill the rest */
+body.mobile .chat-wrap { height: 100% !important; flex-direction: column; }
+body.mobile .chat-side { width: auto; }
+body.mobile .chat-sessions { flex: none; max-height: 88px; }
+/* six trapezoid tabs overflow a phone — let them wrap */
+body.mobile .tabbar { flex-wrap: wrap; }
+/* same rule for list headers: the #666 top row would stack a second dark
+   line under the frame's black border, the #333/#444 bottom shadow rows
+   would stack one onto the black bar line above the first list row, and
+   the pressed sort column's #555 top bevel would do the same under the
+   frame — each seam keeps a single dark line */
+body.mobile th { border-top: 0;
+  box-shadow: inset 1px 0 0 #fff, inset 0 1px 0 #fff, inset 0 -1px 0 #888; }
+body.mobile th.sorted {
+  box-shadow: inset 1px 0 0 #555, inset 0 -1px 0 #aaa; }
 </style>
 </head>
 <body>
@@ -673,7 +717,7 @@ td .mono, td.mono { user-select: text; }
       </div>
       <div class="statusbar">
         <span id="vm-count">…</span>
-        <span class="muted">double-click a VM to open it</span>
+        <span class="muted" id="vm-hint">double-click a VM to open it</span>
         <span style="flex:1"></span>
         <button class="ghost sm" id="vms-new">New VM…</button>
         <button class="ghost sm" id="vms-refresh">Refresh</button>
@@ -1047,6 +1091,19 @@ td .mono, td.mono { user-select: text; }
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
+// Phones get the one-app-fullscreen mobile mode: no drag, grow, zoom or
+// shade, one window at a time, single-tap opens, and no participation in
+// the shared desktop layout snapshot. Tablets and desktops keep the
+// spatial windows. The UA test catches phone browsers; the media test
+// catches other small coarse-pointer screens; ?mobile=1 / ?mobile=0 forces it.
+const IS_MOBILE = new URLSearchParams(location.search).has("mobile")
+  ? new URLSearchParams(location.search).get("mobile") !== "0"
+  : /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(navigator.userAgent)
+    || (matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) < 700);
+if (IS_MOBILE) document.body.classList.add("mobile");
+// icons and list rows open on double-click on the desktop, single tap on
+// mobile — double-tap is the browser's zoom gesture and fires unreliably
+const tapOpen = (n, fn) => n.addEventListener(IS_MOBILE ? "click" : "dblclick", fn);
 function el(tag, attrs = {}, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -1097,8 +1154,19 @@ function focusWin(w) {
   document.querySelectorAll("#desktop .window").forEach(x => x.classList.toggle("front", x === w));
   winSave();
 }
+// mobile: one fullscreen window at a time. Opening a window hides the one
+// on screen and remembers it, so closing walks back through the stack like
+// a phone's back button; closing the last one lands on the desktop icons.
+let mobileStack = [];
+function mobileSwapIn(w) {
+  mobileStack = mobileStack.filter(id => id !== w.id);
+  document.querySelectorAll("#desktop .window").forEach(x => {
+    if (x !== w && !x.hidden) { x.hidden = true; mobileStack.push(x.id); }
+  });
+}
 function openWin(sel) {
   const w = typeof sel === "string" ? $(sel) : sel;
+  if (IS_MOBILE) mobileSwapIn(w);
   w.hidden = false;
   w.classList.remove("shaded");
   focusWin(w);
@@ -1111,6 +1179,10 @@ function closeWin(w) {
   if (w.id === "win-log") stopLogStream();
   // a closed Terminal is gone for good: end the shell and drop the window
   if (w.classList.contains("term-window")) { w._teardown(); w.remove(); }
+  if (IS_MOBILE) {
+    const prev = document.getElementById(mobileStack.pop() || "");
+    if (prev) { prev.hidden = false; focusWin(prev); }
+  }
   winSave();
 }
 function closeFrontWindow() {
@@ -1141,12 +1213,13 @@ function initWindow(w) {
     termResize();
   });
   tb.addEventListener("dblclick", e => {
-    if (e.target.closest(".tbox") || w.classList.contains("modal")) return;
+    if (IS_MOBILE || e.target.closest(".tbox") || w.classList.contains("modal")) return;
     w.classList.toggle("shaded");
     termResize();
     winSave();
   });
-  if (w.classList.contains("modal")) return;
+  // mobile windows are fullscreen and pinned — no titlebar drag
+  if (w.classList.contains("modal") || IS_MOBILE) return;
   tb.addEventListener("pointerdown", e => {
     if (e.target.closest(".tbox")) return;
     e.preventDefault();
@@ -1181,6 +1254,7 @@ document.querySelectorAll(".window").forEach(initWindow);
 // height, live-syncing the layout snapshot. stickEl keeps a scroller pinned
 // to its end during the resize (log tail, chat transcript).
 function wireGrow(grip, w, body, minW, opts = {}) {
+  if (IS_MOBILE) return; // no resize in mobile mode — the grow box is hidden
   grip.addEventListener("pointerdown", e => {
     e.preventDefault(); e.stopPropagation();
     focusWin(w);
@@ -1252,7 +1326,7 @@ function winSnapshot() {
   return st;
 }
 function applyWinState(st) {
-  if (!st) return;
+  if (!st || IS_MOBILE) return; // snapshots describe the spatial desktop, not the phone view
   winApplying = true;
   try {
     // pass 1: open/close (openers bump z and .front; geometry fixes that after)
@@ -1311,6 +1385,9 @@ function applyWinState(st) {
 
 let winSaveT = null, winPushAt = 0;
 function winPush() {
+  // the phone's transient fullscreen stack must never overwrite the
+  // desktop layout other browsers share
+  if (IS_MOBILE) return;
   const st = winSnapshot();
   localStorage.setItem("exe_winstate", JSON.stringify(st));
   j("/v1/ui/state", { method: "PUT", json: { client: WIN_CLIENT, state: st } })
@@ -1348,6 +1425,8 @@ function winSubscribe() {
 }
 tokenInput.addEventListener("change", () => { if (winES) winSubscribe(); });
 function winRestore() {
+  // mobile starts fresh on the VM list and never subscribes to layout events
+  if (IS_MOBILE) { openWin("#win-vms"); return; }
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem("exe_winstate") || "null"); } catch (e) {}
   if (cached) applyWinState(cached); else openWin("#win-vms");
@@ -1507,7 +1586,7 @@ function renderIcons(vms) {
       box.querySelectorAll(".dicon").forEach(d => d.classList.remove("sel"));
       ic.classList.add("sel");
     });
-    ic.addEventListener("dblclick", () => openFinderWin(""));
+    tapOpen(ic, () => openFinderWin(""));
     box.append(ic);
   }
   {
@@ -1520,7 +1599,7 @@ function renderIcons(vms) {
       box.querySelectorAll(".dicon").forEach(d => d.classList.remove("sel"));
       ic.classList.add("sel");
     });
-    ic.addEventListener("dblclick", () => openHostTermWin());
+    tapOpen(ic, () => openHostTermWin());
     box.append(ic);
   }
   for (const vm of vms) {
@@ -1533,7 +1612,7 @@ function renderIcons(vms) {
       box.querySelectorAll(".dicon").forEach(d => d.classList.remove("sel"));
       ic.classList.add("sel");
     });
-    ic.addEventListener("dblclick", () => openVM(vm.name));
+    tapOpen(ic, () => openVM(vm.name));
     box.append(ic);
   }
   for (const app of appsList) {
@@ -1549,7 +1628,7 @@ function renderIcons(vms) {
       box.querySelectorAll(".dicon").forEach(d => d.classList.remove("sel"));
       ic.classList.add("sel");
     });
-    ic.addEventListener("dblclick", () => openAppWin(app.name));
+    tapOpen(ic, () => openAppWin(app.name));
     box.append(ic);
   }
 }
@@ -1633,7 +1712,7 @@ window.addEventListener("message", e => {
     // clicks inside the iframe never reach the window's own mousedown
     // handler, so apps raise their window through the bridge
     focusWin(w);
-  } else if (e.data.exe === "grow-start") {
+  } else if (e.data.exe === "grow-start" && !IS_MOBILE) {
     appGrow = { win: w, frame: fr, w: w.offsetWidth, h: fr.offsetHeight };
     winDragging = w;
     focusWin(w);
@@ -1718,7 +1797,7 @@ async function loadFinder(w) {
       it.classList.add("sel");
     };
     it.addEventListener("click", e => { e.stopPropagation(); select(); });
-    it.addEventListener("dblclick", () => openEntry(en, path ? path + "/" + en.name : en.name, w));
+    tapOpen(it, () => openEntry(en, path ? path + "/" + en.name : en.name, w));
     it.addEventListener("contextmenu", e => {
       e.preventDefault(); e.stopPropagation();
       select();
@@ -1897,11 +1976,11 @@ $("#desktop").addEventListener("mousedown", e => {
 });
 const trashIcon = $("#trash-icon");
 trashIcon.addEventListener("click", e => { e.stopPropagation(); trashIcon.classList.add("sel"); selectedIcon = null; });
-trashIcon.addEventListener("dblclick", () => openWin("#win-trash"));
+tapOpen(trashIcon, () => openWin("#win-trash"));
 document.addEventListener("mousedown", e => { if (!e.target.closest("#trash-icon")) trashIcon.classList.remove("sel"); });
 const chatIcon = $("#chat-icon");
 chatIcon.addEventListener("click", e => { e.stopPropagation(); chatIcon.classList.add("sel"); selectedIcon = null; });
-chatIcon.addEventListener("dblclick", () => openChatWin());
+tapOpen(chatIcon, () => openChatWin());
 document.addEventListener("mousedown", e => { if (!e.target.closest("#chat-icon")) chatIcon.classList.remove("sel"); });
 
 // OS 9 scrollbar end-merge: thumbs render with the leading border merged into
@@ -2004,7 +2083,9 @@ function renderVMList(rawVMs) {
     ];
     const sc = VM_COLS.findIndex(c => c.key === vmSort.key);
     if (cells[sc]) cells[sc].classList.add("sortcol");
-    tb.append(el("tr", { class: "vm-row", ondblclick: () => openVM(vm.name) }, ...cells, actions));
+    const row = el("tr", { class: "vm-row" }, ...cells, actions);
+    tapOpen(row, () => openVM(vm.name));
+    tb.append(row);
   }
 }
 async function vmAction(name, action) {
@@ -3166,6 +3247,7 @@ function appDataSubscribe() {
 tokenInput.addEventListener("change", () => { if (appES) appDataSubscribe(); });
 
 // ---- boot ----
+if (IS_MOBILE) $("#vm-hint").textContent = "tap a VM to open it";
 winRestore();
 appDataSubscribe();
 renderVMHead();
