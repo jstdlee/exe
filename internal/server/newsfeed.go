@@ -176,6 +176,62 @@ func (s *Server) handleNewsfeedPost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "posted"})
 }
 
+// handleNewsfeedDelete removes one item — wherever it lives — from the feed
+// on every node. Journals are one-writer in the append path, but a delete
+// edits the origin node's journal in place: the version-vector sync carries
+// the smaller file everywhere, and the rare concurrent append to the same
+// journal is a plain LWW conflict the engine already resolves (with the
+// losing copy backed up). Fine for a notifications feed.
+func (s *Server) handleNewsfeedDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var changed []string
+	s.newsMu.Lock()
+	defer s.newsMu.Unlock()
+	s.withFileLock(func() {
+		ents, _ := os.ReadDir(s.newsDir())
+		for _, en := range ents {
+			if en.IsDir() || !strings.HasSuffix(en.Name(), ".json") {
+				continue
+			}
+			p := filepath.Join(s.newsDir(), en.Name())
+			b, err := os.ReadFile(p)
+			var items []newsItem
+			if err != nil || json.Unmarshal(b, &items) != nil {
+				continue
+			}
+			kept := items[:0]
+			for _, it := range items {
+				if it.ID != id {
+					kept = append(kept, it)
+				}
+			}
+			if len(kept) == len(items) {
+				continue
+			}
+			nb, err := json.Marshal(kept)
+			if err == nil {
+				err = writeNewsFile(p, nb)
+			}
+			if err != nil {
+				log.Printf("newsfeed: %v", err)
+				continue
+			}
+			if s.Peers != nil {
+				s.Peers.LocalWrite(newsApp, en.Name())
+			}
+			changed = append(changed, en.Name())
+		}
+	})
+	if len(changed) == 0 {
+		writeErr(w, http.StatusNotFound, errors.New("no such item"))
+		return
+	}
+	for _, f := range changed {
+		s.BroadcastAppData(newsApp, f, false, r.Header.Get("X-Exe-Client"))
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func clipText(s string, max int) string {
 	r := []rune(s)
 	if len(r) <= max {

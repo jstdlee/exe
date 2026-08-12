@@ -68,6 +68,57 @@ func TestNewsfeedPostAPIRequiresTitle(t *testing.T) {
 	}
 }
 
+func TestNewsfeedDeletePropagates(t *testing.T) {
+	a, b := newTestNode(t), newTestNode(t)
+	pairNodes(t, a, b)
+
+	resp, err := http.Post(a.ts.URL+"/v1/newsfeed", "application/json",
+		strings.NewReader(`{"title":"doomed item"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	feedItems := func(base string) []newsItem {
+		r, err := http.Get(base + "/v1/newsfeed")
+		if err != nil {
+			return nil
+		}
+		defer r.Body.Close()
+		var feed struct {
+			Items []newsItem `json:"items"`
+		}
+		json.NewDecoder(r.Body).Decode(&feed)
+		return feed.Items
+	}
+	var id string
+	hasDoomed := func(base string) bool {
+		for _, it := range feedItems(base) {
+			if it.Title == "doomed item" {
+				id = it.ID
+				return true
+			}
+		}
+		return false
+	}
+	waitFor(t, "the item to reach B", func() bool { return hasDoomed(b.ts.URL) })
+
+	// delete on B — the node that did NOT post it — and both feeds must drop it
+	req, _ := http.NewRequest("DELETE", b.ts.URL+"/v1/newsfeed/"+id, nil)
+	dresp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dresp.Body.Close()
+	if dresp.StatusCode != 200 {
+		t.Fatalf("DELETE: %d", dresp.StatusCode)
+	}
+	if hasDoomed(b.ts.URL) {
+		t.Fatal("item still in B's feed after delete")
+	}
+	waitFor(t, "the deletion to sync back to A", func() bool { return !hasDoomed(a.ts.URL) })
+}
+
 func TestNewsfeedSyncsBetweenNodes(t *testing.T) {
 	a, b := newTestNode(t), newTestNode(t)
 	pairNodes(t, a, b)

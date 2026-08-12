@@ -395,8 +395,14 @@ pre.out { background: #10120f; color: #cfe3cf; border: 1px solid var(--black); p
    between items — the statusbar draws the bottom frame line); the small
    gray last line is the byline: which node posted it, and when */
 #news-list { height: 380px; overflow-y: scroll; overflow-x: hidden; }
-.news-item { padding: 6px 10px 5px; }
+.news-item { position: relative; overflow: hidden; touch-action: pan-y; }
 .news-item + .news-item { border-top: 1px solid var(--g500); }
+/* the row content is its own white layer so on mobile it can slide left
+   to reveal the Delete button parked under its right edge */
+.news-swipe { position: relative; padding: 6px 10px 5px; background: #fff;
+  transition: transform .15s ease; }
+.news-del { position: absolute; inset: 0 0 0 auto; width: 72px; border: 0; padding: 0;
+  background: var(--red); color: #fff; font: bold 12px var(--font); }
 .news-title { font-weight: bold; }
 .news-body { margin-top: 1px; white-space: pre-wrap; overflow-wrap: break-word; user-select: text; }
 .news-meta { margin-top: 3px; font-size: 10px; color: #777; }
@@ -2822,13 +2828,63 @@ async function loadNews() {
     list.append(el("div", { class: "muted", style: "padding:10px" },
       "No news yet — VM launches, sync conflicts and node changes from every joined node land here."));
   }
+  newsOpenRow = null; // rows were just rebuilt — no swipe is open anymore
   for (const it of items) {
-    const row = el("div", { class: "news-item" }, el("div", { class: "news-title" }, it.title || ""));
-    if (it.body) row.append(el("div", { class: "news-body" }, it.body));
-    row.append(el("div", { class: "news-meta" }, (it.host || "?") + " · " + new Date(it.time).toLocaleString()));
+    const wrap = el("div", { class: "news-swipe" }, el("div", { class: "news-title" }, it.title || ""));
+    if (it.body) wrap.append(el("div", { class: "news-body" }, it.body));
+    wrap.append(el("div", { class: "news-meta" }, (it.host || "?") + " · " + new Date(it.time).toLocaleString()));
+    const row = el("div", { class: "news-item" });
+    if (IS_MOBILE) {
+      row.append(el("button", { class: "news-del", onclick: () => deleteNews(it.id) }, "Delete"));
+      wireNewsSwipe(row, wrap);
+    }
+    row.append(wrap);
     list.append(row);
   }
   $("#news-count").textContent = items.length === 1 ? "1 item" : items.length + " items";
+}
+
+// mobile swipe-to-delete: drag a row left to park its content at -72px and
+// reveal Delete underneath; drag right, tap the row, or start a drag on
+// another row to close it again. touch-action: pan-y on the row keeps
+// vertical list scrolling native while horizontal drags reach us.
+let newsOpenRow = null;
+function newsCloseSwipe() {
+  if (newsOpenRow) { newsOpenRow.style.transform = ""; newsOpenRow = null; }
+}
+function wireNewsSwipe(row, wrap) {
+  const W = 72;
+  let sx = 0, sy = 0, dx = 0, horiz = null;
+  row.addEventListener("touchstart", e => {
+    if (newsOpenRow && newsOpenRow !== wrap) newsCloseSwipe();
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+    dx = newsOpenRow === wrap ? -W : 0;
+    horiz = null;
+  }, { passive: true });
+  row.addEventListener("touchmove", e => {
+    const mx = e.touches[0].clientX - sx, my = e.touches[0].clientY - sy;
+    if (horiz === null && (Math.abs(mx) > 6 || Math.abs(my) > 6)) horiz = Math.abs(mx) > Math.abs(my);
+    if (!horiz) return;
+    dx = Math.max(-W, Math.min(0, (newsOpenRow === wrap ? -W : 0) + mx));
+    wrap.style.transition = "none";
+    wrap.style.transform = "translateX(" + dx + "px)";
+  }, { passive: true });
+  const settle = () => {
+    if (!horiz) return;
+    wrap.style.transition = "";
+    if (dx < -W / 2) { wrap.style.transform = "translateX(-" + W + "px)"; newsOpenRow = wrap; }
+    else { wrap.style.transform = ""; if (newsOpenRow === wrap) newsOpenRow = null; }
+  };
+  row.addEventListener("touchend", settle);
+  row.addEventListener("touchcancel", settle);
+  // a plain tap (no drag this touch) on an open row closes it
+  wrap.addEventListener("click", () => { if (newsOpenRow === wrap && horiz === null) newsCloseSwipe(); });
+}
+async function deleteNews(id) {
+  try {
+    await api("/v1/newsfeed/" + encodeURIComponent(id), { method: "DELETE" });
+  } catch (e) { toast(e.message); }
+  loadNews().catch(() => {});
 }
 
 // the Chat window only appears once the Ollama endpoint answers /api/version
