@@ -153,6 +153,16 @@ a { color: #202a87; text-decoration: underline; }
 .window.grow .win-frame::after { content: ""; position: absolute; right: -2px; bottom: -2px;
   width: 17px; height: 2px; background: var(--g400); }
 .grow-box { position: absolute; right: 0; bottom: 0; width: 15px; height: 15px; }
+/* invisible edge grips on resizable windows: left/right drag width, bottom
+   drags height — one-axis versions of the grow corner. Each strip straddles
+   the frame border (2px inside, over the platinum gutter, so scrollbars stay
+   clickable; 3px outside, over the black line and hard shadow) and stops
+   short of the grow tile so the corner keeps its two-axis drag. */
+.win-edge { position: absolute; z-index: 6; }
+.edge-l { left: -3px; top: 0; bottom: 0; width: 5px; cursor: ew-resize; }
+.edge-r { right: -3px; top: 0; bottom: 20px; width: 5px; cursor: ew-resize; }
+.edge-b { bottom: -3px; left: 0; right: 20px; height: 5px; cursor: ns-resize; }
+.window.shaded .win-edge, .window:not(.grow) .win-edge { display: none; }
 /* document-window scroller to pair with .grow: flush 15px OS 9 bars whose
    trailing edge is the .win-frame border itself (the global 16px spec draws
    its own trailing line and would double it), with the second end arrow as
@@ -1407,11 +1417,60 @@ function initWindow(w) {
 }
 document.querySelectorAll(".window").forEach(initWindow);
 
+// invisible edge grips on resizable windows: dragging the left or right
+// edge resizes width (the left edge keeps the right side anchored), the
+// bottom edge resizes the body height. Same clamps and live-sync as the
+// grow corner; the .win-edge CSS keeps them hidden unless the window is
+// .grow and unshaded.
+function wireEdges(w, body, minW, opts = {}) {
+  if (IS_MOBILE) return;
+  w._edge = { body, minW, opts };
+  if (w.querySelector(":scope > .win-edge")) return;
+  for (const dir of ["l", "r", "b"]) {
+    const grip = el("div", { class: "win-edge edge-" + dir });
+    grip.addEventListener("pointerdown", e => {
+      if (w.classList.contains("shaded")) return;
+      e.preventDefault(); e.stopPropagation();
+      focusWin(w);
+      // capture the drag's pointer stream — it crosses iframes mid-drag
+      try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+      const { body, minW, opts } = w._edge;
+      const sw = w.offsetWidth, sl = w.offsetLeft, sh = body.offsetHeight;
+      const sx = e.clientX, sy = e.clientY;
+      const st = opts.stickEl;
+      const stick = st && st.scrollHeight - st.scrollTop - st.clientHeight < 4;
+      winDragging = w;
+      const move = ev => {
+        if (dir === "b") {
+          body.style.height = Math.max(opts.minH || 96, Math.min(window.innerHeight - (opts.hPad || 170), sh + ev.clientY - sy)) + "px";
+          if (stick) st.scrollTop = st.scrollHeight;
+        } else {
+          const dx = dir === "r" ? ev.clientX - sx : sx - ev.clientX;
+          const nw = Math.max(minW, Math.min(window.innerWidth - 40, sw + dx));
+          w.style.width = nw + "px";
+          if (dir === "l") w.style.left = (sl + sw - nw) + "px";
+        }
+        if (opts.onMove) opts.onMove();
+        winSaveLive();
+      };
+      const up = () => {
+        winDragging = null;
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        winSave();
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+    w.append(grip);
+  }
+}
 // shared grow-box drag: resizes the window's width and one body element's
 // height, live-syncing the layout snapshot. stickEl keeps a scroller pinned
 // to its end during the resize (log tail, chat transcript).
 function wireGrow(grip, w, body, minW, opts = {}) {
   if (IS_MOBILE) return; // no resize in mobile mode — the grow box is hidden
+  wireEdges(w, body, minW, opts); // window edges get the one-axis drags
   grip.addEventListener("pointerdown", e => {
     e.preventDefault(); e.stopPropagation();
     focusWin(w);
@@ -1881,6 +1940,9 @@ function openAppWin(name) {
     fr.src = "/apps/" + encodeURIComponent(name) + "/" + tok;
     $("#desktop").append(w);
     initWindow(w);
+    // the app's grow box lives inside its iframe (postMessage bridge), so
+    // the edge grips are wired here, with the bridge's own clamps
+    wireEdges(w, fr, 240, { minH: 120, hPad: 120 });
   }
   openWin(w);
 }
