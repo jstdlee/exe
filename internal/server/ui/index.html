@@ -3902,9 +3902,14 @@ $("#join-x").onclick = joinClose;
 async function joinRefresh(full) {
   try {
     if (full) {
+      // /v1/peers returns cached statuses so the dialog paints instantly;
+      // follow with a real probe (blocks server-side up to 4 s per
+      // unreachable peer) to fill in fresh online/latency.
       const d = await j("/v1/peers");
       renderJoinSelf(d.self || {});
       renderJoinPeers(d.peers || []);
+      const f = await j("/v1/peers/status?force=1");
+      renderJoinPeers(f.peers || []);
     } else {
       const d = await j("/v1/peers/status?force=1");
       renderJoinPeers(d.peers || []);
@@ -3940,13 +3945,16 @@ function renderJoinPeers(peers) {
         .then(() => { toast("Left " + (p.name || p.id)); joinRefresh(true); })
         .catch(e => toast(e.message));
     };
-    const dot = el("span", { class: "dot", title: p.online ? "online" : (p.error || "offline") });
+    // online=false with no error means "not probed yet" (cached paint on
+    // open) — show a pending "…" instead of flashing the peer as offline.
+    const probing = !p.online && !p.error && !p.last_seen;
+    const dot = el("span", { class: "dot", title: p.online ? "online" : probing ? "checking…" : (p.error || "offline") });
     dot.style.background = p.online ? "var(--green)" : "var(--gray)";
     box.append(el("div", { class: "join-peer" },
       dot,
       el("span", { class: "join-name", title: p.id + (p.addr ? " · " + p.addr : "") }, p.name || p.id),
       el("span", { class: "mono muted" }, p.addr || ""),
-      el("span", { class: "join-lat" }, p.online ? p.latency_ms + " ms" : "—"),
+      el("span", { class: "join-lat" }, p.online ? p.latency_ms + " ms" : probing ? "…" : "—"),
       leave));
   }
 }

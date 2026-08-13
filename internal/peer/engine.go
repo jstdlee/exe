@@ -985,6 +985,14 @@ func (e *Engine) setStatus(p *Peer, latency time.Duration, err error) {
 
 // ---- status / latency -------------------------------------------------------
 
+// StatusCached returns the last known statuses without probing — a probe
+// blocks up to the 4 s ping timeout per unreachable peer, too slow for a
+// UI read on the dialog-open path. Peers never probed since startup come
+// back with Online=false and an empty Error.
+func (e *Engine) StatusCached() []*Status {
+	return e.statusList()
+}
+
 // Probe measures round-trip latency to every peer, cached for 5 s so the
 // dialog's poll doesn't hammer the mesh; force bypasses the cache.
 func (e *Engine) Probe(force bool) []*Status {
