@@ -1405,6 +1405,7 @@ function openWin(sel) {
   return w;
 }
 function closeWin(w) {
+  const wasFront = w.classList.contains("front");
   w.hidden = true;
   if (w.id === "win-detail") { closeTerm(); flushNotes(); currentVM = null; }
   if (w.id === "win-newvm") $("#c-status").textContent = "";
@@ -1422,6 +1423,12 @@ function closeWin(w) {
       if (prev) { prev.hidden = false; focusWin(prev); }
     }
     mobSave();
+  } else if (wasFront) {
+    // OS 9: closing the active window activates the one revealed beneath
+    // it — z order doubles as activation recency since zTop is monotonic
+    const wins = [...document.querySelectorAll("#desktop .window")].filter(x => !x.hidden);
+    wins.sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0));
+    if (wins[0]) focusWin(wins[0]);
   }
   winSave();
 }
