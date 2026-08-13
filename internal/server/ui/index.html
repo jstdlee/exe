@@ -1728,9 +1728,11 @@ function applyWinState(st) {
       if (id === "win-log" && v.h) $("#log-out").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-news" && v.h) $("#news-list").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-docs" && v.h) $("#docs-body").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
-      if (id === "win-vms" && v.h) $("#win-vms .win-body").style.height = Math.max(120, Math.min(window.innerHeight - 170, v.h)) + "px";
-      if (id === "win-config" && v.h) $("#win-config .win-body").style.height = Math.max(200, Math.min(window.innerHeight - 170, v.h)) + "px";
-      if (id === "win-detail" && v.h) $("#win-detail .win-body").style.height = Math.max(200, Math.min(window.innerHeight - 170, v.h)) + "px";
+      // vms/config/detail carry h only once edge-resized — an absent h means
+      // natural content height, so clear any leftover pin instead of keeping it
+      if (id === "win-vms") $("#win-vms .win-body").style.height = v.h ? Math.max(120, Math.min(window.innerHeight - 170, v.h)) + "px" : "";
+      if (id === "win-config") $("#win-config .win-body").style.height = v.h ? Math.max(200, Math.min(window.innerHeight - 170, v.h)) + "px" : "";
+      if (id === "win-detail") $("#win-detail .win-body").style.height = v.h ? Math.max(200, Math.min(window.innerHeight - 170, v.h)) + "px" : "";
       if (id === "win-chat" && v.h) $(".chat-wrap").style.height = Math.max(240, Math.min(window.innerHeight - 190, v.h)) + "px";
       if ((id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-")) && v.h) {
         const g = w.querySelector(".finder-icons, .ed-text, .iv-box");
