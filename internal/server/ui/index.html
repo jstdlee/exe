@@ -2295,7 +2295,9 @@ function nfOpen(w, folder) {
   inp.value = folder ? "untitled folder" : "untitled.txt";
   $("#nf-overlay").hidden = false;
   inp.focus();
-  inp.select();
+  // select up to the extension, so typing replaces the name but keeps .txt
+  const dot = inp.value.lastIndexOf(".");
+  inp.setSelectionRange(0, dot > 0 ? dot : inp.value.length);
 }
 function nfClose() { $("#nf-overlay").hidden = true; }
 $("#nf-x").onclick = nfClose;
