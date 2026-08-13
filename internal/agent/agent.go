@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -228,33 +229,47 @@ func chatHTTP(ctx context.Context, cfg Config, msgs []Message, tools []Tool, str
 	default:
 		creq.Think = cfg.Effort
 	}
-	body, err := json.Marshal(creq)
-	if err != nil {
-		return nil, nil, err
-	}
 	rctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	req, err := http.NewRequestWithContext(rctx, http.MethodPost,
-		strings.TrimRight(cfg.BaseURL, "/")+"/api/chat", bytes.NewReader(body))
-	if err != nil {
-		cancel()
-		return nil, nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		cancel()
-		return nil, nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
+	for {
+		body, err := json.Marshal(creq)
+		if err != nil {
+			cancel()
+			return nil, nil, err
+		}
+		req, err := http.NewRequestWithContext(rctx, http.MethodPost,
+			strings.TrimRight(cfg.BaseURL, "/")+"/api/chat", bytes.NewReader(body))
+		if err != nil {
+			cancel()
+			return nil, nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if cfg.APIKey != "" {
+			req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			cancel()
+			return nil, nil, err
+		}
+		if resp.StatusCode == http.StatusOK {
+			return resp, cancel, nil
+		}
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
+		// The configured effort doesn't fit this model or this Ollama
+		// version ("does not support thinking", "invalid think value",
+		// unknown field on old servers). The setting is best-effort:
+		// drop it and run the request the way every model accepts.
+		if creq.Think != nil && resp.StatusCode == http.StatusBadRequest &&
+			strings.Contains(strings.ToLower(string(raw)), "think") {
+			log.Printf("ollama %s: rejected think=%v (%s); retrying without it",
+				cfg.Model, creq.Think, sshexec.Truncate(string(raw), 200))
+			creq.Think = nil
+			continue
+		}
 		cancel()
 		return nil, nil, fmt.Errorf("ollama %s: HTTP %d: %s", cfg.Model, resp.StatusCode, sshexec.Truncate(string(raw), 2000))
 	}
-	return resp, cancel, nil
 }
 
 // Chat sends one non-streaming chat completion request to Ollama.

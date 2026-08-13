@@ -3293,8 +3293,8 @@ function cbConfiguredModel(p) {
   return sect.model || "";
 }
 const CB_EFFORTS = {
-  openai: ["", "minimal", "low", "medium", "high", "xhigh"],
-  ollama: ["", "off", "low", "medium", "high"],
+  openai: ["", "none", "minimal", "low", "medium", "high", "xhigh", "max"],
+  ollama: ["", "off", "low", "medium", "high", "max"],
 };
 async function cbFill() {
   const p = $("#cb-provider").value;
@@ -3374,12 +3374,12 @@ const CONFIG_FIELDS = [
     { path: "ollama.base_url", hint: "local daemon or https://ollama.com" },
     { path: "ollama.api_key", secret: true },
     { path: "ollama.model", models: "ollama" },
-    { path: "ollama.effort", options: ["", "off", "low", "medium", "high"], hint: "thinking effort for models that support it (Ollama's think option); off disables thinking" },
+    { path: "ollama.effort", options: ["", "off", "low", "medium", "high", "max"], hint: "thinking effort for models that support it (Ollama's think option); off disables thinking" },
   ]},
   { group: "OpenAI", fields: [
     { path: "chat_provider", options: ["ollama", "openai"], hint: "which backend the Chat window uses — openai runs on your ChatGPT subscription" },
     { path: "openai.model", models: "openai", hint: "listed live from the ChatGPT backend once signed in" },
-    { path: "openai.effort", options: ["", "minimal", "low", "medium", "high", "xhigh"], hint: "reasoning effort — empty uses the model's default; xhigh only on some codex models" },
+    { path: "openai.effort", options: ["", "none", "minimal", "low", "medium", "high", "xhigh", "max"], hint: "reasoning effort — empty uses the model's default; a level the model rejects falls back to its default" },
   ]},
   { group: "Cloudflare", fields: [
     { path: "cloudflare.api_token", secret: true },

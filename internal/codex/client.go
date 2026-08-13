@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -194,49 +195,62 @@ func ChatStream(ctx context.Context, cfg ClientConfig, msgs []agent.Message, too
 	if cfg.Effort != "" {
 		reasoning = &respReasoning{Effort: cfg.Effort}
 	}
-	body, err := json.Marshal(respRequest{
-		Model:          cfg.Model,
-		Instructions:   instructions,
-		Input:          input,
-		Tools:          convertTools(tools),
-		Reasoning:      reasoning,
-		Store:          false,
-		Stream:         true,
-		Include:        []string{"reasoning.encrypted_content"},
-		PromptCacheKey: cfg.SessionKey,
-	})
-	if err != nil {
-		return nil, err
-	}
 	rctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	req, err := http.NewRequestWithContext(rctx, http.MethodPost, responsesURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
 	reqID := newUUID()
-	req.Header.Set("Authorization", "Bearer "+cfg.AccessToken)
-	req.Header.Set("chatgpt-account-id", cfg.AccountID)
-	req.Header.Set("originator", originator)
-	req.Header.Set("OpenAI-Beta", "responses=experimental")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("session_id", reqID)
-	req.Header.Set("x-client-request-id", reqID)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusUnauthorized {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
-		return nil, ErrUnauthorized
-	}
-	if resp.StatusCode != http.StatusOK {
+	for {
+		body, err := json.Marshal(respRequest{
+			Model:          cfg.Model,
+			Instructions:   instructions,
+			Input:          input,
+			Tools:          convertTools(tools),
+			Reasoning:      reasoning,
+			Store:          false,
+			Stream:         true,
+			Include:        []string{"reasoning.encrypted_content"},
+			PromptCacheKey: cfg.SessionKey,
+		})
+		if err != nil {
+			return nil, err
+		}
+		req, err := http.NewRequestWithContext(rctx, http.MethodPost, responsesURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+cfg.AccessToken)
+		req.Header.Set("chatgpt-account-id", cfg.AccountID)
+		req.Header.Set("originator", originator)
+		req.Header.Set("OpenAI-Beta", "responses=experimental")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "text/event-stream")
+		req.Header.Set("session_id", reqID)
+		req.Header.Set("x-client-request-id", reqID)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			return readStream(resp.Body, onDelta)
+		}
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusUnauthorized {
+			return nil, ErrUnauthorized
+		}
+		// The configured effort doesn't fit this model: the reasoning
+		// setting is best-effort, so drop it and let the model run with
+		// its default rather than surfacing an error to the user.
+		low := strings.ToLower(string(raw))
+		if reasoning != nil && resp.StatusCode == http.StatusBadRequest &&
+			(strings.Contains(low, "reasoning") || strings.Contains(low, "effort")) {
+			log.Printf("chatgpt %s: rejected effort=%q (%s); retrying without it",
+				cfg.Model, cfg.Effort, truncate(string(raw), 200))
+			reasoning = nil
+			continue
+		}
 		return nil, fmt.Errorf("chatgpt %s: HTTP %d: %s", cfg.Model, resp.StatusCode, truncate(string(raw), 2000))
 	}
-	return readStream(resp.Body, onDelta)
 }
 
 func readStream(r io.Reader, onDelta func(string)) (*agent.Message, error) {
