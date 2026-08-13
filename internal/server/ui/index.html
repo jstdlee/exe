@@ -814,7 +814,7 @@ body.mobile th.sorted {
   </div>
 
   <!-- VM detail -->
-  <div class="window" id="win-detail" style="left:150px; top:64px; width:640px;" hidden>
+  <div class="window edge-grow" id="win-detail" style="left:150px; top:64px; width:640px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title" id="d-title">VM</div>
       <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
@@ -1614,6 +1614,8 @@ wireEdges($("#win-vms"), $("#win-vms .win-body"), 600, { minH: 120 });
 // Configuration likewise: no grow corner, edges only. The body scrolls
 // once its height is pinned below the form's natural size.
 wireEdges($("#win-config"), $("#win-config .win-body"), 560, { minH: 200 });
+// VM detail likewise; a live terminal refits to the new width as it drags
+wireEdges($("#win-detail"), $("#win-detail .win-body"), 600, { minH: 200, onMove: termResize });
 
 // overflow-y:auto scrollers whose frame line must stay single: the border
 // yields to the scrollbar's own black edge whenever the bar is present
@@ -1665,6 +1667,9 @@ function winSnapshot() {
   // Configuration height likewise only once edge-resized
   const cb = $("#win-config .win-body");
   if (cb.style.height) st["win-config"].h = parseInt(cb.style.height);
+  // VM detail height likewise only once edge-resized
+  const db = $("#win-detail .win-body");
+  if (db.style.height) st["win-detail"].h = parseInt(db.style.height);
   return st;
 }
 function applyWinState(st) {
@@ -1702,7 +1707,10 @@ function applyWinState(st) {
       const w = document.getElementById(id);
       if (!w || w === winDragging) continue;
       const width = v.w || w.offsetWidth || 220;
-      if (v.w) w.style.width = Math.min(window.innerWidth - 24, v.w) + "px";
+      // floor at the window's wired minimum: a snapshot saved by a narrow
+      // viewport (the innerWidth clamp below persists via winSave) must not
+      // pin a resizable window below the width its own drags enforce
+      if (v.w) w.style.width = Math.max(w._edge ? w._edge.minW : 0, Math.min(window.innerWidth - 24, v.w)) + "px";
       if (v.l !== undefined) w.style.left = Math.min(window.innerWidth - 60, Math.max(60 - width, v.l)) + "px";
       if (v.t !== undefined) w.style.top = Math.min(window.innerHeight - 46, Math.max(0, v.t)) + "px";
       if (v.z) { w.style.zIndex = v.z; maxZ = Math.max(maxZ, v.z); }
@@ -1712,6 +1720,7 @@ function applyWinState(st) {
       if (id === "win-docs" && v.h) $("#docs-body").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-vms" && v.h) $("#win-vms .win-body").style.height = Math.max(120, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-config" && v.h) $("#win-config .win-body").style.height = Math.max(200, Math.min(window.innerHeight - 170, v.h)) + "px";
+      if (id === "win-detail" && v.h) $("#win-detail .win-body").style.height = Math.max(200, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-chat" && v.h) $(".chat-wrap").style.height = Math.max(240, Math.min(window.innerHeight - 190, v.h)) + "px";
       if ((id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-")) && v.h) {
         const g = w.querySelector(".finder-icons, .ed-text, .iv-box");
