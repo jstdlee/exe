@@ -1805,7 +1805,9 @@ async function openDocsWin() {
   try {
     const r = await fetch("/docs.md");
     if (!r.ok) throw new Error("HTTP " + r.status);
-    renderMD($("#docs-md"), await r.text());
+    // docs.md is hard-wrapped in the source; unlike chat (breaks:true),
+    // fold those newlines back into flowing paragraphs
+    $("#docs-md").innerHTML = DOMPurify.sanitize(marked.parse(await r.text(), { breaks: false }));
     docsLoaded = true;
   } catch (e) {
     $("#docs-md").replaceChildren(el("span", { class: "muted" }, "Could not load the documentation — " + e.message));
