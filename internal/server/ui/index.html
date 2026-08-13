@@ -257,6 +257,10 @@ a { color: #202a87; text-decoration: underline; }
 .statusbar button + button { margin-left: -4px; }
 td.actions button + button { margin-left: 8px; }
 
+/* the Chat status line opens the backend switcher */
+#chat-status { cursor: pointer; }
+#chat-status:hover { text-decoration: underline; }
+
 /* modal dialogs */
 .overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,.15);
   display: flex; align-items: center; justify-content: center; }
@@ -1174,6 +1178,45 @@ body.mobile th.sorted {
         <div class="row" style="justify-content:space-between; margin-top:18px">
           <button class="ghost" id="sum-recheck">Re-check Now</button>
           <button class="btn" id="sum-restart">Start Over…</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chat backend switcher (modal, opened from the Chat window's status line) -->
+<div id="cb-overlay" class="overlay" hidden>
+  <div class="window modal front" style="max-width:360px">
+    <div class="titlebar"><button class="tbox close" id="cb-x"></button><div class="stripe"></div>
+      <div class="title">Chat Backend</div>
+      <div class="stripe"></div></div>
+    <div class="win-frame">
+      <div class="win-body">
+        <div class="field" style="margin-bottom:10px">
+          <label for="cb-provider">provider</label>
+          <select id="cb-provider">
+            <option value="ollama">ollama</option>
+            <option value="openai">openai (ChatGPT)</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:10px">
+          <label for="cb-model">model</label>
+          <select id="cb-model"></select>
+        </div>
+        <div class="field">
+          <label for="cb-effort">effort</label>
+          <select id="cb-effort">
+            <option value="">(default)</option>
+            <option value="minimal">minimal</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="xhigh">xhigh</option>
+          </select>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <span class="muted" id="cb-status" style="flex:1"></span>
+          <button class="btn" id="cb-save">Switch</button>
         </div>
       </div>
     </div>
@@ -3239,6 +3282,69 @@ chatInput.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); chatSend(); }
 });
 
+// ---- chat backend switcher ----
+// Clicking the Chat status line opens a small modal to flip
+// provider/model/effort without a trip through Configuration. It works on
+// a fresh GET of the config so Save can't write back stale fields.
+let cbCfg = null;
+async function cbOpen() {
+  try { cbCfg = await j("/v1/config"); } catch (e) { toast(e.message); return; }
+  $("#cb-status").textContent = "";
+  $("#cb-provider").value = cbCfg.chat_provider === "openai" ? "openai" : "ollama";
+  $("#cb-overlay").hidden = false;
+  cbFill();
+}
+function cbConfiguredModel(p) {
+  const sect = (p === "openai" ? cbCfg.openai : cbCfg.ollama) || {};
+  return sect.model || "";
+}
+async function cbFill() {
+  const p = $("#cb-provider").value;
+  const sel = $("#cb-model");
+  const cur = cbConfiguredModel(p);
+  sel.replaceChildren(el("option", { value: cur }, cur || "(pick a model)"));
+  $("#cb-effort").value = (cbCfg.openai || {}).effort || "";
+  $("#cb-effort").disabled = p !== "openai";
+  try {
+    const res = await j("/v1/chat/models?provider=" + p);
+    if ($("#cb-provider").value !== p) return; // user flipped provider meanwhile
+    const models = res.models || [];
+    if (!models.length) return;
+    sel.replaceChildren(...models.map(m => el("option", { value: m }, m)));
+    if (cur && !models.includes(cur)) sel.append(el("option", { value: cur }, cur + " (configured)"));
+    sel.value = cur || models[0];
+  } catch (e) {
+    $("#cb-status").textContent = "model list unavailable: " + e.message;
+  }
+}
+$("#cb-provider").onchange = cbFill;
+$("#cb-x").onclick = () => { $("#cb-overlay").hidden = true; };
+$("#cb-save").onclick = async () => {
+  if (!cbCfg) return;
+  const p = $("#cb-provider").value;
+  const nc = JSON.parse(JSON.stringify(cbCfg));
+  nc.chat_provider = p;
+  if (p === "openai") {
+    nc.openai = nc.openai || {};
+    nc.openai.model = $("#cb-model").value;
+    nc.openai.effort = $("#cb-effort").value;
+  } else {
+    nc.ollama = nc.ollama || {};
+    nc.ollama.model = $("#cb-model").value;
+  }
+  $("#cb-save").disabled = true;
+  try {
+    await j("/v1/config", { method: "PUT", json: nc });
+    $("#cb-overlay").hidden = true;
+    toast("Chat backend: " + p + " — " + ($("#cb-model").value || "no model set"));
+    chatDetect(true);
+    if (!$("#win-config").hidden) loadConfig().catch(() => {});
+  } catch (e) { toast(e.message); }
+  $("#cb-save").disabled = false;
+};
+$("#chat-status").title = "Switch provider / model / effort…";
+$("#chat-status").onclick = cbOpen;
+
 // ---- config ----
 const CONFIG_FIELDS = [
   { group: "Daemon", fields: [
@@ -3575,6 +3681,7 @@ document.addEventListener("keydown", e => {
   if (!$("#wiz-overlay").hidden) wizClose();
   if (!$("#sum-overlay").hidden) $("#sum-overlay").hidden = true;
   if (!$("#join-overlay").hidden) joinClose();
+  if (!$("#cb-overlay").hidden) $("#cb-overlay").hidden = true;
 });
 
 function wizFeedback(kind, text) {
