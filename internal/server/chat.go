@@ -268,7 +268,7 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			return nil, err
 		}
 		ccfg := codex.ClientConfig{AccessToken: creds.AccessToken, AccountID: creds.AccountID,
-			Model: cfg.OpenAI.Model, SessionKey: sess.ID}
+			Model: cfg.OpenAI.Model, Effort: cfg.OpenAI.Effort, SessionKey: sess.ID}
 		msg, err := codex.ChatStream(ctx, ccfg, msgs, tools, onDelta)
 		if errors.Is(err, codex.ErrUnauthorized) {
 			if creds, err = s.codexToken(ctx, true); err != nil {

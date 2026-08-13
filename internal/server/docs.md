@@ -95,7 +95,7 @@ The Chat window can also run on a **ChatGPT subscription** instead of
 Ollama: in **Windows → Configuration → OpenAI**, click **Sign in with
 ChatGPT…** (the OAuth flow the Codex CLI uses — no API key), set
 `chat_provider` to `openai`, pick a model (`gpt-5.4`, `gpt-5.4-codex`, …)
-and Save. The browser sign-in redirects to `localhost:1455`; the daemon
+plus an optional reasoning effort, and Save. The browser sign-in redirects to `localhost:1455`; the daemon
 listens on all interfaces there, so when it runs on another machine swap
 `localhost` for the daemon's host in that final URL — or paste the URL
 into the tab's paste field. Tokens live in `~/.exe/openai.json` and refresh themselves.

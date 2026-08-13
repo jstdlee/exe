@@ -3271,6 +3271,7 @@ const CONFIG_FIELDS = [
   { group: "OpenAI", fields: [
     { path: "chat_provider", options: ["ollama", "openai"], hint: "which backend the Chat window uses — openai runs on your ChatGPT subscription" },
     { path: "openai.model", models: "openai", hint: "listed live from the ChatGPT backend once signed in" },
+    { path: "openai.effort", options: ["", "minimal", "low", "medium", "high", "xhigh"], hint: "reasoning effort — empty uses the model's default; xhigh only on some codex models" },
   ]},
   { group: "Cloudflare", fields: [
     { path: "cloudflare.api_token", secret: true },
@@ -3353,7 +3354,8 @@ async function loadConfig() {
       if (f.models) {
         input = modelSelect(f, val == null ? "" : String(val));
       } else if (f.options) {
-        input = el("select", { id: "cfg-" + f.path }, ...f.options.map(o => el("option", { value: o }, o)));
+        input = el("select", { id: "cfg-" + f.path },
+          ...f.options.map(o => el("option", { value: o }, o === "" ? "(default)" : o)));
         input.value = f.options.includes(val) ? val : f.options[0];
       } else {
         input = el("input", {

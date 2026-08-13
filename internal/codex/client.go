@@ -30,6 +30,9 @@ type ClientConfig struct {
 	AccessToken string
 	AccountID   string
 	Model       string
+	// Effort is the reasoning effort (minimal/low/medium/high/xhigh);
+	// empty leaves the model's default in place.
+	Effort string
 	// SessionKey keys server-side prompt caching; the chat session id.
 	SessionKey string
 }
@@ -41,11 +44,16 @@ type respTool struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
+type respReasoning struct {
+	Effort string `json:"effort"`
+}
+
 type respRequest struct {
 	Model        string            `json:"model"`
 	Instructions string            `json:"instructions"`
 	Input        []json.RawMessage `json:"input"`
 	Tools        []respTool        `json:"tools,omitempty"`
+	Reasoning    *respReasoning    `json:"reasoning,omitempty"`
 	// The ChatGPT backend rejects store:true and only serves streams.
 	Store          bool     `json:"store"`
 	Stream         bool     `json:"stream"`
@@ -182,11 +190,16 @@ func ChatStream(ctx context.Context, cfg ClientConfig, msgs []agent.Message, too
 	if instructions == "" {
 		instructions = "You are a helpful assistant."
 	}
+	var reasoning *respReasoning
+	if cfg.Effort != "" {
+		reasoning = &respReasoning{Effort: cfg.Effort}
+	}
 	body, err := json.Marshal(respRequest{
 		Model:          cfg.Model,
 		Instructions:   instructions,
 		Input:          input,
 		Tools:          convertTools(tools),
+		Reasoning:      reasoning,
 		Store:          false,
 		Stream:         true,
 		Include:        []string{"reasoning.encrypted_content"},

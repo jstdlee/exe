@@ -27,6 +27,9 @@ type OllamaConfig struct {
 type OpenAIConfig struct {
 	// Model is a ChatGPT model id, e.g. "gpt-5.4" or "gpt-5.4-codex".
 	Model string `json:"model"`
+	// Effort is the reasoning effort (minimal/low/medium/high/xhigh);
+	// empty uses the model's default.
+	Effort string `json:"effort,omitempty"`
 }
 
 type CloudflareConfig struct {
@@ -240,6 +243,7 @@ func (c *Config) Normalize() {
 	c.AdvertiseHost = strings.TrimSpace(c.AdvertiseHost)
 	c.ChatProvider = strings.ToLower(strings.TrimSpace(c.ChatProvider))
 	c.OpenAI.Model = strings.TrimSpace(c.OpenAI.Model)
+	c.OpenAI.Effort = strings.ToLower(strings.TrimSpace(c.OpenAI.Effort))
 	var dirs []string
 	for _, d := range c.AppsDirs {
 		if d = strings.TrimSpace(d); d != "" {
