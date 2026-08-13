@@ -48,9 +48,22 @@ type Message struct {
 	Content   string     `json:"content"`
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 	ToolName  string     `json:"tool_name,omitempty"`
+	// ToolCallID pairs a tool-result message with the ToolCall.ID it answers.
+	// Ollama matches results by position and leaves it empty; the ChatGPT
+	// backend requires the pairing.
+	ToolCallID string `json:"tool_call_id,omitempty"`
+	// CodexItems holds an assistant turn's raw OpenAI Responses output items
+	// (reasoning with encrypted content, message, function calls). The
+	// ChatGPT backend is stateless (store:false) and rejects a function call
+	// replayed without its reasoning item, so later turns resend these
+	// verbatim instead of reconstructing the turn from Content/ToolCalls.
+	CodexItems []json.RawMessage `json:"codex_items,omitempty"`
 }
 
 type ToolCall struct {
+	// ID is the provider's call id, set by the ChatGPT backend (empty from
+	// Ollama, which has no per-call ids).
+	ID       string `json:"id,omitempty"`
 	Function struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`

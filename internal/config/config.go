@@ -22,6 +22,13 @@ type OllamaConfig struct {
 	Model   string `json:"model"`
 }
 
+// OpenAIConfig configures the ChatGPT-subscription chat backend. The tokens
+// from Sign in with ChatGPT live in ~/.exe/openai.json, not here.
+type OpenAIConfig struct {
+	// Model is a ChatGPT model id, e.g. "gpt-5.4" or "gpt-5.4-codex".
+	Model string `json:"model"`
+}
+
 type CloudflareConfig struct {
 	APIToken  string `json:"api_token"`
 	AccountID string `json:"account_id"`
@@ -87,7 +94,12 @@ type Config struct {
 	DefaultMemoryMB int `json:"default_memory_mb"`
 	DefaultDiskGB   int `json:"default_disk_gb"`
 
+	// ChatProvider picks the Chat window's LLM backend: "ollama" (default)
+	// or "openai" (a ChatGPT subscription via Sign in with ChatGPT).
+	ChatProvider string `json:"chat_provider,omitempty"`
+
 	Ollama      OllamaConfig      `json:"ollama"`
+	OpenAI      OpenAIConfig      `json:"openai"`
 	Cloudflare  CloudflareConfig  `json:"cloudflare"`
 	Firecracker FirecrackerConfig `json:"firecracker"`
 	QEMU        QEMUConfig        `json:"qemu"`
@@ -135,6 +147,9 @@ func Default() *Config {
 		Ollama: OllamaConfig{
 			BaseURL: "https://ollama.com",
 			Model:   "glm-5.2",
+		},
+		OpenAI: OpenAIConfig{
+			Model: "gpt-5.4",
 		},
 		Firecracker: FirecrackerConfig{
 			Binary:        "firecracker",
@@ -223,6 +238,8 @@ func (c *Config) Normalize() {
 	c.ProxyListen = NormalizeListen(c.ProxyListen)
 	c.SSHListen = NormalizeListen(c.SSHListen)
 	c.AdvertiseHost = strings.TrimSpace(c.AdvertiseHost)
+	c.ChatProvider = strings.ToLower(strings.TrimSpace(c.ChatProvider))
+	c.OpenAI.Model = strings.TrimSpace(c.OpenAI.Model)
 	var dirs []string
 	for _, d := range c.AppsDirs {
 		if d = strings.TrimSpace(d); d != "" {

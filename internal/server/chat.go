@@ -13,6 +13,8 @@ import (
 
 	"exe/internal/agent"
 	"exe/internal/chat"
+	"exe/internal/codex"
+	"exe/internal/config"
 	"exe/internal/sshexec"
 	"exe/internal/vmm"
 )
@@ -47,12 +49,34 @@ func chatSystemPrompt(sshUser, domain string) string {
 	return fmt.Sprintf(chatSystemTmpl, sshUser, pub)
 }
 
-// ---- ollama detection ----
+// ---- backend detection ----
 
-// handleChatStatus reports whether an Ollama endpoint is reachable, cached
-// for a minute so the UI can ask freely; ?force=1 bypasses the cache.
+// chatProvider is the Chat window's backend: "openai" (ChatGPT
+// subscription) when configured, otherwise "ollama".
+func chatProvider(cfg *config.Config) string {
+	if cfg.ChatProvider == "openai" {
+		return "openai"
+	}
+	return "ollama"
+}
+
+// handleChatStatus reports whether the chat backend is usable, cached for a
+// minute so the UI can ask freely; ?force=1 bypasses the cache. The ChatGPT
+// path is a local credentials check — no probe, no cache needed.
 func (s *Server) handleChatStatus(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Config()
+	if chatProvider(cfg) == "openai" {
+		res := map[string]any{"provider": "openai", "detected": false, "model": cfg.OpenAI.Model}
+		if c := s.codexCreds(); c != nil {
+			res["detected"] = true
+			res["plan"] = c.Plan
+			res["email"] = c.Email
+		} else {
+			res["reason"] = "not signed in to ChatGPT (Configuration → OpenAI)"
+		}
+		writeJSON(w, http.StatusOK, res)
+		return
+	}
 	key := cfg.Ollama.BaseURL + "|" + cfg.Ollama.APIKey + "|" + cfg.Ollama.Model
 	s.chatStatMu.Lock()
 	if s.chatStatRes != nil && s.chatStatKey == key &&
@@ -64,7 +88,7 @@ func (s *Server) handleChatStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.chatStatMu.Unlock()
 
-	res := map[string]any{"detected": false, "model": cfg.Ollama.Model, "base_url": cfg.Ollama.BaseURL}
+	res := map[string]any{"provider": "ollama", "detected": false, "model": cfg.Ollama.Model, "base_url": cfg.Ollama.BaseURL}
 	switch {
 	case cfg.Ollama.BaseURL == "":
 		res["reason"] = "ollama.base_url is not configured"
@@ -135,13 +159,21 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("message is required"))
 		return
 	}
-	if cfg.Ollama.BaseURL == "" {
-		writeErr(w, http.StatusConflict, errors.New("ollama.base_url is not configured"))
-		return
-	}
-	if cfg.Ollama.APIKey == "" && strings.Contains(cfg.Ollama.BaseURL, "ollama.com") {
-		writeErr(w, http.StatusConflict, errors.New("ollama.api_key is not configured (or set OLLAMA_API_KEY)"))
-		return
+	provider := chatProvider(cfg)
+	if provider == "openai" {
+		if s.codexCreds() == nil {
+			writeErr(w, http.StatusConflict, errors.New("not signed in to ChatGPT (Configuration → OpenAI)"))
+			return
+		}
+	} else {
+		if cfg.Ollama.BaseURL == "" {
+			writeErr(w, http.StatusConflict, errors.New("ollama.base_url is not configured"))
+			return
+		}
+		if cfg.Ollama.APIKey == "" && strings.Contains(cfg.Ollama.BaseURL, "ollama.com") {
+			writeErr(w, http.StatusConflict, errors.New("ollama.api_key is not configured (or set OLLAMA_API_KEY)"))
+			return
+		}
 	}
 
 	var sess *chat.Session
@@ -188,8 +220,31 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	acfg := agent.Config{BaseURL: cfg.Ollama.BaseURL, APIKey: cfg.Ollama.APIKey, Model: cfg.Ollama.Model}
 	system := agent.Message{Role: "system", Content: chatSystemPrompt(cfg.SSHUser, cfg.Cloudflare.Domain)}
 	tools := chatTools()
+	// callModel runs one turn on the configured backend. The ChatGPT path
+	// resolves (and auto-refreshes) the token per turn and retries once
+	// after a 401 in case the token was revoked out from under us.
+	callModel := func(ctx context.Context, msgs []agent.Message, onDelta func(string)) (*agent.Message, error) {
+		if provider != "openai" {
+			return agent.ChatStream(ctx, acfg, msgs, tools, onDelta)
+		}
+		creds, err := s.codexToken(ctx, false)
+		if err != nil {
+			return nil, err
+		}
+		ccfg := codex.ClientConfig{AccessToken: creds.AccessToken, AccountID: creds.AccountID,
+			Model: cfg.OpenAI.Model, SessionKey: sess.ID}
+		msg, err := codex.ChatStream(ctx, ccfg, msgs, tools, onDelta)
+		if errors.Is(err, codex.ErrUnauthorized) {
+			if creds, err = s.codexToken(ctx, true); err != nil {
+				return nil, err
+			}
+			ccfg.AccessToken, ccfg.AccountID = creds.AccessToken, creds.AccountID
+			msg, err = codex.ChatStream(ctx, ccfg, msgs, tools, onDelta)
+		}
+		return msg, err
+	}
 	for turn := 0; turn < chatMaxTurns; turn++ {
-		msg, err := agent.ChatStream(r.Context(), acfg, append([]agent.Message{system}, sess.Messages...), tools,
+		msg, err := callModel(r.Context(), append([]agent.Message{system}, sess.Messages...),
 			func(d string) { emit(map[string]any{"type": "delta", "text": d}) })
 		if err != nil {
 			emit(map[string]any{"type": "error", "error": err.Error()})
@@ -206,7 +261,7 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 			emit(map[string]any{"type": "tool_call", "name": name, "summary": chatToolSummary(name, args)})
 			result := s.execChatTool(r.Context(), name, args)
 			emit(map[string]any{"type": "tool_result", "name": name, "output": sshexec.Truncate(result, 4000)})
-			sess.Messages = append(sess.Messages, agent.Message{Role: "tool", ToolName: name, Content: result})
+			sess.Messages = append(sess.Messages, agent.Message{Role: "tool", ToolName: name, ToolCallID: tc.ID, Content: result})
 		}
 		save()
 	}

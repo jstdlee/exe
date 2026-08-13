@@ -22,6 +22,7 @@ import (
 
 	"exe/internal/agent"
 	"exe/internal/cf"
+	"exe/internal/codex"
 	"exe/internal/config"
 	"exe/internal/hostinfo"
 	"exe/internal/peer"
@@ -59,13 +60,20 @@ type Server struct {
 	cfHealthKey string
 	cfHealthRes map[string]any
 
-	// Cached Ollama detection for the Chat window, plus one lock per chat
-	// session so two sends can't interleave a session's history.
+	// Cached chat-backend detection for the Chat window, plus one lock per
+	// chat session so two sends can't interleave a session's history.
 	chatStatMu  sync.Mutex
 	chatStatAt  time.Time
 	chatStatKey string
 	chatStatRes map[string]any
 	chatLocks   sync.Map // session id -> *sync.Mutex
+
+	// ChatGPT sign-in state: cached ~/.exe/openai.json credentials and the
+	// pending OAuth flow, if any (see openai.go).
+	codexMu     sync.Mutex
+	codexLoaded bool
+	codexCache  *codex.Creds
+	codexFlow   *codexFlow
 
 	// Shared web UI window layout (see uistate.go).
 	ui uiState
@@ -134,6 +142,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/chat/sessions/{id}", s.handleChatSession)
 	mux.HandleFunc("DELETE /v1/chat/sessions/{id}", s.handleChatSessionDelete)
 	mux.HandleFunc("POST /v1/chat/send", s.handleChatSend)
+	mux.HandleFunc("POST /v1/openai/oauth/start", s.handleOpenAIStart)
+	mux.HandleFunc("POST /v1/openai/oauth/complete", s.handleOpenAIComplete)
+	mux.HandleFunc("GET /v1/openai/status", s.handleOpenAIStatus)
+	mux.HandleFunc("POST /v1/openai/logout", s.handleOpenAILogout)
 	mux.HandleFunc("POST /v1/cloudflare/wizard", s.handleCFWizard)
 	mux.HandleFunc("GET /v1/cloudflare/health", s.handleCFHealth)
 	mux.HandleFunc("GET /v1/config", s.handleConfigGet)

@@ -88,8 +88,17 @@ needs one. Then:
 - The **Agent** tab in a VM window runs the agent inside that VM. It can
   install packages, write code and start services — it has passwordless
   sudo *inside the VM*, and the VM is the sandbox boundary.
-- The **Chat** icon and window appear once Ollama is reachable: a
+- The **Chat** icon and window appear once a chat backend is usable: a
   conversation that can see and drive your whole VM cloud.
+
+The Chat window can also run on a **ChatGPT subscription** instead of
+Ollama: in **Windows → Configuration → OpenAI**, click **Sign in with
+ChatGPT…** (the OAuth flow the Codex CLI uses — no API key), set
+`chat_provider` to `openai`, pick a model (`gpt-5.4`, `gpt-5.4-codex`, …)
+and Save. The browser sign-in finishes on `localhost:1455`; when the daemon
+runs on another machine, paste the final redirect URL into the tab's paste
+field instead. Tokens live in `~/.exe/openai.json` and refresh themselves.
+The per-VM Agent tab stays on Ollama.
 
 Prefer your own agent? See **Help → Agent Skill Guide**: exe serves a
 `/skill.md` file that teaches Claude Code, Codex or any other coding agent
@@ -148,7 +157,8 @@ restart. Highlights:
   then needs it. Paste it into **Special → Set API Token…** in each browser
   (it is kept in localStorage).
 - `ssh_user` — the user created in every VM (default `dev`).
-- `ollama.*`, `cloudflare.*` — the agent and publishing sections above.
+- `ollama.*`, `chat_provider`, `openai.model`, `cloudflare.*` — the agent
+  and publishing sections above.
 
 **Windows → Daemon Log** streams the daemon's own log when something needs
 a closer look. This page lives at `/docs.md`, and the machine-readable

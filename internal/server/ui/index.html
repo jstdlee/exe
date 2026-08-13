@@ -3063,16 +3063,19 @@ async function deleteNews(id) {
   loadNews().catch(() => {});
 }
 
-// the Chat window only appears once the Ollama endpoint answers /api/version
+// the Chat window only appears once a chat backend is usable: an Ollama
+// endpoint that answers /api/version, or a ChatGPT sign-in
 async function chatDetect(force) {
   try {
     const st = await j("/v1/chat/status" + (force ? "?force=1" : ""));
     $("#dd-chat-item").hidden = !st.detected;
     $("#chat-icon").hidden = !st.detected;
     $("#chat-status").textContent = st.detected
-      ? "ollama " + st.version + " — " + (st.model || "no model set") + " — " + st.base_url
-      : (st.reason || "ollama not detected");
-    if (!st.detected && !$("#win-chat").hidden) toast("Ollama went away: " + (st.reason || ""));
+      ? (st.provider === "openai"
+          ? "chatgpt — " + (st.model || "no model set") + (st.plan ? " — " + st.plan + " plan" : "")
+          : "ollama " + st.version + " — " + (st.model || "no model set") + " — " + st.base_url)
+      : (st.reason || "no chat backend detected");
+    if (!st.detected && !$("#win-chat").hidden) toast("Chat backend went away: " + (st.reason || ""));
   } catch (e) { /* daemon unreachable; leave as-is */ }
 }
 function openChatWin() {
@@ -3265,6 +3268,10 @@ const CONFIG_FIELDS = [
     { path: "ollama.api_key", secret: true },
     { path: "ollama.model" },
   ]},
+  { group: "OpenAI", fields: [
+    { path: "chat_provider", options: ["ollama", "openai"], hint: "which backend the Chat window uses — openai runs on your ChatGPT subscription" },
+    { path: "openai.model", hint: "ChatGPT model, e.g. gpt-5.4 or gpt-5.4-codex" },
+  ]},
   { group: "Cloudflare", fields: [
     { path: "cloudflare.api_token", secret: true },
     { path: "cloudflare.account_id" },
@@ -3300,6 +3307,7 @@ async function loadConfig() {
       pane.append(el("div", { class: "row", style: "justify-content:flex-end; margin-bottom:8px" },
         el("button", { class: "ghost sm", onclick: () => wizOpen(false) }, "Cloudflare Setup Wizard…")));
     }
+    if (g.group === "OpenAI") pane.append(openaiAuthBox());
     if (g.group === "Daemon") {
       const tools = el("div", { class: "row", style: "justify-content:flex-end; margin-bottom:8px" });
       const rb = el("button", { class: "ghost sm" }, "Restart Daemon…");
@@ -3322,11 +3330,17 @@ async function loadConfig() {
     const grid = el("div", { class: "grid" });
     for (const f of g.fields) {
       const val = getPath(loadedConfig, f.path);
-      const input = el("input", {
-        id: "cfg-" + f.path,
-        type: f.secret ? "password" : (f.num ? "number" : "text"),
-        value: val == null ? "" : (f.list ? val.join(", ") : String(val)),
-      });
+      let input;
+      if (f.options) {
+        input = el("select", { id: "cfg-" + f.path }, ...f.options.map(o => el("option", { value: o }, o)));
+        input.value = f.options.includes(val) ? val : f.options[0];
+      } else {
+        input = el("input", {
+          id: "cfg-" + f.path,
+          type: f.secret ? "password" : (f.num ? "number" : "text"),
+          value: val == null ? "" : (f.list ? val.join(", ") : String(val)),
+        });
+      }
       // inside a group tab the "ollama." / "cloudflare." prefix is redundant
       const label = f.path.includes(".") ? f.path.split(".").pop() : f.path;
       const field = el("div", { class: "field" },
@@ -3416,6 +3430,86 @@ $("#cfg-save").onclick = async () => {
   } catch (e) { toast(e.message); }
   $("#cfg-save").disabled = false;
 };
+
+// ---- Sign in with ChatGPT (Configuration → OpenAI) ----
+// The daemon runs the Codex CLI's OAuth flow; the browser callback lands on
+// localhost:1455 next to the daemon, so when the daemon is on another
+// machine the user pastes the final redirect URL instead.
+let oaiPoll = 0;
+function openaiAuthBox() {
+  const box = el("div", { style: "margin-bottom:10px" });
+  renderOpenAIAuth(box);
+  return box;
+}
+async function renderOpenAIAuth(box) {
+  let st;
+  try { st = await j("/v1/openai/status"); }
+  catch (e) { box.replaceChildren(el("div", { class: "muted" }, "status: " + e.message)); return; }
+  box.replaceChildren();
+  const row = el("div", { class: "row" });
+  if (st.authenticated) {
+    const out = el("button", { class: "ghost sm danger" }, "Sign Out");
+    out.onclick = () => openaiSignOut(out);
+    row.append(el("span", { style: "flex:1" },
+      "Signed in as ", el("b", {}, st.email || st.account_id || "?"),
+      st.plan ? " — ChatGPT " + st.plan + " plan" : ""), out);
+  } else {
+    const go = el("button", { class: "btn" }, "Sign in with ChatGPT…");
+    go.onclick = () => openaiSignIn(box, go);
+    row.append(el("span", { class: "muted", style: "flex:1" }, "Not signed in."), go);
+  }
+  box.append(row);
+}
+async function openaiSignIn(box, btn) {
+  btn.disabled = true;
+  let res;
+  try { res = await j("/v1/openai/oauth/start", { method: "POST", json: {} }); }
+  catch (e) { toast(e.message); btn.disabled = false; return; }
+  window.open(res.url, "_blank", "noopener");
+  const inp = el("input", { placeholder: "http://localhost:1455/auth/callback?code=…", style: "flex:1" });
+  const ok = el("button", { class: "btn" }, "Complete");
+  ok.onclick = async () => {
+    ok.disabled = true;
+    try {
+      const r2 = await j("/v1/openai/oauth/complete", { method: "POST", json: { input: inp.value } });
+      openaiDone(r2.email, r2.plan);
+    } catch (e) { toast(e.message); ok.disabled = false; }
+  };
+  box.replaceChildren(
+    el("div", { class: "muted", style: "margin-bottom:6px" },
+      "Waiting for the browser sign-in to finish… If no tab opened, ",
+      el("a", { href: res.url, target: "_blank", rel: "noopener" }, "open the sign-in page"), "."),
+    el("div", { class: "hint", style: "margin-bottom:6px" },
+      "If the last page can't connect (localhost:1455 isn't this daemon from your browser), copy the final URL from the address bar and paste it here:"),
+    el("div", { class: "row" }, inp, ok));
+  clearInterval(oaiPoll);
+  oaiPoll = setInterval(async () => {
+    try {
+      const st = await j("/v1/openai/status");
+      if (st.authenticated) openaiDone(st.email, st.plan);
+    } catch (e) { /* daemon briefly unreachable */ }
+  }, 2000);
+  setTimeout(() => clearInterval(oaiPoll), 10 * 60 * 1000);
+}
+function openaiDone(email, plan) {
+  clearInterval(oaiPoll);
+  toast("Signed in to ChatGPT as " + (email || "?") + (plan ? " — " + plan + " plan" : ""));
+  loadConfig().catch(() => {});
+  chatDetect(true);
+}
+async function openaiSignOut(btn) {
+  if (!btn.classList.contains("armed")) {
+    btn.classList.add("armed");
+    btn.textContent = "Sure?";
+    setTimeout(() => { btn.classList.remove("armed"); btn.textContent = "Sign Out"; }, 3000);
+    return;
+  }
+  try { await j("/v1/openai/logout", { method: "POST", json: {} }); }
+  catch (e) { toast(e.message); return; }
+  toast("Signed out of ChatGPT.");
+  loadConfig().catch(() => {});
+  chatDetect(true);
+}
 
 // ---- cloudflare wizard ----
 const WIZ_STEPS = [
