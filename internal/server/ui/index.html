@@ -295,6 +295,16 @@ td.actions button + button { margin-left: 8px; }
 .tabpanel { position: relative; border: 1px solid var(--black); background: var(--g200);
   padding: 12px 10px 10px; min-height: 280px;
   box-shadow: inset 1px 1px 0 var(--g400), inset 2px 2px 0 #fff, inset -1px -1px 0 var(--g500); }
+/* VM detail: an edge-resized body hands surplus height to the tab panel
+   (grow-only — a short window keeps the panel's natural size and scrolls
+   the body, as before), and inside each pane the main content stretches
+   with it: the terminal, the agent/transcript logs, the notes textarea */
+#win-detail .win-body { display: flex; flex-direction: column; }
+#win-detail .tabpanel { flex: 1 0 auto; display: flex; flex-direction: column; }
+#win-detail .pane:not([hidden]) { flex: 1; display: flex; flex-direction: column; }
+#pane-term #term-box { flex: 1 1 auto; }
+#pane-notes #n-text { flex: 1 1 auto; }
+#pane-vibe #a-out, #pane-tr #t-log { flex: 1 1 380px; max-height: none; }
 
 /* ---------- controls (macthemes.garden pixel bevels) ---------- */
 button { font: inherit; cursor: default; }
