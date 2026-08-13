@@ -276,6 +276,8 @@ func handleFilePut(w http.ResponseWriter, r *http.Request, root, rel string) boo
 		writeErr(w, http.StatusInternalServerError, err)
 		return false
 	}
+	_, statErr := os.Lstat(p)
+	created := os.IsNotExist(statErr)
 	// Atomic-ish: temp file in the same directory, then rename over.
 	tmp, err := os.CreateTemp(filepath.Dir(p), ".put-*")
 	if err != nil {
@@ -295,7 +297,7 @@ func handleFilePut(w http.ResponseWriter, r *http.Request, root, rel string) boo
 		writeErr(w, http.StatusInternalServerError, err)
 		return false
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "saved", "path": rel, "size": len(body)})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "saved", "path": rel, "size": len(body), "created": created})
 	return true
 }
 

@@ -131,6 +131,8 @@ right-click for Get Info and Download; **File → Upload to Workspace…**
 brings files in from this browser. Files can also be dragged from your
 computer onto the desktop (lands in the Workspace root), onto a Finder
 window (lands in its folder), or onto a folder icon (lands in that folder).
+New files brought in this way are announced on the Newsfeed, so every desk
+in the mesh sees them arrive; overwriting an existing file stays quiet.
 
 ## Apps
 

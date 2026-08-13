@@ -2612,14 +2612,18 @@ $("#up-go").onclick = async () => {
 
 // ---- Drag-and-drop upload: a file dropped on the desktop lands in the
 // Workspace root, on a Finder window in its folder, on a folder icon in
-// that folder. Uploads PUT each file; toasts report skips and failures. ----
+// that folder. Uploads PUT each file; toasts report skips and failures.
+// Genuinely new files (not overwrites) are announced on the Newsfeed. ----
 async function wsUpload(dir, files) {
   let done = 0, last = "";
+  const fresh = [];
   for (const f of files) {
     if (f.size > 10 << 20) { toast(f.name + " exceeds 10 MB"); continue; }
+    const rel = dir ? dir + "/" + f.name : f.name;
     try {
-      await api(wsUrl(dir ? dir + "/" + f.name : f.name), { method: "PUT", body: f });
+      const r = await (await api(wsUrl(rel), { method: "PUT", body: f })).json();
       done++; last = f.name;
+      if (r.created) fresh.push(rel);
     } catch (e) { toast(f.name + ": " + e.message); }
   }
   if (done) {
@@ -2627,6 +2631,12 @@ async function wsUpload(dir, files) {
     const w = document.getElementById("win-ws-" + encodeURIComponent(dir));
     if (w && !w.hidden) loadFinder(w);
   }
+  if (fresh.length)
+    j("/v1/newsfeed", { method: "POST", json: {
+      kind: "file",
+      title: fresh.length === 1 ? "File added to Workspace" : fresh.length + " files added to Workspace",
+      body: fresh.join(", "),
+    }}).catch(() => {});
   return done;
 }
 const dndHasFiles = e => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files");
