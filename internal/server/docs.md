@@ -81,7 +81,8 @@ leave on a LAN.
 ## The coding agent
 
 Point exe at Ollama in **Windows → Configuration** (`ollama.base_url` and
-`ollama.model`). A local signed-in Ollama at `http://127.0.0.1:11434` can
+`ollama.model`; `ollama.effort` sets the thinking effort on models that
+support it, or `off` to disable thinking). A local signed-in Ollama at `http://127.0.0.1:11434` can
 use cloud models like `glm-5.2:cloud` with no API key; `https://ollama.com`
 needs one. Then:
 

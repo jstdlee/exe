@@ -23,6 +23,10 @@ type Config struct {
 	BaseURL string
 	APIKey  string
 	Model   string
+	// Effort maps to Ollama's think option for models that support it:
+	// "low"/"medium"/"high" pick a thinking level, "off" disables thinking,
+	// empty leaves the model's default (and sends nothing).
+	Effort string
 }
 
 type Logf func(format string, args ...any)
@@ -86,7 +90,10 @@ type chatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
 	Tools    []Tool    `json:"tools,omitempty"`
-	Stream   bool      `json:"stream"`
+	// Think is Ollama's thinking control: a level string or false; nil
+	// (omitted) keeps the model's default.
+	Think  any  `json:"think,omitempty"`
+	Stream bool `json:"stream"`
 }
 
 type ChatResponse struct {
@@ -213,7 +220,15 @@ func Models(ctx context.Context, cfg Config) ([]string, error) {
 // caller to decode; non-200s are drained into the error. cancel bounds the
 // whole exchange (including streaming reads) to 5 minutes.
 func chatHTTP(ctx context.Context, cfg Config, msgs []Message, tools []Tool, stream bool) (*http.Response, context.CancelFunc, error) {
-	body, err := json.Marshal(chatRequest{Model: cfg.Model, Messages: msgs, Tools: tools, Stream: stream})
+	creq := chatRequest{Model: cfg.Model, Messages: msgs, Tools: tools, Stream: stream}
+	switch cfg.Effort {
+	case "":
+	case "off", "false":
+		creq.Think = false
+	default:
+		creq.Think = cfg.Effort
+	}
+	body, err := json.Marshal(creq)
 	if err != nil {
 		return nil, nil, err
 	}

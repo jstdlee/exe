@@ -66,7 +66,8 @@ func chatProvider(cfg *config.Config) string {
 func (s *Server) handleChatStatus(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Config()
 	if chatProvider(cfg) == "openai" {
-		res := map[string]any{"provider": "openai", "detected": false, "model": cfg.OpenAI.Model}
+		res := map[string]any{"provider": "openai", "detected": false,
+			"model": cfg.OpenAI.Model, "effort": cfg.OpenAI.Effort}
 		if c := s.codexCreds(); c != nil {
 			res["detected"] = true
 			res["plan"] = c.Plan
@@ -77,7 +78,7 @@ func (s *Server) handleChatStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, res)
 		return
 	}
-	key := cfg.Ollama.BaseURL + "|" + cfg.Ollama.APIKey + "|" + cfg.Ollama.Model
+	key := cfg.Ollama.BaseURL + "|" + cfg.Ollama.APIKey + "|" + cfg.Ollama.Model + "|" + cfg.Ollama.Effort
 	s.chatStatMu.Lock()
 	if s.chatStatRes != nil && s.chatStatKey == key &&
 		time.Since(s.chatStatAt) < time.Minute && r.URL.Query().Get("force") != "1" {
@@ -88,7 +89,8 @@ func (s *Server) handleChatStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.chatStatMu.Unlock()
 
-	res := map[string]any{"provider": "ollama", "detected": false, "model": cfg.Ollama.Model, "base_url": cfg.Ollama.BaseURL}
+	res := map[string]any{"provider": "ollama", "detected": false,
+		"model": cfg.Ollama.Model, "effort": cfg.Ollama.Effort, "base_url": cfg.Ollama.BaseURL}
 	switch {
 	case cfg.Ollama.BaseURL == "":
 		res["reason"] = "ollama.base_url is not configured"
@@ -253,7 +255,8 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	sess.Messages = append(sess.Messages, agent.Message{Role: "user", Content: req.Message})
 	save()
 
-	acfg := agent.Config{BaseURL: cfg.Ollama.BaseURL, APIKey: cfg.Ollama.APIKey, Model: cfg.Ollama.Model}
+	acfg := agent.Config{BaseURL: cfg.Ollama.BaseURL, APIKey: cfg.Ollama.APIKey,
+		Model: cfg.Ollama.Model, Effort: cfg.Ollama.Effort}
 	system := agent.Message{Role: "system", Content: chatSystemPrompt(cfg.SSHUser, cfg.Cloudflare.Domain)}
 	tools := chatTools()
 	// callModel runs one turn on the configured backend. The ChatGPT path

@@ -20,6 +20,10 @@ type OllamaConfig struct {
 	BaseURL string `json:"base_url"`
 	APIKey  string `json:"api_key"`
 	Model   string `json:"model"`
+	// Effort is the thinking effort for models that support it (Ollama's
+	// think option): "low"/"medium"/"high", "off" to disable thinking;
+	// empty uses the model's default.
+	Effort string `json:"effort,omitempty"`
 }
 
 // OpenAIConfig configures the ChatGPT-subscription chat backend. The tokens
@@ -242,6 +246,7 @@ func (c *Config) Normalize() {
 	c.SSHListen = NormalizeListen(c.SSHListen)
 	c.AdvertiseHost = strings.TrimSpace(c.AdvertiseHost)
 	c.ChatProvider = strings.ToLower(strings.TrimSpace(c.ChatProvider))
+	c.Ollama.Effort = strings.ToLower(strings.TrimSpace(c.Ollama.Effort))
 	c.OpenAI.Model = strings.TrimSpace(c.OpenAI.Model)
 	c.OpenAI.Effort = strings.ToLower(strings.TrimSpace(c.OpenAI.Effort))
 	var dirs []string

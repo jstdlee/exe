@@ -350,6 +350,7 @@ func (s *Server) agentRun(ctx context.Context, info *vmm.Info, name, prompt, mod
 		BaseURL: cfg.Ollama.BaseURL,
 		APIKey:  cfg.Ollama.APIKey,
 		Model:   cfg.Ollama.Model,
+		Effort:  cfg.Ollama.Effort,
 	}
 	if model != "" {
 		acfg.Model = model

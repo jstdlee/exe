@@ -1205,14 +1205,7 @@ body.mobile th.sorted {
         </div>
         <div class="field">
           <label for="cb-effort">effort</label>
-          <select id="cb-effort">
-            <option value="">(default)</option>
-            <option value="minimal">minimal</option>
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-            <option value="xhigh">xhigh</option>
-          </select>
+          <select id="cb-effort"><!-- options filled per provider by cbFill --></select>
         </div>
         <div class="row" style="margin-top:14px">
           <span class="muted" id="cb-status" style="flex:1"></span>
@@ -3113,10 +3106,11 @@ async function chatDetect(force) {
     const st = await j("/v1/chat/status" + (force ? "?force=1" : ""));
     $("#dd-chat-item").hidden = !st.detected;
     $("#chat-icon").hidden = !st.detected;
+    const eff = st.effort ? " (" + st.effort + ")" : "";
     $("#chat-status").textContent = st.detected
       ? (st.provider === "openai"
-          ? "chatgpt — " + (st.model || "no model set") + (st.plan ? " — " + st.plan + " plan" : "")
-          : "ollama " + st.version + " — " + (st.model || "no model set") + " — " + st.base_url)
+          ? "chatgpt — " + (st.model || "no model set") + eff + (st.plan ? " — " + st.plan + " plan" : "")
+          : "ollama " + st.version + " — " + (st.model || "no model set") + eff + " — " + st.base_url)
       : (st.reason || "no chat backend detected");
     if (!st.detected && !$("#win-chat").hidden) toast("Chat backend went away: " + (st.reason || ""));
   } catch (e) { /* daemon unreachable; leave as-is */ }
@@ -3298,13 +3292,19 @@ function cbConfiguredModel(p) {
   const sect = (p === "openai" ? cbCfg.openai : cbCfg.ollama) || {};
   return sect.model || "";
 }
+const CB_EFFORTS = {
+  openai: ["", "minimal", "low", "medium", "high", "xhigh"],
+  ollama: ["", "off", "low", "medium", "high"],
+};
 async function cbFill() {
   const p = $("#cb-provider").value;
   const sel = $("#cb-model");
   const cur = cbConfiguredModel(p);
   sel.replaceChildren(el("option", { value: cur }, cur || "(pick a model)"));
-  $("#cb-effort").value = (cbCfg.openai || {}).effort || "";
-  $("#cb-effort").disabled = p !== "openai";
+  const effSel = $("#cb-effort");
+  const effCur = ((p === "openai" ? cbCfg.openai : cbCfg.ollama) || {}).effort || "";
+  effSel.replaceChildren(...CB_EFFORTS[p].map(o => el("option", { value: o }, o === "" ? "(default)" : o)));
+  effSel.value = CB_EFFORTS[p].includes(effCur) ? effCur : "";
   try {
     const res = await j("/v1/chat/models?provider=" + p);
     if ($("#cb-provider").value !== p) return; // user flipped provider meanwhile
@@ -3331,6 +3331,7 @@ $("#cb-save").onclick = async () => {
   } else {
     nc.ollama = nc.ollama || {};
     nc.ollama.model = $("#cb-model").value;
+    nc.ollama.effort = $("#cb-effort").value;
   }
   $("#cb-save").disabled = true;
   try {
@@ -3373,6 +3374,7 @@ const CONFIG_FIELDS = [
     { path: "ollama.base_url", hint: "local daemon or https://ollama.com" },
     { path: "ollama.api_key", secret: true },
     { path: "ollama.model", models: "ollama" },
+    { path: "ollama.effort", options: ["", "off", "low", "medium", "high"], hint: "thinking effort for models that support it (Ollama's think option); off disables thinking" },
   ]},
   { group: "OpenAI", fields: [
     { path: "chat_provider", options: ["ollama", "openai"], hint: "which backend the Chat window uses — openai runs on your ChatGPT subscription" },
