@@ -2887,7 +2887,20 @@ function termFitCheck() {
       term.resize(term.cols, rows);
       termWS.send(JSON.stringify({ resize: [term.cols, rows] }));
     }
+    termSpacerFix($("#term-box"), term);
   }));
+}
+// xterm sizes its scroll spacer from the viewport's rounded offsetHeight;
+// fractional display scale (Windows 150% leaves the viewport at n+2/3 CSS
+// px) rounds that past the true height, and the sub-pixel overflow enables
+// the scrollbar with nothing to scroll. While there is no scrollback, pin
+// the spacer at or under the real fractional height so the bar stays in
+// its disabled-flat state; real scrollback overwrites it and scrolls.
+function termSpacerFix(box, t) {
+  const vp = box.querySelector(".xterm-viewport"), sa = box.querySelector(".xterm-scroll-area");
+  if (!vp || !sa || t.buffer.active.length > t.rows) return;
+  const h = Math.floor(vp.getBoundingClientRect().height) + "px";
+  if (sa.style.height !== h) sa.style.height = h;
 }
 $("#term-close").onclick = closeTerm;
 $("#term-open").onclick = () => {
@@ -2974,12 +2987,14 @@ function openHostTermWin() {
     if (ws.readyState === 1) {
       fit.fit();
       ws.send(JSON.stringify({ resize: [term.cols, term.rows] }));
+      requestAnimationFrame(() => termSpacerFix(box, term));
     }
   };
   ws.onopen = () => {
     status.textContent = "connected";
     ws.send(JSON.stringify({ resize: [term.cols, term.rows] }));
     term.focus();
+    requestAnimationFrame(() => termSpacerFix(box, term));
   };
   ws.onmessage = e => term.write(new Uint8Array(e.data));
   ws.onclose = () => {
