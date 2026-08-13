@@ -204,8 +204,11 @@ a { color: #202a87; text-decoration: underline; }
   align-items: center; gap: 2px; }
 .fitem .lbl { max-width: 116px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 12px; padding: 0 3px; }
-.fitem.sel svg { filter: brightness(.55) saturate(1.3); }
-.fitem.sel .lbl { background: var(--hl); color: #fff; }
+.fitem.sel svg, .fitem.drop svg { filter: brightness(.55) saturate(1.3); }
+.fitem.sel .lbl, .fitem.drop .lbl { background: var(--hl); color: #fff; }
+/* drag-and-drop upload targets */
+.finder-window.drop .finder-icons { box-shadow: inset 0 0 0 2px var(--hl); }
+#desktop.drop { box-shadow: inset 0 0 0 3px var(--hl); }
 
 /* Get Info window, OS 9 style: icon + name header, groove rule, then
    right-aligned bold labels over a two-column grid */
@@ -2137,6 +2140,7 @@ function openFinderWin(path, fromWin) {
       if (e.target === box) box.querySelectorAll(".fitem").forEach(d => d.classList.remove("sel"));
     });
     wireGrow(w.querySelector(".grow-box"), w, box, 320);
+    wireFinderDrop(w);
     $("#desktop").append(w);
     initWindow(w);
   }
@@ -2157,6 +2161,7 @@ async function loadFinder(w) {
     const it = el("div", { class: "fitem", title: en.name });
     it.innerHTML = fileIcon(en);
     it.append(el("span", { class: "lbl" }, en.name));
+    if (en.dir) it.dataset.dropDir = path ? path + "/" + en.name : en.name;
     const select = () => {
       box.querySelectorAll(".fitem").forEach(d => d.classList.remove("sel"));
       it.classList.add("sel");
@@ -2592,19 +2597,94 @@ $("#up-cancel").onclick = () => closeWin($("#win-upload"));
 $("#up-go").onclick = async () => {
   const f = $("#up-file").files[0];
   if (!f) { toast("choose a file first"); return; }
-  if (f.size > 10 << 20) { toast("file exceeds 10 MB"); return; }
   $("#up-go").disabled = true;
   $("#up-status").textContent = "uploading…";
-  try {
-    await api(wsUrl(f.name), { method: "PUT", body: f });
-    toast("Uploaded " + f.name);
-    closeWin($("#win-upload"));
-    const ws = document.getElementById("win-ws-"); // root Workspace window, if open
-    if (ws && !ws.hidden) loadFinder(ws);
-  } catch (e) { toast(e.message); }
+  const n = await wsUpload("", [f]);
   $("#up-go").disabled = false;
   $("#up-status").textContent = "";
+  if (n) closeWin($("#win-upload"));
 };
+
+// ---- Drag-and-drop upload: a file dropped on the desktop lands in the
+// Workspace root, on a Finder window in its folder, on a folder icon in
+// that folder. Uploads PUT each file; toasts report skips and failures. ----
+async function wsUpload(dir, files) {
+  let done = 0, last = "";
+  for (const f of files) {
+    if (f.size > 10 << 20) { toast(f.name + " exceeds 10 MB"); continue; }
+    try {
+      await api(wsUrl(dir ? dir + "/" + f.name : f.name), { method: "PUT", body: f });
+      done++; last = f.name;
+    } catch (e) { toast(f.name + ": " + e.message); }
+  }
+  if (done) {
+    toast(done === 1 ? "Uploaded " + last : "Uploaded " + done + " files");
+    const w = document.getElementById("win-ws-" + encodeURIComponent(dir));
+    if (w && !w.hidden) loadFinder(w);
+  }
+  return done;
+}
+const dndHasFiles = e => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files");
+// dropped directories can't be read as bodies — filter them out with a toast
+function dndDropFiles(e) {
+  const files = [];
+  let dirs = 0;
+  for (const it of e.dataTransfer.items || []) {
+    if (it.kind !== "file") continue;
+    const en = it.webkitGetAsEntry ? it.webkitGetAsEntry() : null;
+    if (en && en.isDirectory) { dirs++; continue; }
+    const f = it.getAsFile();
+    if (f) files.push(f);
+  }
+  if (!files.length && !dirs) files.push(...e.dataTransfer.files);
+  if (dirs) toast("folders can't be uploaded");
+  return files;
+}
+// without these a stray drop navigates the page away from the desktop
+document.addEventListener("dragover", e => { if (dndHasFiles(e)) e.preventDefault(); });
+document.addEventListener("drop", e => { if (dndHasFiles(e)) e.preventDefault(); });
+const desk = $("#desktop");
+desk.addEventListener("dragover", e => {
+  if (!dndHasFiles(e)) return;
+  if (e.target.closest(".window")) { desk.classList.remove("drop"); return; }
+  e.dataTransfer.dropEffect = "copy";
+  desk.classList.add("drop");
+});
+desk.addEventListener("dragleave", e => {
+  if (!desk.contains(e.relatedTarget)) desk.classList.remove("drop");
+});
+desk.addEventListener("drop", e => {
+  desk.classList.remove("drop");
+  if (!dndHasFiles(e) || e.target.closest(".window")) return;
+  e.preventDefault();
+  wsUpload("", dndDropFiles(e));
+});
+function wireFinderDrop(w) {
+  let hi = null; // the folder icon currently under the drag, if any
+  const clear = () => {
+    w.classList.remove("drop");
+    if (hi) { hi.classList.remove("drop"); hi = null; }
+  };
+  const folderAt = e => {
+    const it = e.target.closest(".fitem");
+    return it && it.dataset.dropDir !== undefined ? it : null;
+  };
+  w.addEventListener("dragover", e => {
+    if (!dndHasFiles(e)) return;
+    e.dataTransfer.dropEffect = "copy";
+    w.classList.add("drop");
+    const t = folderAt(e);
+    if (t !== hi) { if (hi) hi.classList.remove("drop"); hi = t; if (hi) hi.classList.add("drop"); }
+  });
+  w.addEventListener("dragleave", e => { if (!w.contains(e.relatedTarget)) clear(); });
+  w.addEventListener("drop", e => {
+    if (!dndHasFiles(e)) return;
+    e.preventDefault();
+    const t = folderAt(e);
+    clear();
+    wsUpload(t ? t.dataset.dropDir : w.dataset.path, dndDropFiles(e));
+  });
+}
 
 // ---- vm detail ----
 function showPane(key) {
