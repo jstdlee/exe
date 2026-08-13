@@ -66,6 +66,22 @@ func TestMergeTodosUnionAndLWW(t *testing.T) {
 	}
 }
 
+func TestMergeTodosKeepsOrder(t *testing.T) {
+	// drag-reorder writes a fractional `order` on one item; the merge must
+	// carry it (a schema-stripping merge would silently undo every reorder)
+	a := todoJSON(`{"id":"x","text":"moved","done":false,"created":1,"updated":20,"order":1.5}`)
+	b := todoJSON(`{"id":"x","text":"moved","done":false,"created":1,"updated":10}`)
+	merged, ok := MergeFile("Todo/todos.json", a, b)
+	if !ok {
+		t.Fatal("merge not ok")
+	}
+	var d todoDoc
+	json.Unmarshal(merged, &d)
+	if len(d.Items) != 1 || d.Items[0].Order != 1.5 {
+		t.Fatalf("order rank must survive the merge: %s", merged)
+	}
+}
+
 func TestMergeTodosTombstoneWins(t *testing.T) {
 	now := time.Now().UnixMilli()
 	a := todoJSON(fmt.Sprintf(`{"id":"x","text":"edited","done":false,"created":1,"updated":%d}`, now-1000))

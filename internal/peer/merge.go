@@ -14,7 +14,7 @@ import (
 // per-record updated stamps, so concurrent edits on two nodes both survive.
 // The schemas mirror what the apps write (exe-apps Todo and Notes):
 //
-//	todos.json  {"version":2,"items":[{id,text,done,created,updated,deleted?}]}
+//	todos.json  {"version":2,"items":[{id,text,done,created,updated,order?,deleted?}]}
 //	notes.json  {"notes":[{id,text,created,updated,deleted?}]}
 //
 // deleted is a tombstone stamp (ms); merged output GCs tombstones older
@@ -60,12 +60,13 @@ func CanonicalFile(key string, data []byte) ([]byte, bool) {
 }
 
 type todoItem struct {
-	ID      string `json:"id"`
-	Text    string `json:"text"`
-	Done    bool   `json:"done"`
-	Created int64  `json:"created"`
-	Updated int64  `json:"updated"`
-	Deleted int64  `json:"deleted,omitempty"`
+	ID      string  `json:"id"`
+	Text    string  `json:"text"`
+	Done    bool    `json:"done"`
+	Created int64   `json:"created"`
+	Updated int64   `json:"updated"`
+	Order   float64 `json:"order,omitempty"` // fractional drag-reorder rank; app falls back to created
+	Deleted int64   `json:"deleted,omitempty"`
 }
 
 type todoDoc struct {
