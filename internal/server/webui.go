@@ -63,6 +63,9 @@ func (s *Server) handleUI(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// the UI ships embedded in the binary and changes with every deploy;
+	// no-cache makes a plain reload always revalidate to the new build
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(uiHTML)
 }
