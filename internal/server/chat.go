@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -39,12 +40,25 @@ Rules:
 - Creating a VM takes ~10 seconds and it boots with an IP; the very first creation ever downloads a 3 GB image.
 - Format answers in Markdown (lists, tables, code blocks and links render nicely), and keep them concise. When you finish a task, summarize what changed and give the address where it can be reached.`
 
+// The system prompt of a session pinned to one VM: same operator, but the
+// fleet is out of scope and the tools already target the pinned VM.
+const chatPinnedTmpl = `You are the operator of %q, one Debian Linux VM in exe, a personal VM cloud running on this Mac. All your tools act on this VM only — other VMs are out of scope for this conversation. Inside the VM you act as user %s over SSH, with passwordless sudo.
+%s
+
+Rules:
+- To inspect or change anything inside the VM, use bash (non-interactive commands only). Install packages with sudo apt-get install -y. Services you set up should bind 0.0.0.0 and run under systemd so they survive.
+- Only call unexpose when the user explicitly asked for that; for anything destructive, restate what you are about to do first.
+- Format answers in Markdown (lists, tables, code blocks and links render nicely), and keep them concise. When you finish a task, summarize what changed and give the address where it can be reached.`
+
 func (s *Server) chatDir() string { return filepath.Join(s.StateDir, "chat") }
 
-func chatSystemPrompt(sshUser, domain string) string {
+func chatSystemPrompt(sshUser, domain, vm string) string {
 	pub := "Publishing: cloudflare.domain is not configured, so expose only adds a local proxy route — suggest the Cloudflare wizard if the user wants public URLs."
 	if domain != "" {
 		pub = fmt.Sprintf("Publishing: expose makes a VM port reachable at https://<subdomain>.%s.", domain)
+	}
+	if vm != "" {
+		return fmt.Sprintf(chatPinnedTmpl, vm, sshUser, pub)
 	}
 	return fmt.Sprintf(chatSystemTmpl, sshUser, pub)
 }
@@ -188,6 +202,9 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Session string `json:"session"`
 		Message string `json:"message"`
+		// VM pins a NEW session to one VM; ignored when Session is set —
+		// the pin is a property of the session, not of the request.
+		VM string `json:"vm"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
@@ -217,7 +234,13 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	var sess *chat.Session
 	var err error
 	if req.Session == "" {
-		sess, err = chat.New(s.chatDir(), req.Message)
+		if req.VM != "" {
+			if _, err := s.VMs.Get(r.Context(), req.VM); err != nil {
+				writeErr(w, http.StatusNotFound, err)
+				return
+			}
+		}
+		sess, err = chat.New(s.chatDir(), req.Message, req.VM)
 	} else {
 		sess, err = chat.Load(s.chatDir(), req.Session)
 	}
@@ -257,8 +280,8 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 
 	acfg := agent.Config{BaseURL: cfg.Ollama.BaseURL, APIKey: cfg.Ollama.APIKey,
 		Model: cfg.Ollama.Model, Effort: cfg.Ollama.Effort}
-	system := agent.Message{Role: "system", Content: chatSystemPrompt(cfg.SSHUser, cfg.Cloudflare.Domain)}
-	tools := chatTools()
+	system := agent.Message{Role: "system", Content: chatSystemPrompt(cfg.SSHUser, cfg.Cloudflare.Domain, sess.VM)}
+	tools := chatTools(sess.VM != "")
 	// callModel runs one turn on the configured backend. The ChatGPT path
 	// resolves (and auto-refreshes) the token per turn and retries once
 	// after a 401 in case the token was revoked out from under us.
@@ -297,8 +320,11 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		for _, tc := range msg.ToolCalls {
 			name := tc.Function.Name
 			args := agent.ParseArgs(tc.Function.Arguments)
+			if sess.VM != "" {
+				pinChatArgs(name, args, sess.VM)
+			}
 			emit(map[string]any{"type": "tool_call", "name": name, "summary": chatToolSummary(name, args)})
-			result := s.execChatTool(r.Context(), name, args)
+			result := s.execChatTool(r.Context(), name, args, sess.VM)
 			emit(map[string]any{"type": "tool_result", "name": name, "output": sshexec.Truncate(result, 4000)})
 			sess.Messages = append(sess.Messages, agent.Message{Role: "tool", ToolName: name, ToolCallID: tc.ID, Content: result})
 		}
@@ -309,11 +335,11 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 
 // ---- tools ----
 
-func chatTools() []agent.Tool {
+func chatTools(pinned bool) []agent.Tool {
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 	num := func(desc string) map[string]any { return map[string]any{"type": "integer", "description": desc} }
 	vm := str("VM name")
-	return []agent.Tool{
+	tools := []agent.Tool{
 		agent.MkTool("list_vms", "List all VMs with state, IP and specs.", map[string]any{}, nil),
 		agent.MkTool("create_vm", "Create and boot a new VM; unset specs use the configured defaults.", map[string]any{
 			"name": vm, "cpus": num("CPU count"), "memory_mb": num("memory in MB"), "disk_gb": num("disk in GB"),
@@ -342,6 +368,63 @@ func chatTools() []agent.Tool {
 			"lines": num("how many lines (default 100, max 400)"),
 		}, nil),
 	}
+	if !pinned {
+		return tools
+	}
+	// A pinned session can't even express touching another VM: the fleet
+	// tools disappear and the VM-name parameter is stripped from every
+	// schema — pinChatArgs injects the pinned name at call time instead.
+	out := tools[:0]
+	for _, t := range tools {
+		switch t.Function.Name {
+		case "list_vms", "create_vm", "delete_vm":
+			continue
+		}
+		props := t.Function.Parameters["properties"].(map[string]any)
+		delete(props, "vm")
+		delete(props, "name")
+		if req, ok := t.Function.Parameters["required"].([]string); ok {
+			keep := req[:0]
+			for _, k := range req {
+				if k != "vm" && k != "name" {
+					keep = append(keep, k)
+				}
+			}
+			t.Function.Parameters["required"] = keep
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+// pinChatArgs overwrites a tool call's VM-target argument with the session's
+// pinned VM. The pinned schemas no longer carry the parameter, and a
+// hallucinated value must not win either — overwriting beats validating.
+func pinChatArgs(name string, args map[string]any, vm string) {
+	switch name {
+	case "bash", "write_file", "read_file", "list_ports", "expose":
+		args["vm"] = vm
+	case "start_vm", "stop_vm":
+		args["name"] = vm
+	}
+}
+
+// routeBelongsTo verifies that host's proxy route points at the named VM's
+// current IP, so a pinned chat can only unexpose its own routes.
+func (s *Server) routeBelongsTo(ctx context.Context, vmName, host string) error {
+	backend, ok := s.Proxy.Snapshot()[strings.ToLower(host)]
+	if !ok {
+		return fmt.Errorf("no route for %q", host)
+	}
+	info, err := s.runningVM(ctx, vmName)
+	if err != nil {
+		return err
+	}
+	u, err := url.Parse(backend)
+	if err != nil || u.Hostname() == "" || u.Hostname() != info.IP {
+		return fmt.Errorf("%s does not route to VM %s", host, vmName)
+	}
+	return nil
 }
 
 // chatToolSummary is the one-liner the UI shows for a tool call.
@@ -366,7 +449,7 @@ func chatToolSummary(name string, args map[string]any) string {
 	}
 }
 
-func (s *Server) execChatTool(ctx context.Context, name string, args map[string]any) string {
+func (s *Server) execChatTool(ctx context.Context, name string, args map[string]any, pin string) string {
 	cfg := s.Config()
 	str := func(k string) string { v, _ := args[k].(string); return v }
 	num := func(k string) int { v, _ := args[k].(float64); return int(v) }
@@ -386,6 +469,20 @@ func (s *Server) execChatTool(ctx context.Context, name string, args map[string]
 	}
 	tctx, cancel := context.WithTimeout(ctx, chatToolTimeout)
 	defer cancel()
+
+	// Belt and braces for pinned sessions: the fleet tools aren't offered,
+	// but a model may still emit one from prior context; and unexpose takes
+	// a hostname, which schema shaping can't scope to the pin.
+	if pin != "" {
+		switch name {
+		case "list_vms", "create_vm", "delete_vm":
+			return fmt.Sprintf("error: this chat is pinned to VM %s; %s is not available here", pin, name)
+		case "unexpose":
+			if err := s.routeBelongsTo(tctx, pin, str("host")); err != nil {
+				return "error: " + err.Error()
+			}
+		}
+	}
 
 	switch name {
 	case "list_vms":

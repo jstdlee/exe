@@ -18,8 +18,11 @@ import (
 )
 
 type Meta struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// VM pins the session to a single VM: the agent's tools are scoped to
+	// it server-side. Empty for whole-daemon operator sessions.
+	VM        string    `json:"vm,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -29,14 +32,16 @@ type Session struct {
 	Messages []agent.Message `json:"messages"`
 }
 
-// New creates and saves an empty session titled after the first prompt.
-func New(dir, title string) (*Session, error) {
+// New creates and saves an empty session titled after the first prompt,
+// pinned to vm when non-empty.
+func New(dir, title, vm string) (*Session, error) {
 	suffix := make([]byte, 2)
 	rand.Read(suffix)
 	now := time.Now().UTC()
 	s := &Session{Meta: Meta{
 		ID:        fmt.Sprintf("%d-%s", now.UnixMilli(), hex.EncodeToString(suffix)),
 		Title:     Title(title),
+		VM:        vm,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}}

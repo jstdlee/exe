@@ -304,7 +304,7 @@ td.actions button + button { margin-left: 8px; }
 #win-detail .pane:not([hidden]) { flex: 1; display: flex; flex-direction: column; }
 #pane-term #term-box { flex: 1 1 auto; min-height: 160px; }
 #pane-notes #n-text { flex: 1 1 auto; }
-#pane-vibe #a-out, #pane-tr #t-log { flex: 1 1 380px; max-height: none; }
+#pane-tr #t-log { flex: 1 1 380px; max-height: none; }
 /* the terminal is the one pane that can adapt its height (xterm refits
    its rows), so when the body runs short — the 100vh cap on a small
    screen, or a short edge-resize — the squeeze flows into the terminal
@@ -409,7 +409,7 @@ td { padding: 4px 9px; border-bottom: 1px solid #efefef; }
 tr:last-child td { border-bottom: none; }
 /* OS 9 tints the sorted column's body one gray step (ExtMgr: #ddd on #eee) */
 td.sortcol { background: #eee; }
-tr.vm-row:hover td { background: #dfe3f5; }
+tr.vm-row:hover td, tr.vm-row.ctx td { background: #dfe3f5; }
 
 /* status chips */
 .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: bold; }
@@ -499,8 +499,12 @@ td .mono, td.mono { user-select: text; }
 .cs-item { display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 8px; border-bottom: 1px solid #efefef; }
 .cs-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-time { font-size: 10px; color: #777; }
+.cs-vm { color: #777; }
 .cs-item.sel { background: var(--hl); }
-.cs-item.sel .cs-title, .cs-item.sel .cs-time { color: #fff; }
+.cs-item.sel .cs-title, .cs-item.sel .cs-time, .cs-item.sel .cs-vm { color: #fff; }
+/* the VM the session list is scoped to, with an × back to all sessions */
+.chat-scope { display: flex; align-items: center; gap: 4px; padding: 1px 1px 1px 8px; border: 1px solid #999; background: #e6e6e6; }
+.chat-scope .vm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; font-size: 11px; }
 .chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .chat-msgs { flex: 1; overflow-y: auto; background: #fff; border: 1px solid var(--black);
   padding: 10px; user-select: text;
@@ -876,16 +880,11 @@ body.mobile th.sorted {
           </div>
 
           <div class="pane" id="pane-vibe" hidden>
-            <div class="muted" style="margin-bottom:8px">Tell the agent what you want — it gets a shell in this VM and can install packages, write code, and start services on its own.</div>
+            <div class="muted" style="margin-bottom:8px">Tell the agent what you want — it gets a shell in this VM and can install packages, write code, and start services on its own. Progress streams in a Chat pinned to this VM, where you can keep the conversation going.</div>
             <textarea id="a-prompt" placeholder="Build a snake game and serve it on port 8000"></textarea>
             <div class="row actions" style="margin-top:10px">
-              <div class="field" style="width:220px">
-                <label for="a-model">Model (blank = default)</label>
-                <input id="a-model">
-              </div>
               <button class="btn" id="a-run">Run Agent</button>
             </div>
-            <pre class="out" id="a-out" hidden></pre>
           </div>
 
           <div class="pane" id="pane-expose" hidden>
@@ -1020,6 +1019,10 @@ body.mobile th.sorted {
         <div class="chat-wrap">
           <div class="chat-side">
             <button class="ghost" id="chat-new">New Chat</button>
+            <div class="chat-scope" id="chat-scope" hidden>
+              <span class="vm mono" id="chat-scope-vm"></span>
+              <button class="ghost sm" id="chat-scope-x" title="Show chats for all VMs">×</button>
+            </div>
             <div class="listbox chat-sessions" id="chat-sessions"></div>
           </div>
           <div class="chat-main">
@@ -2279,12 +2282,21 @@ async function openWorkspaceFile(rel) {
 
 // ---- Finder contextual menu, styled from a real OS 9 capture ----
 const ctxMenu = $("#ctx-menu");
-function showCtxMenu(x, y, items) {
+function hideCtxMenu() {
+  if (ctxMenu.hidden) return;
+  ctxMenu.hidden = true;
+  const f = ctxMenu._onclose;
+  ctxMenu._onclose = null;
+  if (f) f();
+}
+function showCtxMenu(x, y, items, onclose) {
+  hideCtxMenu();
+  ctxMenu._onclose = onclose || null;
   ctxMenu.replaceChildren();
   for (const it of items) {
     if (it === "-") { ctxMenu.append(el("div", { class: "dd-sep" })); continue; }
     const d = el("div", { class: "dd-item" + (it.dis ? " dis" : "") }, it.label);
-    if (!it.dis) d.addEventListener("click", () => { ctxMenu.hidden = true; it.act(); });
+    if (!it.dis) d.addEventListener("click", () => { hideCtxMenu(); it.act(); });
     ctxMenu.append(d);
   }
   ctxMenu.hidden = false;
@@ -2292,8 +2304,8 @@ function showCtxMenu(x, y, items) {
   ctxMenu.style.left = Math.min(x, window.innerWidth - r.width - 4) + "px";
   ctxMenu.style.top = Math.min(y, window.innerHeight - r.height - 4) + "px";
 }
-document.addEventListener("mousedown", e => { if (!e.target.closest("#ctx-menu")) ctxMenu.hidden = true; });
-document.addEventListener("keydown", e => { if (e.key === "Escape") ctxMenu.hidden = true; });
+document.addEventListener("mousedown", e => { if (!e.target.closest("#ctx-menu")) hideCtxMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideCtxMenu(); });
 
 // Move To Trash parks the item in the dot-hidden .Trash folder (the move
 // endpoint creates it); a timestamp prefix keeps trashed names unique
@@ -2663,8 +2675,40 @@ function renderVMList(rawVMs) {
     if (cells[sc]) cells[sc].classList.add("sortcol");
     const row = el("tr", { class: "vm-row" }, ...cells, actions);
     tapOpen(row, () => openVM(vm.name));
+    // desktop: the shared OS 9 contextual menu; mobile keeps the inline
+    // buttons. The row stays highlighted while its menu is up.
+    if (!IS_MOBILE) row.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      row.classList.add("ctx");
+      const running = vm.state === "running";
+      showCtxMenu(e.clientX, e.clientY, [
+        { label: "Open", act: () => openVM(vm.name) },
+        { label: "Open Terminal", act: () => openVM(vm.name, "term") },
+        { label: "Chat with this VM", act: () => openChatWin(vm.name), dis: !chatDetected },
+        "-",
+        running ? { label: "Stop", act: () => vmAction(vm.name, "stop") }
+                : { label: "Start", act: () => vmAction(vm.name, "start") },
+        { label: "Restart", act: () => vmRestart(vm.name), dis: !running },
+        "-",
+        { label: "Copy IP", act: () => navigator.clipboard.writeText(vm.ip).then(() => toast("Copied " + vm.ip), () => toast("Copy failed")), dis: !vm.ip },
+        { label: "Expose Port…", act: () => openVM(vm.name, "expose") },
+        "-",
+        { label: "Delete", act: () => del.click() },
+      ], () => row.classList.remove("ctx"));
+    });
     tb.append(row);
   }
+}
+// no restart endpoint: a plain stop → start sequence
+async function vmRestart(name) {
+  toast(name + ": restart…");
+  try {
+    await api(`/v1/vms/${name}/stop`, { method: "POST", json: {} });
+    await api(`/v1/vms/${name}/start`, { method: "POST", json: {} });
+    toast(name + " restarted");
+  } catch (e) { toast(e.message); }
+  loadVMs();
+  if (currentVM === name) refreshDetailHead();
 }
 async function vmAction(name, action) {
   toast(name + ": " + action + "…");
@@ -2823,18 +2867,20 @@ function showPane(key) {
 }
 document.querySelectorAll("#win-detail .tab").forEach(t =>
   t.addEventListener("click", () => showPane(t.dataset.tab)));
-async function openVM(name) {
+async function openVM(name, tab) {
   if (currentVM !== name) closeTerm();
   flushNotes();
   currentVM = name;
   $("#d-title").textContent = name;
-  $("#a-out").hidden = true;
   $("#t-log").hidden = true;
   $("#e-result").textContent = "";
   showPane("svc");
   openWin("#win-detail");
   loadNotes().catch(() => {});
   await refreshDetailHead();
+  // deep-links wait for the fresh state: the Terminal tab's auto-connect
+  // reads #d-state, which still shows the previous VM until here
+  if (tab) showPane(tab);
   loadPorts().catch(() => {});
   loadTranscripts().catch(e => toast(e.message));
 }
@@ -3137,28 +3183,21 @@ async function streamLog() {
 }
 wireGrow($("#log-grow"), $("#win-log"), $("#log-out"), 380, { stickEl: $("#log-out") });
 
-// ---- agent ----
-$("#a-run").onclick = async () => {
+// ---- agent: the tab is a launcher — the prompt becomes the first message
+// of a fresh chat session pinned to this VM, and the Chat window opens to
+// stream the run. Follow-up turns continue in the same session. ----
+$("#a-run").onclick = () => {
   const prompt = $("#a-prompt").value.trim();
   if (!prompt) { toast("Tell the agent what to do first."); return; }
-  const out = $("#a-out");
-  out.hidden = false;
-  out.textContent = "";
-  $("#a-run").disabled = true;
-  try {
-    const resp = await api(`/v1/vms/${currentVM}/agent`, { method: "POST", json: { prompt, model: $("#a-model").value.trim() } });
-    const rd = resp.body.getReader();
-    const dec = new TextDecoder();
-    for (;;) {
-      const { done, value } = await rd.read();
-      if (done) break;
-      out.textContent += dec.decode(value, { stream: true });
-      out.scrollTop = out.scrollHeight;
-    }
-  } catch (e) { out.textContent += "\nERROR: " + e.message; }
-  $("#a-run").disabled = false;
-  loadTranscripts().catch(() => {});
-  loadPorts().catch(() => {});
+  if (!chatDetected) { toast("No chat backend configured (Configuration → Ollama / OpenAI)."); return; }
+  if (chatBusy) { toast("Wait for the current chat reply to finish."); return; }
+  $("#a-prompt").value = "";
+  openChatWin(currentVM);
+  // every run is its own session, even when this VM's chat is already up
+  chatCur = null;
+  chatHint();
+  chatInput.value = prompt;
+  chatSend();
 };
 
 // ---- expose ----
@@ -3269,6 +3308,10 @@ window.addEventListener("pagehide", flushNotes);
 
 // ---- chat ----
 let chatCur = null, chatBusy = false;
+// chatScope filters the session list to one VM's chats (and pins new ones
+// to it); chatCurVM is the ACTIVE session's pin — a property of the
+// session itself, shown in the titlebar however the session was reached.
+let chatScope = null, chatCurVM = null, chatDetected = false;
 const chatMsgs = $("#chat-msgs"), chatInput = $("#chat-input");
 
 // ---- newsfeed ----
@@ -3359,6 +3402,7 @@ async function deleteNews(id) {
 async function chatDetect(force) {
   try {
     const st = await j("/v1/chat/status" + (force ? "?force=1" : ""));
+    chatDetected = !!st.detected;
     $("#dd-chat-item").hidden = !st.detected;
     $("#chat-icon").hidden = !st.detected;
     const eff = st.effort ? " (" + st.effort + ")" : "";
@@ -3370,16 +3414,46 @@ async function chatDetect(force) {
     if (!st.detected && !$("#win-chat").hidden) toast("Chat backend went away: " + (st.reason || ""));
   } catch (e) { /* daemon unreachable; leave as-is */ }
 }
-function openChatWin() {
+// openChatWin(vm) scopes the window to that VM: the session list filters
+// to its chats and a new chat is pinned to it. No argument (the Chat icon,
+// the menu) shows every session.
+function openChatWin(vm) {
+  const scope = vm === undefined ? null : vm;
+  if (scope !== chatScope) {
+    if (chatBusy) { toast("Wait for the current reply to finish."); openWin("#win-chat"); return; }
+    setChatScope(scope);
+    // entering a VM's scope starts fresh unless its chat is already up;
+    // leaving scope keeps the active session — the pin belongs to it
+    if (scope && chatCurVM !== scope) {
+      chatCur = null;
+      chatCurVM = scope;
+      chatTitle();
+      chatHint();
+    }
+  }
   openWin("#win-chat");
   if (!chatMsgs.children.length) chatHint();
   loadChatSessions().catch(e => toast(e.message));
   chatInput.focus();
 }
+function setChatScope(vm) {
+  chatScope = vm || null;
+  $("#chat-scope").hidden = !chatScope;
+  $("#chat-scope-vm").textContent = chatScope || "";
+}
+$("#chat-scope-x").onclick = () => {
+  setChatScope(null);
+  loadChatSessions().catch(() => {});
+};
+function chatTitle() {
+  $("#win-chat .title").textContent = chatCurVM ? "Chat — " + chatCurVM : "Chat";
+}
 function chatHint() {
   chatMsgs.replaceChildren(el("div", { class: "chat-hint" },
-    "This chat can operate exe for you: create and manage VMs, run commands inside them, build things, and publish ports to the web.",
-    el("br"), el("br"), "Try: “what's running right now?”"));
+    chatScope
+      ? "This chat operates the VM “" + chatScope + "” — run commands inside it, build things, and publish its ports to the web."
+      : "This chat can operate exe for you: create and manage VMs, run commands inside them, build things, and publish ports to the web.",
+    el("br"), el("br"), chatScope ? "Try: “what's listening in here?”" : "Try: “what's running right now?”"));
 }
 function chatStick(force) {
   // during streaming only follow the bottom if the user hasn't scrolled up
@@ -3413,11 +3487,14 @@ function addToolOut(out) {
 function toolSummary(name, rawArgs) {
   let a = rawArgs || {};
   if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { a = {}; } }
+  // pinned sessions store tool calls without a vm argument (the server
+  // injects the pin), so the prefix only appears when the args carry one
+  const at = a.vm ? a.vm + ":" : "";
   switch (name) {
-    case "bash": return (a.vm || "") + " $ " + (a.command || "");
-    case "write_file": return `write ${a.vm}:${a.path} (${(a.content || "").length} bytes)`;
-    case "read_file": return `read ${a.vm}:${a.path}`;
-    case "expose": return `expose ${a.vm}:${a.port}` + (a.subdomain ? ` as "${a.subdomain}"` : "");
+    case "bash": return (a.vm ? a.vm + " " : "") + "$ " + (a.command || "");
+    case "write_file": return `write ${at}${a.path} (${(a.content || "").length} bytes)`;
+    case "read_file": return `read ${at}${a.path}`;
+    case "expose": return `expose ${at}${a.port}` + (a.subdomain ? ` as "${a.subdomain}"` : "");
     default: return name + (Object.keys(a).length ? " " + JSON.stringify(a) : "");
   }
 }
@@ -3433,10 +3510,11 @@ function renderChatSession(sess) {
   if (!chatMsgs.children.length) chatHint();
 }
 async function loadChatSessions() {
-  const list = await j("/v1/chat/sessions");
+  const list = (await j("/v1/chat/sessions")).filter(m => !chatScope || m.vm === chatScope);
   const box = $("#chat-sessions");
   box.replaceChildren();
-  if (!list.length) box.append(el("div", { class: "muted", style: "padding:8px" }, "No chats yet."));
+  if (!list.length) box.append(el("div", { class: "muted", style: "padding:8px" },
+    chatScope ? "No chats with this VM yet." : "No chats yet."));
   for (const m of list) {
     const x = el("button", { class: "ghost sm danger", title: "Delete this chat" }, "×");
     x.onclick = async e => {
@@ -3447,12 +3525,16 @@ async function loadChatSessions() {
         return;
       }
       try { await api("/v1/chat/sessions/" + m.id, { method: "DELETE" }); } catch (err) { toast(err.message); }
-      if (chatCur === m.id) { chatCur = null; chatHint(); }
+      if (chatCur === m.id) { chatCur = null; chatCurVM = chatScope; chatTitle(); chatHint(); }
       loadChatSessions().catch(() => {});
     };
+    const title = el("div", { class: "cs-title", title: m.title + (m.vm ? " · " + m.vm : "") }, m.title);
+    // in the all-sessions view, VM-pinned chats carry their VM's name;
+    // under a scope every row is that VM's, so the label would be noise
+    if (m.vm && !chatScope) title.append(el("span", { class: "cs-vm" }, " · " + m.vm));
     const item = el("div", { class: "cs-item" + (m.id === chatCur ? " sel" : "") },
       el("div", { style: "flex:1; min-width:0" },
-        el("div", { class: "cs-title", title: m.title }, m.title),
+        title,
         el("div", { class: "cs-time" }, fmtTime(m.updated_at))),
       x);
     item.onclick = e => { if (!e.target.closest("button")) selectChat(m.id); };
@@ -3462,13 +3544,20 @@ async function loadChatSessions() {
 async function selectChat(id) {
   if (chatBusy) { toast("Wait for the current reply to finish."); return; }
   chatCur = id;
-  try { renderChatSession(await j("/v1/chat/sessions/" + id)); } catch (e) { toast(e.message); }
+  try {
+    const sess = await j("/v1/chat/sessions/" + id);
+    renderChatSession(sess);
+    chatCurVM = sess.vm || null;
+    chatTitle();
+  } catch (e) { toast(e.message); }
   loadChatSessions().catch(() => {});
   chatInput.focus();
 }
 $("#chat-new").onclick = () => {
   if (chatBusy) { toast("Wait for the current reply to finish."); return; }
   chatCur = null;
+  chatCurVM = chatScope;
+  chatTitle();
   chatHint();
   loadChatSessions().catch(() => {});
   chatInput.focus();
@@ -3495,7 +3584,7 @@ async function chatSend() {
     }
     cur = null;
     think.remove();
-    if (ev.type === "session") chatCur = ev.meta.id;
+    if (ev.type === "session") { chatCur = ev.meta.id; chatCurVM = ev.meta.vm || null; chatTitle(); }
     else if (ev.type === "text") addMDMsg(ev.text);
     else if (ev.type === "tool_call") addMsg("tool", "▸ " + ev.summary);
     else if (ev.type === "tool_result") addToolOut(ev.output || "");
@@ -3503,7 +3592,7 @@ async function chatSend() {
     if (ev.type !== "done") { chatMsgs.append(think); chatStick(); }
   };
   try {
-    const resp = await api("/v1/chat/send", { method: "POST", json: { session: chatCur || "", message: text } });
+    const resp = await api("/v1/chat/send", { method: "POST", json: { session: chatCur || "", message: text, vm: chatCur ? "" : (chatScope || "") } });
     const rd = resp.body.getReader();
     const dec = new TextDecoder();
     let buf = "";
@@ -3738,7 +3827,6 @@ async function loadConfig() {
     panel.append(pane);
   });
   // populate placeholders elsewhere in the UI
-  $("#a-model").placeholder = (loadedConfig.ollama && loadedConfig.ollama.model) || "model";
   $("#c-cpus").placeholder = loadedConfig.default_cpus || "cpus";
   $("#c-mem").placeholder = loadedConfig.default_memory_mb || "mem MB";
   $("#c-disk").placeholder = loadedConfig.default_disk_gb || "disk GB";
