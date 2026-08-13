@@ -146,6 +146,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/openai/oauth/start", s.handleOpenAIStart)
 	mux.HandleFunc("POST /v1/openai/oauth/complete", s.handleOpenAIComplete)
 	mux.HandleFunc("GET /v1/openai/status", s.handleOpenAIStatus)
+	mux.HandleFunc("GET /v1/openai/usage", s.handleOpenAIUsage)
 	mux.HandleFunc("POST /v1/openai/logout", s.handleOpenAILogout)
 	mux.HandleFunc("POST /v1/cloudflare/wizard", s.handleCFWizard)
 	mux.HandleFunc("GET /v1/cloudflare/health", s.handleCFHealth)

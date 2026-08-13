@@ -227,6 +227,28 @@ func (s *Server) handleOpenAIStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+// handleOpenAIUsage reports the subscription's rate-limit usage (the 5-hour
+// and weekly windows, plus any credit balance) for the Configuration
+// window's OpenAI tab.
+func (s *Server) handleOpenAIUsage(w http.ResponseWriter, r *http.Request) {
+	c, err := s.codexToken(r.Context(), false)
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	u, err := codex.FetchUsage(r.Context(), c.AccessToken, c.AccountID)
+	if errors.Is(err, codex.ErrUnauthorized) {
+		if c, err = s.codexToken(r.Context(), true); err == nil {
+			u, err = codex.FetchUsage(r.Context(), c.AccessToken, c.AccountID)
+		}
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
+}
+
 func (s *Server) handleOpenAILogout(w http.ResponseWriter, r *http.Request) {
 	s.codexMu.Lock()
 	if f := s.codexFlow; f != nil && f.listener != nil {

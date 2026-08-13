@@ -100,7 +100,9 @@ plus an optional reasoning effort, and Save. The browser sign-in redirects to `l
 listens on all interfaces there, so when it runs on another machine swap
 `localhost` for the daemon's host in that final URL — or paste the URL
 into the tab's paste field. Tokens live in `~/.exe/openai.json` and refresh themselves.
-The per-VM Agent tab stays on Ollama.
+While signed in the tab also shows the subscription's rate-limit usage —
+the rolling 5-hour and weekly windows, with their reset times — and any
+credit balance. The per-VM Agent tab stays on Ollama.
 
 Prefer your own agent? See **Help → Agent Skill Guide**: exe serves a
 `/skill.md` file that teaches Claude Code, Codex or any other coding agent

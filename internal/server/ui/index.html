@@ -538,6 +538,11 @@ td .mono, td.mono { user-select: text; }
 .wiz-review div { padding: 4px 0; border-bottom: 1px solid var(--g500); display: flex;
   justify-content: space-between; gap: 12px; }
 .wiz-review div:last-child { border-bottom: none; }
+/* OpenAI tab rate-limit usage */
+.oai-usage { display: flex; align-items: center; gap: 8px; }
+.oai-meter { width: 72px; height: 8px; border: 1px solid var(--black); background: #fff; }
+.oai-meter > span { display: block; height: 100%; background: var(--hl); }
+.oai-meter.hot > span { background: #a33; }
 .modal select, .modal input[type=text], .modal input[type=password] { width: 100%; }
 
 /* toast */
@@ -3684,6 +3689,50 @@ async function renderOpenAIAuth(box) {
     row.append(el("span", { class: "muted", style: "flex:1" }, "Not signed in."), go);
   }
   box.append(row);
+  if (st.authenticated) {
+    const ub = el("div", { style: "margin-top:8px" }, el("div", { class: "hint" }, "Loading usage…"));
+    box.append(ub);
+    renderOpenAIUsage(ub);
+  }
+}
+// Rate-limit usage for the signed-in subscription: the rolling 5-hour and
+// weekly windows the ChatGPT backend meters, plus any credit balance.
+async function renderOpenAIUsage(box) {
+  let u;
+  try { u = await j("/v1/openai/usage"); }
+  catch (e) { box.replaceChildren(el("div", { class: "hint" }, "usage: " + e.message)); return; }
+  const rows = el("div", { class: "wiz-review" });
+  const win = (label, w) => {
+    const pct = Math.max(0, Math.min(100, Math.round(w.used_percent)));
+    rows.append(el("div", {},
+      el("span", { class: "muted" }, label),
+      el("span", { class: "oai-usage" },
+        el("span", { class: "oai-meter" + (pct >= 90 ? " hot" : "") },
+          el("span", { style: "width:" + pct + "%" })),
+        pct + "% used — resets " + oaiResetAt(w.reset_at))));
+  };
+  const rl = u.rate_limit || {};
+  if (rl.primary_window) win(oaiWindowLabel(rl.primary_window.limit_window_seconds, "5-hour"), rl.primary_window);
+  if (rl.secondary_window) win(oaiWindowLabel(rl.secondary_window.limit_window_seconds, "Weekly"), rl.secondary_window);
+  if (u.credits && (u.credits.unlimited || u.credits.has_credits))
+    rows.append(el("div", {}, el("span", { class: "muted" }, "Credits"),
+      el("span", {}, u.credits.unlimited ? "unlimited" : u.credits.balance)));
+  if (!rows.children.length) { box.replaceChildren(); return; }
+  box.replaceChildren(rows);
+}
+function oaiWindowLabel(sec, fallback) {
+  if (!sec) return fallback + " limit";
+  const h = Math.round(sec / 3600);
+  if (h < 24) return h + "-hour limit";
+  const d = Math.round(h / 24);
+  return d === 7 ? "Weekly limit" : d + "-day limit";
+}
+function oaiResetAt(unix) {
+  if (!unix) return "?";
+  const d = new Date(unix * 1000);
+  const t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (d.toDateString() === new Date().toDateString()) return t;
+  return d.toLocaleDateString([], { weekday: "short" }) + " " + t;
 }
 async function openaiSignIn(box, btn) {
   btn.disabled = true;
