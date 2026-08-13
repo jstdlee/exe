@@ -311,6 +311,14 @@ td.actions button + button { margin-left: 8px; }
    instead of overflowing the body into a scrollbar */
 #win-detail .tabpanel:has(> #pane-term:not([hidden])) { flex-shrink: 1; }
 #pane-term:not([hidden]) { min-height: 0; }
+/* since the terminal absorbs any squeeze, the body never legitimately
+   scrolls on this tab — clip it so the exact-fit layout can't grow a
+   phantom scrollbar from sub-pixel rounding (Windows fractional display
+   scaling ceils scrollHeight past clientHeight). The floor is the body's
+   360px drag minimum; viewports too short for that keep the scrollbar. */
+@media (min-height: 500px) {
+  #win-detail .win-body:has(#pane-term:not([hidden])) { overflow: clip; }
+}
 
 /* ---------- controls (macthemes.garden pixel bevels) ---------- */
 button { font: inherit; cursor: default; }
@@ -1630,8 +1638,11 @@ wireEdges($("#win-vms"), $("#win-vms .win-body"), 600, { minH: 120 });
 // Configuration likewise: no grow corner, edges only. The body scrolls
 // once its height is pinned below the form's natural size.
 wireEdges($("#win-config"), $("#win-config .win-body"), 560, { minH: 200 });
-// VM detail likewise; a live terminal refits to the new width as it drags
-wireEdges($("#win-detail"), $("#win-detail .win-body"), 600, { minH: 200, onMove: termResize });
+// VM detail likewise; a live terminal refits to the new width as it drags.
+// The 360px height floor keeps every tab's fixed rows + the 280px panel
+// minimum inside the body, so the Terminal tab's clipped body never hides
+// content — the shrinking terminal means a 360px body has no dead space.
+wireEdges($("#win-detail"), $("#win-detail .win-body"), 600, { minH: 360, onMove: termResize });
 
 // overflow-y:auto scrollers whose frame line must stay single: the border
 // yields to the scrollbar's own black edge whenever the bar is present
@@ -1738,7 +1749,7 @@ function applyWinState(st) {
       // natural content height, so clear any leftover pin instead of keeping it
       if (id === "win-vms") $("#win-vms .win-body").style.height = v.h ? Math.max(120, Math.min(window.innerHeight - 170, v.h)) + "px" : "";
       if (id === "win-config") $("#win-config .win-body").style.height = v.h ? Math.max(200, Math.min(window.innerHeight - 170, v.h)) + "px" : "";
-      if (id === "win-detail") $("#win-detail .win-body").style.height = v.h ? Math.max(200, Math.min(window.innerHeight - 170, v.h)) + "px" : "";
+      if (id === "win-detail") $("#win-detail .win-body").style.height = v.h ? Math.max(360, Math.min(window.innerHeight - 170, v.h)) + "px" : "";
       if (id === "win-chat" && v.h) $(".chat-wrap").style.height = Math.max(240, Math.min(window.innerHeight - 190, v.h)) + "px";
       if ((id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-")) && v.h) {
         const g = w.querySelector(".finder-icons, .ed-text, .iv-box");
