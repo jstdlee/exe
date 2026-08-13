@@ -1224,6 +1224,28 @@ body.mobile th.sorted {
   </div>
 </div>
 
+<!-- New Folder / New Text File name prompt (modal), opened from the
+     context menu on a Finder window's white area -->
+<div id="nf-overlay" class="overlay" hidden>
+  <div class="window modal front" style="max-width:340px">
+    <div class="titlebar"><button class="tbox close" id="nf-x"></button><div class="stripe"></div>
+      <div class="title" id="nf-title">New Folder</div>
+      <div class="stripe"></div></div>
+    <div class="win-frame">
+      <div class="win-body">
+        <div class="field" style="margin-bottom:10px">
+          <label for="nf-name">Name</label>
+          <input id="nf-name" spellcheck="false" style="width:100%">
+        </div>
+        <div class="row" style="justify-content:flex-end; gap:11px; margin:4px 0 2px">
+          <button class="ghost" id="nf-cancel">Cancel</button>
+          <button class="btn" id="nf-go">Create</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Node Sync / Join (modal) -->
 <div id="join-overlay" class="overlay" hidden>
   <div class="window modal front">
@@ -2144,6 +2166,17 @@ function openFinderWin(path, fromWin) {
     box.addEventListener("click", e => {
       if (e.target === box) box.querySelectorAll(".fitem").forEach(d => d.classList.remove("sel"));
     });
+    // white-area menu: icons run their own contextmenu handler and stop
+    // propagation, so anything that reaches the box is empty space
+    box.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      showCtxMenu(e.clientX, e.clientY, [
+        { label: "New Folder…", act: () => nfOpen(w, true) },
+        { label: "New Text File…", act: () => nfOpen(w, false) },
+        "-",
+        { label: "Upload…", act: () => nfPickUpload(w.dataset.path) },
+      ]);
+    });
     wireGrow(w.querySelector(".grow-box"), w, box, 320);
     wireFinderDrop(w);
     $("#desktop").append(w);
@@ -2253,6 +2286,42 @@ async function wsDuplicate(en, rel, w) {
   } catch (e) {}
   loadFinder(w);
 }
+// ---- New Folder / New Text File: name prompt over a Finder window ----
+let nfWin = null, nfFolder = false;
+function nfOpen(w, folder) {
+  nfWin = w; nfFolder = folder;
+  $("#nf-title").textContent = folder ? "New Folder" : "New Text File";
+  const inp = $("#nf-name");
+  inp.value = folder ? "untitled folder" : "untitled.txt";
+  $("#nf-overlay").hidden = false;
+  inp.focus();
+  inp.select();
+}
+function nfClose() { $("#nf-overlay").hidden = true; }
+$("#nf-x").onclick = nfClose;
+$("#nf-cancel").onclick = nfClose;
+$("#nf-name").addEventListener("keydown", e => { if (e.key === "Enter") $("#nf-go").click(); });
+$("#nf-go").onclick = async () => {
+  const name = $("#nf-name").value.trim();
+  if (!name) { toast("name required"); return; }
+  // slashes would nest, dot-prefixed names vanish from the listing
+  if (name.includes("/") || name.startsWith(".")) { toast("that name won't work"); return; }
+  if ((nfWin._entries || []).some(x => x.name === name)) { toast(`“${name}” is already taken`); return; }
+  const rel = nfWin.dataset.path ? nfWin.dataset.path + "/" + name : name;
+  $("#nf-go").disabled = true;
+  try {
+    if (nfFolder) await api(wsUrl(rel) + "?mkdir=1", { method: "POST" });
+    else await api(wsUrl(rel), { method: "PUT", body: "" });
+    nfClose();
+    loadFinder(nfWin);
+  } catch (e) { toast(e.message); }
+  $("#nf-go").disabled = false;
+};
+// Upload… aims a throwaway file input at the window's folder
+const nfUpInput = el("input", { type: "file", multiple: "" });
+nfUpInput.onchange = () => { wsUpload(nfUpInput._dir, [...nfUpInput.files]); nfUpInput.value = ""; };
+function nfPickUpload(dir) { nfUpInput._dir = dir; nfUpInput.click(); }
+
 function showGetInfo(en, rel) {
   $("#win-getinfo .title").textContent = en.name + " Info";
   $("#gi-icon").innerHTML = fileIcon(en);
@@ -3845,6 +3914,7 @@ document.addEventListener("keydown", e => {
   if (!$("#sum-overlay").hidden) $("#sum-overlay").hidden = true;
   if (!$("#join-overlay").hidden) joinClose();
   if (!$("#cb-overlay").hidden) $("#cb-overlay").hidden = true;
+  if (!$("#nf-overlay").hidden) nfClose();
 });
 
 function wizFeedback(kind, text) {

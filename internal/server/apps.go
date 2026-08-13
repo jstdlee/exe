@@ -510,10 +510,44 @@ func (s *Server) handleWorkspaceDelete(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleWorkspaceMkdir creates a folder (POST …?mkdir=1) for the Finder's
+// New Folder. Empty folders don't sync to peers — the engine's inventory is
+// file-based — so there's no LocalWrite; the broadcast still refreshes other
+// open desktops' windows on this node.
+func (s *Server) handleWorkspaceMkdir(w http.ResponseWriter, r *http.Request) {
+	rel := r.PathValue("path")
+	p, err := scopedPath(s.workspaceDir(), rel)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	made := false
+	s.withFileLock(func() {
+		if _, err := os.Lstat(p); err == nil {
+			writeErr(w, http.StatusConflict, errors.New("name already taken"))
+			return
+		}
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		made = true
+	})
+	if !made {
+		return
+	}
+	s.BroadcastAppData(peer.WorkspaceNS, rel, false, r.Header.Get("X-Exe-Client"))
+	writeJSON(w, http.StatusOK, map[string]any{"created": filepath.ToSlash(rel)})
+}
+
 // handleWorkspaceMove renames/moves a file or folder inside the workspace
 // (body: {"to": "rel/path"}). The Finder's Move To Trash uses it to park
 // items under the dot-hidden .Trash folder instead of hard-deleting.
 func (s *Server) handleWorkspaceMove(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Has("mkdir") {
+		s.handleWorkspaceMkdir(w, r)
+		return
+	}
 	root := s.workspaceDir()
 	src, err := scopedPath(root, r.PathValue("path"))
 	if err != nil {

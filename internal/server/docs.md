@@ -127,7 +127,8 @@ Status…**, where they can be unpublished.
 The **Workspace** is `~/.exe/workspace` on this machine: a shared folder
 where you, agents and apps exchange files. The desktop icon opens a Finder
 view — double-click text files to edit them in place, images to view them;
-right-click for Get Info and Download; **File → Upload to Workspace…**
+right-click for Get Info and Download; right-click a window's empty space
+for New Folder, New Text File and Upload; **File → Upload to Workspace…**
 brings files in from this browser. Files can also be dragged from your
 computer onto the desktop (lands in the Workspace root), onto a Finder
 window (lands in its folder), or onto a folder icon (lands in that folder).
