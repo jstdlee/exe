@@ -36,6 +36,16 @@ func handleSkill(w http.ResponseWriter, r *http.Request) {
 	w.Write(skillMD)
 }
 
+//go:embed docs.md
+var docsMD []byte
+
+// handleDocs serves the user manual — the page the web UI's Help →
+// exe Documentation window renders.
+func handleDocs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Write(docsMD)
+}
+
 //go:embed all:ui
 var uiFS embed.FS
 

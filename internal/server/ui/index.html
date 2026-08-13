@@ -399,7 +399,7 @@ pre.out { background: #10120f; color: #cfe3cf; border: 1px solid var(--black); p
    (.grow + .grow-box); the bottom strip is a plain status area like
    classic IE/Netscape. 15px total (border-box) so the strip's border-top
    is the same line as the grow box tile's top separator row. */
-#win-log .statusbar, #win-chat .statusbar, #win-news .statusbar, .term-window .statusbar { height: 15px; padding: 0 25px 0 8px; }
+#win-log .statusbar, #win-chat .statusbar, #win-news .statusbar, #win-docs .statusbar, .term-window .statusbar { height: 15px; padding: 0 25px 0 8px; }
 /* edge to edge in the frame: the win-frame draws the outline, the pre
    keeps only its inner text padding, and only a vertical bar renders */
 #log-out { margin: 0; height: 380px; max-height: none; border: 0; box-shadow: none;
@@ -408,6 +408,9 @@ pre.out { background: #10120f; color: #cfe3cf; border: 1px solid var(--black); p
    between items — the statusbar draws the bottom frame line); the small
    gray last line is the byline: which node posted it, and when */
 #news-list { height: 380px; overflow-y: scroll; overflow-x: hidden; }
+/* Documentation (Help menu): the manual on paper, rendered markdown with
+   the chat's typography (the inner div carries .msg.asst) */
+#docs-body { height: 420px; overflow-y: scroll; overflow-x: hidden; user-select: text; }
 .news-item { position: relative; overflow: hidden; touch-action: pan-y; }
 .news-item + .news-item { border-top: 1px solid var(--g500); }
 /* the row content is its own white layer so on mobile it can slide left
@@ -667,6 +670,7 @@ body.mobile .win-frame > .ed-text,
 body.mobile .win-frame > .iv-box { flex: 1; min-height: 0; height: auto !important; }
 body.mobile #log-out { height: 100% !important; }
 body.mobile #news-list { height: 100% !important; }
+body.mobile #docs-body { height: 100% !important; }
 body.mobile .term-window .hostterm-box { height: 100%; }
 body.mobile #term-box { height: calc(100dvh - 260px); min-height: 180px; }
 /* chat: sessions become a strip on top, messages fill the rest */
@@ -736,6 +740,7 @@ body.mobile th.sorted {
   <div class="dd-item" data-act="token">Set API Token…</div>
 </div>
 <div class="dropdown" id="dd-help" hidden>
+  <div class="dd-item" data-act="docs">exe Documentation…</div>
   <div class="dd-item" data-act="skillguide">Agent Skill Guide…</div>
 </div>
 <div class="dropdown" id="ctx-menu" hidden></div>
@@ -1117,6 +1122,31 @@ body.mobile th.sorted {
     </div>
   </div>
 
+  <!-- exe Documentation (Help menu): the manual, embedded in the binary as
+       docs.md, served at /docs.md, rendered with the chat's markdown
+       pipeline. No desktop icon — the Help menu is its only entry. -->
+  <div class="window grow" id="win-docs" style="left:200px; top:56px; width:560px;" hidden>
+    <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
+      <div class="title">exe Documentation</div>
+      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+    <div class="win-frame paper">
+      <div class="win-body" style="padding:0">
+        <div id="docs-body" class="vflush">
+          <div id="docs-md" class="msg asst" style="margin:0; padding:12px 16px"><span class="muted">Loading…</span></div>
+        </div>
+      </div>
+      <div class="statusbar"><span class="mono muted" id="docs-url"></span></div>
+      <svg id="docs-grow" class="grow-box" width="15" height="15" viewBox="0 0 15 15" shape-rendering="crispEdges">
+        <rect width="15" height="15" fill="#ccc"/>
+        <path fill="#000" d="M0 0h15v1H0zM0 1h1v14H0z"/>
+        <path fill="#fff" d="M1 1h14v1H1zM1 2h1v13H1z"/>
+        <path fill="#fff" d="M9 4h2v1H9zM8 5h1v1H8zM7 6h1v1H7zM6 7h1v1H6zM5 8h1v1H5zM4 9h1v1H4zM11 6h2v1h-2zM10 7h1v1h-1zM9 8h1v1H9zM8 9h1v1H8zM7 10h1v1H7zM6 11h1v1H6zM13 8h2v1h-2zM12 9h1v1h-1zM11 10h1v1h-1zM10 11h1v1h-1zM9 12h1v1H9zM8 13h1v1H8z"/>
+        <path fill="#777" d="M10 5h1v1h-1zM9 6h1v1H9zM8 7h1v1H8zM7 8h1v1H7zM6 9h1v1H6zM5 10h1v1H5zM12 7h1v1h-1zM11 8h1v1h-1zM10 9h1v1h-1zM9 10h1v1H9zM8 11h1v1H8zM7 12h1v1H7zM14 9h1v1h-1zM13 10h1v1h-1zM12 11h1v1h-1zM11 12h1v1h-1zM10 13h1v1h-1zM9 14h1v1H9z"/>
+        <path fill="#aaa" d="M4 10h1v1H4zM6 12h1v1H6zM8 14h1v1H8z"/>
+      </svg>
+    </div>
+  </div>
+
   <!-- Trash -->
   <div class="window" id="win-trash" style="left:340px; top:180px; width:300px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
@@ -1299,7 +1329,7 @@ function mobileSwapIn(w) {
 // local only, never mixed into the shared desktop layout snapshot. Live
 // terminals and transient dialogs don't restore; win-detail needs the VM
 // name, carried alongside.
-const MOB_RESTORE = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-news", "win-trash", "win-detail"]);
+const MOB_RESTORE = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-news", "win-trash", "win-detail", "win-docs"]);
 const mobRestorable = id => MOB_RESTORE.has(id)
   || id.startsWith("win-app-") || id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-");
 function mobSave() {
@@ -1504,6 +1534,7 @@ function wireGrow(grip, w, body, minW, opts = {}) {
 }
 wireGrow($("#chat-grow"), $("#win-chat"), $(".chat-wrap"), 560, { minH: 240, stickEl: $("#chat-msgs") });
 wireGrow($("#news-grow"), $("#win-news"), $("#news-list"), 320, { minH: 160 });
+wireGrow($("#docs-grow"), $("#win-docs"), $("#docs-body"), 420, { minH: 160 });
 // Virtual Machines has no grow corner (its statusbar is full of buttons),
 // but the edges resize it: width, and the list body's height
 wireEdges($("#win-vms"), $("#win-vms .win-body"), 600, { minH: 120 });
@@ -1529,8 +1560,8 @@ autoVBar($("#chat-sessions"));
 const WIN_CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
 // windows whose open/closed state is restored and synced; win-detail needs a
 // current VM and the dialogs are transient, so those only keep geometry
-const WIN_SYNC_OPEN = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-news", "win-trash"]);
-const WIN_OPENERS = { "win-log": () => openLogWin(), "win-chat": () => openChatWin(), "win-news": () => openNewsWin(), "win-config": () => openConfigWin() };
+const WIN_SYNC_OPEN = new Set(["win-vms", "win-config", "win-log", "win-chat", "win-news", "win-trash", "win-docs"]);
+const WIN_OPENERS = { "win-log": () => openLogWin(), "win-chat": () => openChatWin(), "win-news": () => openNewsWin(), "win-config": () => openConfigWin(), "win-docs": () => openDocsWin() };
 let winApplying = false; // applying a stored/remote snapshot — don't echo it back
 let winDragging = null;  // window under the local pointer — remote moves lose
 let winRev = 0;
@@ -1551,6 +1582,7 @@ function winSnapshot() {
   });
   st["win-log"].h = parseInt($("#log-out").style.height) || $("#log-out").offsetHeight || 380;
   st["win-news"].h = parseInt($("#news-list").style.height) || $("#news-list").offsetHeight || 380;
+  st["win-docs"].h = parseInt($("#docs-body").style.height) || $("#docs-body").offsetHeight || 420;
   // VM list height only once edge-resized — otherwise it sizes to its rows
   const vb = $("#win-vms .win-body");
   if (vb.style.height) st["win-vms"].h = parseInt(vb.style.height);
@@ -1598,6 +1630,7 @@ function applyWinState(st) {
       w.classList.toggle("shaded", !!v.shaded);
       if (id === "win-log" && v.h) $("#log-out").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-news" && v.h) $("#news-list").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
+      if (id === "win-docs" && v.h) $("#docs-body").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-vms" && v.h) $("#win-vms .win-body").style.height = Math.max(120, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-chat" && v.h) $(".chat-wrap").style.height = Math.max(240, Math.min(window.innerHeight - 190, v.h)) + "px";
       if ((id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-")) && v.h) {
@@ -1714,6 +1747,7 @@ const ACTIONS = {
   cfwizard: () => wizOpen(false),
   join: () => joinOpen(),
   token: () => { openWin("#win-token"); tokenInput.focus(); },
+  docs: () => openDocsWin(),
   skillguide: () => openSkillWin(),
 };
 document.querySelectorAll(".dd-item").forEach(it => {
@@ -1758,6 +1792,24 @@ async function copyIP(ip) {
     ta.remove();
   }
   toast(ok ? "Copied IP " + ip : "Copy failed — select and copy " + ip);
+}
+
+// ---- Help → exe Documentation: the manual ships in the binary (docs.md,
+// served at /docs.md the way the skill file is) and is fetched once per
+// page load, rendered with the chat's markdown pipeline ----
+let docsLoaded = false;
+async function openDocsWin() {
+  $("#docs-url").textContent = location.origin + "/docs.md";
+  openWin("#win-docs");
+  if (docsLoaded) return;
+  try {
+    const r = await fetch("/docs.md");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    renderMD($("#docs-md"), await r.text());
+    docsLoaded = true;
+  } catch (e) {
+    $("#docs-md").replaceChildren(el("span", { class: "muted" }, "Could not load the documentation — " + e.message));
+  }
 }
 
 // ---- Help → Agent Skill Guide ----

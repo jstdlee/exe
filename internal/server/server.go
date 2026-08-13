@@ -99,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, "ok") })
 	mux.HandleFunc("GET /skill.md", handleSkill)
+	mux.HandleFunc("GET /docs.md", handleDocs)
 	mux.HandleFunc("GET /v1/vms", s.handleList)
 	mux.HandleFunc("POST /v1/vms", s.handleCreate)
 	mux.HandleFunc("GET /v1/vms/{name}", s.handleGet)
