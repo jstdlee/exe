@@ -3700,7 +3700,7 @@ async function renderOpenAIAuth(box) {
   }
   box.append(row);
   if (st.authenticated) {
-    const ub = el("div", { style: "margin-top:8px" }, el("div", { class: "hint" }, "Loading usage…"));
+    const ub = el("div", { style: "margin-top:8px" });
     box.append(ub);
     renderOpenAIUsage(ub);
   }
@@ -3708,27 +3708,35 @@ async function renderOpenAIAuth(box) {
 // Rate-limit usage for the signed-in subscription: the rolling 5-hour and
 // weekly windows the ChatGPT backend meters, plus any credit balance.
 async function renderOpenAIUsage(box) {
+  const rows = el("div", { class: "wiz-review" });
+  const row = (label, right) => rows.append(el("div", {},
+    el("span", { class: "muted" }, label), right));
+  const meter = (pct, hot, text) => el("span", { class: "oai-usage" },
+    el("span", { class: "oai-meter" + (hot ? " hot" : "") },
+      el("span", { style: "width:" + pct + "%" })), text);
+  // Placeholder rows mirror the loaded layout so the tab doesn't jump
+  // when the fetch resolves.
+  row("5-hour limit", meter(0, false, el("span", { class: "muted" }, "loading…")));
+  row("Weekly limit", meter(0, false, el("span", { class: "muted" }, "loading…")));
+  box.replaceChildren(rows);
   let u;
   try { u = await j("/v1/openai/usage"); }
-  catch (e) { box.replaceChildren(el("div", { class: "hint" }, "usage: " + e.message)); return; }
-  const rows = el("div", { class: "wiz-review" });
+  catch (e) {
+    rows.replaceChildren(el("div", {},
+      el("span", { class: "muted" }, "Usage"), el("span", {}, e.message)));
+    return;
+  }
+  rows.replaceChildren();
   const win = (label, w) => {
     const pct = Math.max(0, Math.min(100, Math.round(w.used_percent)));
-    rows.append(el("div", {},
-      el("span", { class: "muted" }, label),
-      el("span", { class: "oai-usage" },
-        el("span", { class: "oai-meter" + (pct >= 90 ? " hot" : "") },
-          el("span", { style: "width:" + pct + "%" })),
-        pct + "% used — resets " + oaiResetAt(w.reset_at))));
+    row(label, meter(pct, pct >= 90, pct + "% used — resets " + oaiResetAt(w.reset_at)));
   };
   const rl = u.rate_limit || {};
   if (rl.primary_window) win(oaiWindowLabel(rl.primary_window.limit_window_seconds, "5-hour"), rl.primary_window);
   if (rl.secondary_window) win(oaiWindowLabel(rl.secondary_window.limit_window_seconds, "Weekly"), rl.secondary_window);
   if (u.credits && (u.credits.unlimited || u.credits.has_credits))
-    rows.append(el("div", {}, el("span", { class: "muted" }, "Credits"),
-      el("span", {}, u.credits.unlimited ? "unlimited" : u.credits.balance)));
-  if (!rows.children.length) { box.replaceChildren(); return; }
-  box.replaceChildren(rows);
+    row("Credits", el("span", {}, u.credits.unlimited ? "unlimited" : u.credits.balance));
+  if (!rows.children.length) box.replaceChildren();
 }
 function oaiWindowLabel(sec, fallback) {
   if (!sec) return fallback + " limit";
