@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -169,6 +170,43 @@ func Version(ctx context.Context, cfg Config) (string, error) {
 		return "", fmt.Errorf("parse ollama version: %s", sshexec.Truncate(string(raw), 200))
 	}
 	return out.Version, nil
+}
+
+// Models lists the models the Ollama server offers (GET /api/tags).
+func Models(ctx context.Context, cfg Config) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		strings.TrimRight(cfg.BaseURL, "/")+"/api/tags", nil)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ollama models: HTTP %d", resp.StatusCode)
+	}
+	var out struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("parse ollama models: %s", sshexec.Truncate(string(raw), 200))
+	}
+	names := make([]string, 0, len(out.Models))
+	for _, m := range out.Models {
+		if m.Name != "" {
+			names = append(names, m.Name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // chatHTTP posts one /api/chat request and returns the raw response for the

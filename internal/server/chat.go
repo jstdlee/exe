@@ -111,6 +111,42 @@ func (s *Server) handleChatStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+// handleChatModels lists the models a backend offers, for the
+// Configuration window's model dropdowns. ?provider=ollama|openai picks
+// which backend to ask (default: the active chat provider).
+func (s *Server) handleChatModels(w http.ResponseWriter, r *http.Request) {
+	cfg := s.Config()
+	provider := r.URL.Query().Get("provider")
+	if provider == "" {
+		provider = chatProvider(cfg)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	var models []string
+	var err error
+	switch provider {
+	case "openai":
+		var creds *codex.Creds
+		if creds, err = s.codexToken(ctx, false); err == nil {
+			models, err = codex.Models(ctx, creds.AccessToken, creds.AccountID)
+		}
+	case "ollama":
+		if cfg.Ollama.BaseURL == "" {
+			err = errors.New("ollama.base_url is not configured")
+		} else {
+			models, err = agent.Models(ctx, agent.Config{BaseURL: cfg.Ollama.BaseURL, APIKey: cfg.Ollama.APIKey})
+		}
+	default:
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown provider %q", provider))
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"provider": provider, "models": models})
+}
+
 // ---- session CRUD ----
 
 func (s *Server) handleChatSessions(w http.ResponseWriter, r *http.Request) {

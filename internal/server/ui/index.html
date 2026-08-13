@@ -3266,11 +3266,11 @@ const CONFIG_FIELDS = [
   { group: "Ollama", fields: [
     { path: "ollama.base_url", hint: "local daemon or https://ollama.com" },
     { path: "ollama.api_key", secret: true },
-    { path: "ollama.model" },
+    { path: "ollama.model", models: "ollama" },
   ]},
   { group: "OpenAI", fields: [
     { path: "chat_provider", options: ["ollama", "openai"], hint: "which backend the Chat window uses — openai runs on your ChatGPT subscription" },
-    { path: "openai.model", hint: "ChatGPT model, e.g. gpt-5.4 or gpt-5.4-codex" },
+    { path: "openai.model", models: "openai", hint: "listed live from the ChatGPT backend once signed in" },
   ]},
   { group: "Cloudflare", fields: [
     { path: "cloudflare.api_token", secret: true },
@@ -3280,6 +3280,25 @@ const CONFIG_FIELDS = [
     { path: "cloudflare.domain" },
   ]},
 ];
+// modelSelect is a dropdown of a backend's live model list (Ollama's
+// /api/tags or the ChatGPT catalog via /v1/chat/models). Until the list
+// arrives it holds only the configured value; when the list can't be
+// fetched (backend down, not signed in) it degrades to a text input so
+// the model stays editable either way.
+function modelSelect(f, val) {
+  const sel = el("select", { id: "cfg-" + f.path },
+    el("option", { value: val }, val || "(pick a model)"));
+  j("/v1/chat/models?provider=" + f.models).then(res => {
+    const models = res.models || [];
+    if (!models.length) throw new Error("empty model list");
+    sel.replaceChildren(...models.map(m => el("option", { value: m }, m)));
+    if (val && !models.includes(val)) sel.append(el("option", { value: val }, val + " (configured)"));
+    sel.value = val || models[0];
+  }).catch(() => {
+    sel.replaceWith(el("input", { id: "cfg-" + f.path, type: "text", value: val }));
+  });
+  return sel;
+}
 const getPath = (o, p) => p.split(".").reduce((a, k) => (a == null ? a : a[k]), o);
 const setPath = (o, p, v) => { const ks = p.split("."); const last = ks.pop(); let t = o; for (const k of ks) { t[k] = t[k] || {}; t = t[k]; } t[last] = v; };
 let loadedConfig = null;
@@ -3331,7 +3350,9 @@ async function loadConfig() {
     for (const f of g.fields) {
       const val = getPath(loadedConfig, f.path);
       let input;
-      if (f.options) {
+      if (f.models) {
+        input = modelSelect(f, val == null ? "" : String(val));
+      } else if (f.options) {
         input = el("select", { id: "cfg-" + f.path }, ...f.options.map(o => el("option", { value: o }, o)));
         input.value = f.options.includes(val) ? val : f.options[0];
       } else {

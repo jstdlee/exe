@@ -138,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/newsfeed", s.handleNewsfeedPost)
 	mux.HandleFunc("DELETE /v1/newsfeed/{id}", s.handleNewsfeedDelete)
 	mux.HandleFunc("GET /v1/chat/status", s.handleChatStatus)
+	mux.HandleFunc("GET /v1/chat/models", s.handleChatModels)
 	mux.HandleFunc("GET /v1/chat/sessions", s.handleChatSessions)
 	mux.HandleFunc("GET /v1/chat/sessions/{id}", s.handleChatSession)
 	mux.HandleFunc("DELETE /v1/chat/sessions/{id}", s.handleChatSessionDelete)

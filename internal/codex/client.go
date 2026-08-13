@@ -18,6 +18,10 @@ import (
 
 const responsesURL = "https://chatgpt.com/backend-api/codex/responses"
 
+// modelsURL is the ChatGPT backend's model catalog; client_version mirrors
+// a current Codex CLI release (the backend rejects unversioned requests).
+const modelsURL = "https://chatgpt.com/backend-api/codex/models?client_version=0.147.0"
+
 // ErrUnauthorized marks an HTTP 401 so the caller can refresh the access
 // token and retry once.
 var ErrUnauthorized = errors.New("chatgpt: unauthorized")
@@ -117,6 +121,57 @@ func newUUID() string {
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// Models lists the models this ChatGPT subscription serves, in the
+// backend's picker order.
+func Models(ctx context.Context, accessToken, accountID string) ([]string, error) {
+	rctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(rctx, http.MethodGet, modelsURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("chatgpt-account-id", accountID)
+	req.Header.Set("originator", originator)
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, ErrUnauthorized
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("chatgpt models: HTTP %d: %s", resp.StatusCode, truncate(string(raw), 300))
+	}
+	var out struct {
+		Models []struct {
+			Slug         string `json:"slug"`
+			ID           string `json:"id"`
+			Visibility   string `json:"visibility"`
+			ShowInPicker *bool  `json:"show_in_picker"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("parse chatgpt models: %w", err)
+	}
+	var names []string
+	for _, m := range out.Models {
+		id := m.Slug
+		if id == "" {
+			id = m.ID
+		}
+		if id == "" || (m.Visibility != "" && m.Visibility != "list") ||
+			(m.ShowInPicker != nil && !*m.ShowInPicker) {
+			continue
+		}
+		names = append(names, id)
+	}
+	return names, nil
 }
 
 // ChatStream sends one turn to the ChatGPT backend, calling onDelta with
