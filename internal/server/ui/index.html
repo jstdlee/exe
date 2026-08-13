@@ -302,9 +302,15 @@ td.actions button + button { margin-left: 8px; }
 #win-detail .win-body { display: flex; flex-direction: column; }
 #win-detail .tabpanel { flex: 1 0 auto; display: flex; flex-direction: column; }
 #win-detail .pane:not([hidden]) { flex: 1; display: flex; flex-direction: column; }
-#pane-term #term-box { flex: 1 1 auto; }
+#pane-term #term-box { flex: 1 1 auto; min-height: 160px; }
 #pane-notes #n-text { flex: 1 1 auto; }
 #pane-vibe #a-out, #pane-tr #t-log { flex: 1 1 380px; max-height: none; }
+/* the terminal is the one pane that can adapt its height (xterm refits
+   its rows), so when the body runs short — the 100vh cap on a small
+   screen, or a short edge-resize — the squeeze flows into the terminal
+   instead of overflowing the body into a scrollbar */
+#win-detail .tabpanel:has(> #pane-term:not([hidden])) { flex-shrink: 1; }
+#pane-term:not([hidden]) { min-height: 0; }
 
 /* ---------- controls (macthemes.garden pixel bevels) ---------- */
 button { font: inherit; cursor: default; }
