@@ -2867,7 +2867,27 @@ function termResize() {
   if (fitAddon && term && termWS && termWS.readyState === 1) {
     fitAddon.fit();
     termWS.send(JSON.stringify({ resize: [term.cols, term.rows] }));
+    termFitCheck();
   }
+}
+// FitAddon trusts the renderer's measured cell height, which Windows
+// fractional display scaling can misreport (a ~5px reading fit ~3x the
+// rows the box holds, overflowing the viewport into a scrollbar). Once
+// the render settles, re-derive rows from the painted screen's actual
+// cell height and correct any gross misfit from that ground truth.
+function termFitCheck() {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!(term && termWS && termWS.readyState === 1)) return;
+    const scr = document.querySelector("#term-box .xterm-screen");
+    const vp = document.querySelector("#term-box .xterm-viewport");
+    if (!scr || !vp || !term.rows) return;
+    const cell = scr.getBoundingClientRect().height / term.rows;
+    const rows = Math.floor((vp.clientHeight - 10) / cell); // 10 = .xterm padding
+    if (cell > 0 && rows >= 4 && Math.abs(rows - term.rows) >= 2) {
+      term.resize(term.cols, rows);
+      termWS.send(JSON.stringify({ resize: [term.cols, rows] }));
+    }
+  }));
 }
 $("#term-close").onclick = closeTerm;
 $("#term-open").onclick = () => {
@@ -2892,6 +2912,8 @@ $("#term-open").onclick = () => {
   termWS.onopen = () => {
     termWS.send(JSON.stringify({ resize: [term.cols, term.rows] }));
     term.focus();
+    termFitCheck();
+    setTimeout(termResize, 500); // late settle: fonts, fractional-DPR remeasure
   };
   termWS.onmessage = e => term.write(new Uint8Array(e.data));
   termWS.onclose = () => {
