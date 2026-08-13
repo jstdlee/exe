@@ -3480,7 +3480,8 @@ async function openaiSignIn(box, btn) {
       "Waiting for the browser sign-in to finish… If no tab opened, ",
       el("a", { href: res.url, target: "_blank", rel: "noopener" }, "open the sign-in page"), "."),
     el("div", { class: "hint", style: "margin-bottom:6px" },
-      "If the last page can't connect (localhost:1455 isn't this daemon from your browser), copy the final URL from the address bar and paste it here:"),
+      "If the last page can't connect, edit its address: replace localhost with " +
+      location.hostname + " (keep :1455 and the rest). Or paste that full URL here:"),
     el("div", { class: "row" }, inp, ok));
   clearInterval(oaiPoll);
   oaiPoll = setInterval(async () => {

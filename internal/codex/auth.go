@@ -30,10 +30,11 @@ const (
 	scope        = "openid profile email offline_access"
 	originator   = "exe"
 
-	// CallbackAddr is where the daemon listens for the browser redirect when
-	// it runs on the same machine as the browser; RedirectURI must match the
-	// client registration byte for byte either way.
-	CallbackAddr = "127.0.0.1:1455"
+	// CallbackAddr listens on all interfaces: the client registration pins
+	// the redirect to localhost, so when the browser runs on another machine
+	// the user swaps localhost for the daemon's host in the address bar and
+	// the same code+state land here. The random state gates the exchange.
+	CallbackAddr = ":1455"
 	CallbackPath = "/auth/callback"
 	RedirectURI  = "http://localhost:1455/auth/callback"
 )
