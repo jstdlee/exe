@@ -2690,7 +2690,7 @@ function renderVMList(rawVMs) {
                 : { label: "Start", act: () => vmAction(vm.name, "start") },
         { label: "Restart", act: () => vmRestart(vm.name), dis: !running },
         "-",
-        { label: "Copy IP", act: () => navigator.clipboard.writeText(vm.ip).then(() => toast("Copied " + vm.ip), () => toast("Copy failed")), dis: !vm.ip },
+        { label: "Copy IP", act: () => copyIP(vm.ip), dis: !vm.ip },
         { label: "Expose Port…", act: () => openVM(vm.name, "expose") },
         "-",
         { label: "Delete", act: () => del.click() },
