@@ -36,6 +36,15 @@ type OpenAIConfig struct {
 	Effort string `json:"effort,omitempty"`
 }
 
+// GitHubConfig configures Sign in with GitHub — the OAuth device flow
+// behind Publish to GitHub. The token lives in ~/.exe/github.json, not here.
+type GitHubConfig struct {
+	// ClientID is an OAuth app's client ID (github.com → Settings →
+	// Developer settings → OAuth Apps) with device flow enabled. Not a
+	// secret: device flow needs no client secret.
+	ClientID string `json:"client_id"`
+}
+
 type CloudflareConfig struct {
 	APIToken  string `json:"api_token"`
 	AccountID string `json:"account_id"`
@@ -107,6 +116,7 @@ type Config struct {
 
 	Ollama      OllamaConfig      `json:"ollama"`
 	OpenAI      OpenAIConfig      `json:"openai"`
+	GitHub      GitHubConfig      `json:"github"`
 	Cloudflare  CloudflareConfig  `json:"cloudflare"`
 	Firecracker FirecrackerConfig `json:"firecracker"`
 	QEMU        QEMUConfig        `json:"qemu"`
@@ -249,6 +259,7 @@ func (c *Config) Normalize() {
 	c.Ollama.Effort = strings.ToLower(strings.TrimSpace(c.Ollama.Effort))
 	c.OpenAI.Model = strings.TrimSpace(c.OpenAI.Model)
 	c.OpenAI.Effort = strings.ToLower(strings.TrimSpace(c.OpenAI.Effort))
+	c.GitHub.ClientID = strings.TrimSpace(c.GitHub.ClientID)
 	var dirs []string
 	for _, d := range c.AppsDirs {
 		if d = strings.TrimSpace(d); d != "" {

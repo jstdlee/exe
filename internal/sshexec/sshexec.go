@@ -131,6 +131,9 @@ func (t Target) ReadFile(ctx context.Context, p string, maxOut int) (string, err
 
 func shq(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
+// Quote returns s single-quoted for a POSIX shell.
+func Quote(s string) string { return shq(s) }
+
 // Truncate keeps the head and tail of s when it exceeds max bytes.
 func Truncate(s string, max int) string {
 	if max <= 0 || len(s) <= max {

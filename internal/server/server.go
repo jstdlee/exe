@@ -24,6 +24,7 @@ import (
 	"exe/internal/cf"
 	"exe/internal/codex"
 	"exe/internal/config"
+	"exe/internal/github"
 	"exe/internal/hostinfo"
 	"exe/internal/peer"
 	"exe/internal/proxy"
@@ -74,6 +75,13 @@ type Server struct {
 	codexLoaded bool
 	codexCache  *codex.Creds
 	codexFlow   *codexFlow
+
+	// GitHub sign-in state: cached ~/.exe/github.json credentials and the
+	// pending device-code flow, if any (see github.go).
+	ghMu     sync.Mutex
+	ghLoaded bool
+	ghCache  *github.Creds
+	ghFlow   *ghFlow
 
 	// Shared web UI window layout (see uistate.go).
 	ui uiState
@@ -143,6 +151,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/chat/sessions/{id}", s.handleChatSession)
 	mux.HandleFunc("DELETE /v1/chat/sessions/{id}", s.handleChatSessionDelete)
 	mux.HandleFunc("POST /v1/chat/send", s.handleChatSend)
+	mux.HandleFunc("GET /v1/vms/{name}/publish/scan", s.handlePublishScan)
+	mux.HandleFunc("POST /v1/vms/{name}/publish", s.handlePublish)
+	mux.HandleFunc("POST /v1/github/oauth/start", s.handleGitHubStart)
+	mux.HandleFunc("GET /v1/github/status", s.handleGitHubStatus)
+	mux.HandleFunc("POST /v1/github/logout", s.handleGitHubLogout)
 	mux.HandleFunc("POST /v1/openai/oauth/start", s.handleOpenAIStart)
 	mux.HandleFunc("POST /v1/openai/oauth/complete", s.handleOpenAIComplete)
 	mux.HandleFunc("GET /v1/openai/status", s.handleOpenAIStatus)

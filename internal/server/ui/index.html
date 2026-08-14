@@ -563,6 +563,12 @@ td .mono, td.mono { user-select: text; }
 .wiz-fb.ok { background: #e2f2e0; border-color: #2f7d33; color: #1d5a22; }
 .wiz-fb.err { background: #f6dddd; border-color: #a33; color: #7a1010; }
 .wiz-fb.warn { background: #f7ecd2; border-color: #b07d18; color: #6e4d05; }
+.pub-log { margin: 0 0 10px; padding: 6px 8px; border: 1px solid #999; background: #f4f4ef;
+  font-family: var(--mono); font-size: 11px; max-height: 140px; overflow-y: auto; user-select: text; }
+.pub-log .err { color: #7a1010; }
+.pub-log a { word-break: break-all; }
+.gh-code { font-family: var(--mono); font-size: 20px; letter-spacing: 4px; text-align: center;
+  padding: 6px 0; user-select: text; }
 .wiz-review div { padding: 4px 0; border-bottom: 1px solid var(--g500); display: flex;
   justify-content: space-between; gap: 12px; }
 .wiz-review div:last-child { border-bottom: none; }
@@ -1267,6 +1273,38 @@ body.mobile th.sorted {
         <div class="row" style="justify-content:flex-end; gap:11px; margin:4px 0 2px">
           <button class="ghost" id="nf-cancel">Cancel</button>
           <button class="btn" id="nf-go">Create</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Publish to GitHub (modal), opened from a VM's context menu. The push
+     runs on the daemon: it holds the GitHub token and pushes the VM's
+     project through a per-operation proxy, so the VM never sees creds -->
+<div id="pub-overlay" class="overlay" hidden>
+  <div class="window modal front" style="max-width:420px">
+    <div class="titlebar"><button class="tbox close" id="pub-x"></button><div class="stripe"></div>
+      <div class="title" id="pub-title">Publish to GitHub</div>
+      <div class="stripe"></div></div>
+    <div class="win-frame">
+      <div class="win-body">
+        <div id="pub-auth" style="margin-bottom:10px"></div>
+        <div class="field" style="margin-bottom:10px">
+          <label for="pub-dir">Project folder in the VM</label>
+          <select id="pub-dir" style="width:100%"></select>
+        </div>
+        <div class="field" style="margin-bottom:10px">
+          <label for="pub-name">Repository name</label>
+          <input id="pub-name" spellcheck="false" style="width:100%">
+        </div>
+        <label class="row" style="gap:6px; margin-bottom:10px">
+          <input type="checkbox" id="pub-private" checked> Private repository
+        </label>
+        <div id="pub-log" class="pub-log" hidden></div>
+        <div class="row" style="justify-content:flex-end; gap:11px; margin:4px 0 2px">
+          <button class="ghost" id="pub-cancel">Cancel</button>
+          <button class="btn" id="pub-go">Publish</button>
         </div>
       </div>
     </div>
@@ -2692,6 +2730,7 @@ function renderVMList(rawVMs) {
         "-",
         { label: "Copy IP", act: () => copyIP(vm.ip), dis: !vm.ip },
         { label: "Expose Port…", act: () => openVM(vm.name, "expose") },
+        { label: "Publish to GitHub…", act: () => openPublishWin(vm.name), dis: !running },
         "-",
         { label: "Delete", act: () => del.click() },
       ], () => row.classList.remove("ctx"));
@@ -3725,6 +3764,9 @@ const CONFIG_FIELDS = [
     { path: "openai.model", models: "openai", hint: "listed live from the ChatGPT backend once signed in" },
     { path: "openai.effort", options: ["", "none", "minimal", "low", "medium", "high", "xhigh", "max"], hint: "reasoning effort — empty uses the model's default; a level the model rejects falls back to its default" },
   ]},
+  { group: "GitHub", fields: [
+    { path: "github.client_id", hint: "an OAuth app client ID with device flow enabled (github.com → Settings → Developer settings → OAuth Apps) — used by Publish to GitHub; the token stays on this host" },
+  ]},
   { group: "Cloudflare", fields: [
     { path: "cloudflare.api_token", secret: true },
     { path: "cloudflare.account_id" },
@@ -3780,6 +3822,7 @@ async function loadConfig() {
         el("button", { class: "ghost sm", onclick: () => wizOpen(false) }, "Cloudflare Setup Wizard…")));
     }
     if (g.group === "OpenAI") pane.append(openaiAuthBox());
+    if (g.group === "GitHub") pane.append(githubAuthBox());
     if (g.group === "Daemon") {
       const tools = el("div", { class: "row", style: "justify-content:flex-end; margin-bottom:8px" });
       const rb = el("button", { class: "ghost sm" }, "Restart Daemon…");
@@ -3901,6 +3944,8 @@ $("#cfg-save").onclick = async () => {
     $("#cfg-status").textContent = msg;
     toast(msg);
     chatDetect(true);
+    const gb = document.getElementById("cfg-gh-auth");
+    if (gb) renderGitHubAuth(gb); // a freshly-saved client_id enables Sign In
   } catch (e) { toast(e.message); }
   $("#cfg-save").disabled = false;
 };
@@ -4038,6 +4083,171 @@ async function openaiSignOut(btn) {
   chatDetect(true);
 }
 
+// ---- Sign in with GitHub (device flow) ----
+// The daemon fetches a device code and polls GitHub in the background; the
+// user enters the code at github.com/login/device. Configuration → GitHub
+// and the Publish modal share this box.
+let ghPollTimer = 0;
+function githubAuthBox() {
+  const box = el("div", { id: "cfg-gh-auth", style: "margin-bottom:10px" });
+  renderGitHubAuth(box);
+  return box;
+}
+function ghAuthRow(left, right) {
+  return el("div", { class: "row" }, el("span", { style: "flex:1" }, left), right);
+}
+async function renderGitHubAuth(box) {
+  // placeholder mirrors the loaded row (text + button) so the pane
+  // doesn't jump when the status arrives
+  box.replaceChildren(ghAuthRow(el("span", { class: "muted" }, "GitHub: checking sign-in…"),
+    el("button", { class: "btn", style: "visibility:hidden" }, "Sign in with GitHub…")));
+  let st;
+  try { st = await j("/v1/github/status"); }
+  catch (e) { box.replaceChildren(el("div", { class: "muted" }, "status: " + e.message)); return; }
+  if (box.id === "pub-auth") $("#pub-go").disabled = !st.authenticated;
+  if (st.authenticated) {
+    const out = el("button", { class: "ghost sm danger" }, "Sign Out");
+    out.onclick = () => githubSignOut(out, box);
+    box.replaceChildren(ghAuthRow(el("span", {}, "Signed in as ", el("b", {}, st.login || "?")), out));
+  } else {
+    const go = el("button", { class: "btn" }, "Sign in with GitHub…");
+    go.onclick = () => githubSignIn(box, go);
+    const why = st.configured ? "Not signed in."
+      : box.id === "cfg-gh-auth" ? "Enter a client ID below, Save, then sign in."
+      : "Set github.client_id in Configuration → GitHub first.";
+    box.replaceChildren(ghAuthRow(el("span", { class: "muted" }, why), go));
+    if (!st.configured) go.disabled = true;
+  }
+}
+async function githubSignIn(box, btn) {
+  btn.disabled = true;
+  let res;
+  try { res = await j("/v1/github/oauth/start", { method: "POST", json: {} }); }
+  catch (e) { toast(e.message); btn.disabled = false; return; }
+  window.open(res.verification_uri, "_blank", "noopener");
+  box.replaceChildren(
+    el("div", { class: "muted", style: "margin-bottom:2px" },
+      "Enter this code at ",
+      el("a", { href: res.verification_uri, target: "_blank", rel: "noopener" },
+        res.verification_uri.replace(/^https:\/\//, "")), ":"),
+    el("div", { class: "gh-code" }, res.user_code),
+    el("div", { class: "muted" }, "Waiting for GitHub…"));
+  clearInterval(ghPollTimer);
+  ghPollTimer = setInterval(async () => {
+    try {
+      const st = await j("/v1/github/status");
+      if (st.authenticated) {
+        clearInterval(ghPollTimer);
+        toast("Signed in to GitHub as " + (st.login || "?"));
+        renderGitHubAuth(box);
+      } else if (st.error) {
+        clearInterval(ghPollTimer);
+        toast("GitHub sign-in failed: " + st.error);
+        renderGitHubAuth(box);
+      }
+    } catch (e) { /* daemon briefly unreachable */ }
+  }, 2000);
+  setTimeout(() => clearInterval(ghPollTimer), 15 * 60 * 1000);
+}
+async function githubSignOut(btn, box) {
+  if (!btn.classList.contains("armed")) {
+    btn.classList.add("armed");
+    btn.textContent = "Sure?";
+    setTimeout(() => { btn.classList.remove("armed"); btn.textContent = "Sign Out"; }, 3000);
+    return;
+  }
+  try { await j("/v1/github/logout", { method: "POST", json: {} }); }
+  catch (e) { toast(e.message); return; }
+  toast("Signed out of GitHub.");
+  renderGitHubAuth(box);
+}
+
+// ---- Publish to GitHub (VM context menu) ----
+// The daemon does everything: commits in the VM if needed, creates the
+// repository, and pushes through a one-shot host-side proxy — the GitHub
+// token never enters the VM.
+let pubVM = null;
+function openPublishWin(name) {
+  pubVM = name;
+  $("#pub-title").textContent = "Publish " + name + " to GitHub";
+  const log = $("#pub-log");
+  log.hidden = true;
+  log.replaceChildren();
+  $("#pub-name").value = "";
+  delete $("#pub-name").dataset.edited;
+  $("#pub-go").disabled = true; // enabled by renderGitHubAuth once signed in
+  $("#pub-overlay").hidden = false;
+  renderGitHubAuth($("#pub-auth"));
+  pubScan();
+}
+function pubClose() { $("#pub-overlay").hidden = true; }
+$("#pub-x").onclick = pubClose;
+$("#pub-cancel").onclick = pubClose;
+$("#pub-name").addEventListener("input", () => { $("#pub-name").dataset.edited = "1"; });
+async function pubScan() {
+  // rebuild the select each open — a failed scan swaps it for a text input
+  const sel = el("select", { id: "pub-dir", style: "width:100%", onchange: pubSyncName },
+    el("option", { value: "" }, "scanning the VM…"));
+  document.getElementById("pub-dir").replaceWith(sel);
+  const freeform = () => sel.replaceWith(el("input", {
+    id: "pub-dir", type: "text", placeholder: "/home/dev/myapp", spellcheck: "false",
+    style: "width:100%", oninput: pubSyncName }));
+  try {
+    const res = await j("/v1/vms/" + pubVM + "/publish/scan");
+    const dirs = res.dirs || [];
+    if (!dirs.length) { freeform(); return; }
+    sel.replaceChildren(...dirs.map(d => el("option", { value: d }, d)));
+    pubSyncName();
+  } catch (e) { freeform(); toast(e.message); }
+}
+function pubSyncName() {
+  if ($("#pub-name").dataset.edited) return;
+  const p = document.getElementById("pub-dir").value;
+  $("#pub-name").value = (p.split("/").filter(Boolean).pop() || "").replace(/[^A-Za-z0-9._-]+/g, "-");
+}
+$("#pub-go").onclick = async () => {
+  const path = document.getElementById("pub-dir").value.trim();
+  const name = $("#pub-name").value.trim();
+  if (!path) { toast("pick a project folder"); return; }
+  if (!name) { toast("repository name required"); return; }
+  const log = $("#pub-log");
+  log.hidden = false;
+  log.replaceChildren();
+  const line = (cls, text) => {
+    log.append(el("div", { class: cls }, text));
+    log.scrollTop = log.scrollHeight;
+  };
+  $("#pub-go").disabled = true;
+  try {
+    const resp = await api("/v1/vms/" + pubVM + "/publish", { method: "POST",
+      json: { path, repo: name, private: $("#pub-private").checked } });
+    const rd = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await rd.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const l = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (!l) continue;
+        const ev = JSON.parse(l);
+        if (ev.type === "step") line("", ev.text);
+        else if (ev.type === "error") { line("err", ev.error); toast(ev.error); }
+        else if (ev.type === "done") {
+          line("", "Published.");
+          log.append(el("div", {}, el("a", { href: ev.url, target: "_blank", rel: "noopener" }, ev.url)));
+          log.scrollTop = log.scrollHeight;
+          toast("Published " + ev.repo + " to GitHub");
+        }
+      }
+    }
+  } catch (e) { line("err", e.message); toast(e.message); }
+  $("#pub-go").disabled = false;
+};
+
 // ---- cloudflare wizard ----
 const WIZ_STEPS = [
   { key: "api_token", title: "API token", secret: true,
@@ -4080,6 +4290,7 @@ document.addEventListener("keydown", e => {
   if (!$("#join-overlay").hidden) joinClose();
   if (!$("#cb-overlay").hidden) $("#cb-overlay").hidden = true;
   if (!$("#nf-overlay").hidden) nfClose();
+  if (!$("#pub-overlay").hidden) pubClose();
 });
 
 function wizFeedback(kind, text) {

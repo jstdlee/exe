@@ -122,6 +122,27 @@ click later the service is live at `https://<sub>.<your-domain>`. Current
 routes are listed in the Services tab and in **Special → Cloudflare
 Status…**, where they can be unpublished.
 
+## Publishing to GitHub
+
+Right-click a running VM and choose **Publish to GitHub…** to turn a
+project folder inside it into a GitHub repository. One-time setup: create
+an OAuth app under github.com → Settings → Developer settings → OAuth Apps
+(enable **Device Flow**; no callback URL or client secret needed), put its
+client ID in **Configuration → GitHub**, and sign in — a code appears here,
+you enter it at github.com/login/device, done.
+
+The dialog lists the folders in the VM's home; pick one, name the
+repository (private by default), and Publish. exe installs git in the VM if
+needed, commits any uncommitted work as your GitHub account's noreply
+identity, creates the repository, and pushes. Publishing again later pushes
+the new commits to the same repository.
+
+The point of the design: **no GitHub credentials ever enter the VM.** The
+sign-in token lives only on this machine (`~/.exe/github.json`), and the
+push travels through a proxy that exists just for that one operation and
+answers only for that one repository — the VM's git talks to it without
+ever holding a token, on disk or in memory.
+
 ## Workspace and files
 
 The **Workspace** is `~/.exe/workspace` on this machine: a shared folder
