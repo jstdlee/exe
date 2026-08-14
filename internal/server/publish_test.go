@@ -9,6 +9,30 @@ import (
 	"testing"
 )
 
+func TestParseGitHubRemote(t *testing.T) {
+	cases := []struct {
+		in, owner, name string
+		ok              bool
+	}{
+		{"https://github.com/livid/app.git", "livid", "app", true},
+		{"https://github.com/livid/app", "livid", "app", true},
+		{"git@github.com:livid/app.git", "livid", "app", true},
+		{"ssh://git@github.com/livid/app.git", "livid", "app", true},
+		{"https://github.com/livid/app/", "livid", "app", true},
+		{"https://gitlab.com/livid/app.git", "", "", false},
+		{"https://github.com/livid", "", "", false},
+		{"https://github.com/livid/app/extra", "", "", false},
+		{"", "", "", false},
+	}
+	for _, c := range cases {
+		owner, name, ok := parseGitHubRemote(c.in)
+		if owner != c.owner || name != c.name || ok != c.ok {
+			t.Errorf("parseGitHubRemote(%q) = %q, %q, %v; want %q, %q, %v",
+				c.in, owner, name, ok, c.owner, c.name, c.ok)
+		}
+	}
+}
+
 // The proxy is the only thing standing between the guest and the daemon's
 // GitHub token while a push is in flight, so its pinning must hold: one
 // repository path, auth injected upstream only, redirects rewritten back

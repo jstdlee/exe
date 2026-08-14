@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	gopath "path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,7 +32,31 @@ const (
 	publishMaxOut  = 32 << 10
 )
 
-var repoNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+var (
+	repoNameRe     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+	repoSanitizeRe = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+)
+
+// parseGitHubRemote extracts owner and name from a github.com remote URL
+// in https or ssh form; ok is false for any other remote.
+func parseGitHubRemote(u string) (owner, name string, ok bool) {
+	var rest string
+	switch {
+	case strings.HasPrefix(u, "https://github.com/"):
+		rest = strings.TrimPrefix(u, "https://github.com/")
+	case strings.HasPrefix(u, "git@github.com:"):
+		rest = strings.TrimPrefix(u, "git@github.com:")
+	case strings.HasPrefix(u, "ssh://git@github.com/"):
+		rest = strings.TrimPrefix(u, "ssh://git@github.com/")
+	default:
+		return "", "", false
+	}
+	parts := strings.Split(strings.TrimSuffix(strings.TrimSuffix(rest, "/"), ".git"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
 
 // handlePublishScan lists the candidate project folders for the Publish
 // dialog: the non-hidden directories directly under the VM user's home.
@@ -81,7 +106,7 @@ func (s *Server) handlePublish(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("path is required"))
 		return
 	}
-	if !repoNameRe.MatchString(req.Repo) {
+	if req.Repo != "" && !repoNameRe.MatchString(req.Repo) {
 		writeErr(w, http.StatusBadRequest, errors.New("repository name must be letters, digits, '.', '-' or '_'"))
 		return
 	}
@@ -227,6 +252,30 @@ func (s *Server) publishVM(ctx context.Context, target sshexec.Target, creds *gi
 	branch := strings.TrimSpace(out)
 	if code != 0 || branch == "" {
 		return nil, errors.New("the repository is on a detached HEAD — check out a branch first")
+	}
+
+	// No name given (the chat tool's default): reuse the folder's origin
+	// remote when it already points at the signed-in account, else fall
+	// back to the folder's own name.
+	if repoName == "" {
+		out, code, err = run(git + "remote get-url origin 2>/dev/null")
+		if err != nil {
+			return nil, err
+		}
+		if code == 0 {
+			if owner, name, ok := parseGitHubRemote(strings.TrimSpace(out)); ok {
+				if !strings.EqualFold(owner, creds.Login) {
+					return nil, fmt.Errorf("origin points at %s/%s, which is not the signed-in account %s — pass a repository name to publish a copy", owner, name, creds.Login)
+				}
+				repoName = name
+			}
+		}
+		if repoName == "" {
+			repoName = strings.Trim(repoSanitizeRe.ReplaceAllString(gopath.Base(path), "-"), "-.")
+		}
+	}
+	if !repoNameRe.MatchString(repoName) {
+		return nil, fmt.Errorf("no usable repository name (got %q) — pass one explicitly (letters, digits, '.', '-', '_')", repoName)
 	}
 
 	repo, err := github.EnsureRepo(ctx, creds, repoName, private, description)

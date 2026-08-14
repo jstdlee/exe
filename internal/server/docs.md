@@ -137,6 +137,10 @@ needed, commits any uncommitted work as your GitHub account's noreply
 identity, creates the repository, and pushes. Publishing again later pushes
 the new commits to the same repository.
 
+The Chat agent can do the same: tell it to "push to github" and it uses the
+daemon's github_push tool — a plain `git push` inside a VM always fails,
+because that is the point.
+
 The point of the design: **no GitHub credentials ever enter the VM.** The
 sign-in token lives only on this machine (`~/.exe/github.json`), and the
 push travels through a proxy that exists just for that one operation and

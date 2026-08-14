@@ -37,6 +37,7 @@ Rules:
 - VM names: lowercase letters, digits, hyphens, max 31 chars.
 - To inspect or change anything inside a VM, use bash (non-interactive commands only). Install packages with sudo apt-get install -y. Services you set up should bind 0.0.0.0 and run under systemd so they survive.
 - Only call delete_vm or unexpose when the user explicitly asked for that; for anything destructive, restate what you are about to do first.
+- Pushing to github.com: use github_push — VMs hold no GitHub credentials, so git push via bash always fails; never configure credentials or tokens inside a VM.
 - Creating a VM takes ~10 seconds and it boots with an IP; the very first creation ever downloads a 3 GB image.
 - Format answers in Markdown (lists, tables, code blocks and links render nicely), and keep them concise. When you finish a task, summarize what changed and give the address where it can be reached.`
 
@@ -48,6 +49,7 @@ const chatPinnedTmpl = `You are the operator of %q, one Debian Linux VM in exe, 
 Rules:
 - To inspect or change anything inside the VM, use bash (non-interactive commands only). Install packages with sudo apt-get install -y. Services you set up should bind 0.0.0.0 and run under systemd so they survive.
 - Only call unexpose when the user explicitly asked for that; for anything destructive, restate what you are about to do first.
+- Pushing to github.com: use github_push — the VM holds no GitHub credentials, so git push via bash always fails; never configure credentials or tokens inside the VM.
 - Format answers in Markdown (lists, tables, code blocks and links render nicely), and keep them concise. When you finish a task, summarize what changed and give the address where it can be reached.`
 
 func (s *Server) chatDir() string { return filepath.Join(s.StateDir, "chat") }
@@ -364,6 +366,12 @@ func chatTools(pinned bool) []agent.Tool {
 		agent.MkTool("unexpose", "Remove a published hostname (DNS, tunnel ingress, proxy route). Only when the user explicitly asked.", map[string]any{
 			"host": str("full hostname as shown by list_routes"),
 		}, []string{"host"}),
+		agent.MkTool("github_push", "Push a project folder in a VM to the user's GitHub. The daemon holds the credentials and pushes on the VM's behalf — a plain `git push` inside the VM always fails, so use this tool for any push to github.com. It commits uncommitted work, creates the repository if needed, and pushes the current branch.", map[string]any{
+			"vm":      vm,
+			"path":    str("absolute project folder in the VM, e.g. /home/dev/app"),
+			"repo":    str("repository name — omit to reuse the folder's origin remote (or the folder name on a first publish)"),
+			"private": map[string]any{"type": "boolean", "description": "create the repository as private (default true; ignored when it already exists)"},
+		}, []string{"vm", "path"}),
 		agent.MkTool("daemon_logs", "Read the tail of the exe daemon's own log — useful to diagnose expose/DNS/VM issues.", map[string]any{
 			"lines": num("how many lines (default 100, max 400)"),
 		}, nil),
@@ -402,7 +410,7 @@ func chatTools(pinned bool) []agent.Tool {
 // hallucinated value must not win either — overwriting beats validating.
 func pinChatArgs(name string, args map[string]any, vm string) {
 	switch name {
-	case "bash", "write_file", "read_file", "list_ports", "expose":
+	case "bash", "write_file", "read_file", "list_ports", "expose", "github_push":
 		args["vm"] = vm
 	case "start_vm", "stop_vm":
 		args["name"] = vm
@@ -440,6 +448,8 @@ func chatToolSummary(name string, args map[string]any) string {
 	case "expose":
 		p, _ := args["port"].(float64)
 		return fmt.Sprintf("expose %s:%d as %q", str("vm"), int(p), str("subdomain"))
+	case "github_push":
+		return fmt.Sprintf("push %s:%s to github", str("vm"), str("path"))
 	default:
 		b, _ := json.Marshal(args)
 		if len(args) == 0 {
@@ -569,6 +579,31 @@ func (s *Server) execChatTool(ctx context.Context, name string, args map[string]
 		return asJSON(s.exposeVM(tctx, info, str("vm"), str("subdomain"), port))
 	case "unexpose":
 		return asJSON(s.removeRoute(tctx, str("host")))
+	case "github_push":
+		creds, err := s.ghRequireAuth(tctx)
+		if err != nil {
+			return "error: " + err.Error() + " — ask the user to sign in there, then retry"
+		}
+		info, err := s.runningVM(tctx, str("vm"))
+		if err != nil {
+			return "error: " + err.Error()
+		}
+		private := true
+		if v, ok := args["private"].(bool); ok {
+			private = v
+		}
+		var steps strings.Builder
+		step := func(format string, a ...any) { fmt.Fprintf(&steps, format+"\n", a...) }
+		// Its own deadline: a first publish may apt-get install git, and a
+		// large push can outgrow the budget for quick commands.
+		pctx, pcancel := context.WithTimeout(ctx, publishTimeout)
+		defer pcancel()
+		repo, err := s.publishVM(pctx, s.vmTarget(info), creds, str("path"), str("repo"), private, "", step)
+		if err != nil {
+			return steps.String() + "error: " + err.Error()
+		}
+		s.PostNews("vm", "Published to GitHub", str("vm")+": "+str("path")+" → "+repo.HTMLURL)
+		return steps.String() + "pushed: " + repo.HTMLURL
 	case "daemon_logs":
 		if s.Logs == nil {
 			return "error: daemon log not available"
