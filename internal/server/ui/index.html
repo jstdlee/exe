@@ -263,6 +263,9 @@ td.actions button + button { margin-left: 8px; }
 /* the Chat status line opens the backend switcher */
 #chat-status { cursor: pointer; }
 #chat-status:hover { text-decoration: underline; }
+/* ChatGPT token usage sits at the status line's far right */
+#chat-usage { margin-left: auto; white-space: nowrap; }
+#chat-usage .hot { color: #a33; }
 
 /* modal dialogs */
 .overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,.15);
@@ -1040,7 +1043,7 @@ body.mobile th.sorted {
           </div>
         </div>
       </div>
-      <div class="statusbar"><span id="chat-status">…</span></div>
+      <div class="statusbar"><span id="chat-status">…</span><span id="chat-usage" hidden></span></div>
       <svg id="chat-grow" class="grow-box" width="15" height="15" viewBox="0 0 15 15" shape-rendering="crispEdges">
         <rect width="15" height="15" fill="#ccc"/>
         <path fill="#000" d="M0 0h15v1H0zM0 1h1v14H0z"/>
@@ -3350,7 +3353,7 @@ let chatCur = null, chatBusy = false;
 // chatScope filters the session list to one VM's chats (and pins new ones
 // to it); chatCurVM is the ACTIVE session's pin — a property of the
 // session itself, shown in the titlebar however the session was reached.
-let chatScope = null, chatCurVM = null, chatDetected = false;
+let chatScope = null, chatCurVM = null, chatDetected = false, chatProv = "";
 const chatMsgs = $("#chat-msgs"), chatInput = $("#chat-input");
 
 // ---- newsfeed ----
@@ -3442,6 +3445,7 @@ async function chatDetect(force) {
   try {
     const st = await j("/v1/chat/status" + (force ? "?force=1" : ""));
     chatDetected = !!st.detected;
+    chatProv = st.provider || "";
     $("#dd-chat-item").hidden = !st.detected;
     $("#chat-icon").hidden = !st.detected;
     const eff = st.effort ? " (" + st.effort + ")" : "";
@@ -3451,7 +3455,43 @@ async function chatDetect(force) {
           : "ollama " + st.version + " — " + (st.model || "no model set") + eff + " — " + st.base_url)
       : (st.reason || "no chat backend detected");
     if (!st.detected && !$("#win-chat").hidden) toast("Chat backend went away: " + (st.reason || ""));
+    chatUsage(force);
   } catch (e) { /* daemon unreachable; leave as-is */ }
+}
+// While ChatGPT is the backend, the status line's far right shows how much
+// of each rolling rate-limit window the subscription has used. Cached for a
+// minute; a finished reply forces a fresh read since it just spent tokens.
+let chatUsageAt = 0;
+async function chatUsage(force) {
+  const box = $("#chat-usage");
+  if (chatProv !== "openai" || !chatDetected) { box.hidden = true; chatUsageAt = 0; return; }
+  if ($("#win-chat").hidden) return;
+  if (!force && Date.now() - chatUsageAt < 60000) return;
+  chatUsageAt = Date.now();
+  let u;
+  try { u = await j("/v1/openai/usage"); }
+  catch (e) { box.hidden = true; chatUsageAt = 0; return; }
+  const rl = u.rate_limit || {};
+  const spans = [], tips = [];
+  for (const w of [rl.primary_window, rl.secondary_window]) {
+    if (!w) continue;
+    const pct = Math.max(0, Math.min(100, Math.round(w.used_percent)));
+    if (spans.length) spans.push(" · ");
+    spans.push(el("span", pct >= 90 ? { class: "hot" } : {}, chatWinLabel(w.limit_window_seconds) + " " + pct + "%"));
+    tips.push(oaiWindowLabel(w.limit_window_seconds, "?") + ": " + pct + "% used — resets " + oaiResetAt(w.reset_at));
+  }
+  if (!spans.length) { box.hidden = true; return; }
+  box.replaceChildren(...spans);
+  box.title = tips.join("\n");
+  box.hidden = false;
+}
+// compact window names for the status line: 5h, wk, 30d
+function chatWinLabel(sec) {
+  if (!sec) return "";
+  const h = Math.round(sec / 3600);
+  if (h < 24) return h + "h";
+  const d = Math.round(h / 24);
+  return d === 7 ? "wk" : d + "d";
 }
 // openChatWin(vm) scopes the window to that VM: the session list filters
 // to its chats and a new chat is pinned to it. No argument (the Chat icon,
@@ -3473,6 +3513,7 @@ function openChatWin(vm) {
   openWin("#win-chat");
   if (!chatMsgs.children.length) chatHint();
   loadChatSessions().catch(e => toast(e.message));
+  chatUsage();
   chatInput.focus();
 }
 function setChatScope(vm) {
@@ -3652,6 +3693,7 @@ async function chatSend() {
   $("#chat-send").disabled = false;
   loadChatSessions().catch(() => {});
   loadVMs().catch(() => {});
+  chatUsage(true);
   chatInput.focus();
 }
 $("#chat-send").onclick = chatSend;
