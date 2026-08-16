@@ -8,6 +8,35 @@ uses QEMU on the Windows Hypervisor Platform.
 
 ![The web UI — a Mac OS 9 Platinum desktop: sortable VM list and an SSH terminal into a VM](docs/screenshot.png)
 
+## Feature gallery
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/workspace-tree-editor.png" alt="Workspace tree beside the single-file editor">
+      <br><strong>Workspace tree + editor</strong><br>
+      Browse host workspace files as a tree, open text files in focused autosaving editor windows, and keep dotfiles / Trash hidden.
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/agent-tools-catalog.png" alt="Agent and developer tool launchers inside a VM">
+      <br><strong>VM Agent &amp; Tools catalog</strong><br>
+      Launch code-agent CLIs and common developer tools inside the VM terminal without creating host transcripts.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/host-agent-chat.png" alt="Host Chat using signed-in Grok, Claude, or Codex agents">
+      <br><strong>Host-agent Chat</strong><br>
+      Pick already-signed-in Grok, Claude, or Codex host agents and use Chat as the VM cloud control plane.
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/mobile-windows-bars.png" alt="Mobile Windows menu with minimized window bars">
+      <br><strong>Mobile windows</strong><br>
+      Switch windows from a dedicated mobile Windows menu and keep minimized windows visible as bottom bars.
+    </td>
+  </tr>
+</table>
+
 ```
 phone/laptop ──► exe API (bind to Tailscale IP)
                     │
@@ -115,16 +144,41 @@ http://127.0.0.1:7777). It can:
 
 - list VMs with live state, and create / start / stop / delete them
 - open a full SSH terminal in the browser (xterm.js over WebSocket, embedded in the binary)
+- open VM Agent & Tools launchers for Codex, Gemini, OpenCode, Aider, Qwen Code, Pi, Claude, and common Linux dev tools
+- browse the host Workspace as a tree, with dotfiles and `.Trash` hidden
+- edit Workspace text files in single-file autosaving editor windows
+- use Host Chat through signed-in Grok, Claude, or Codex credentials on the host
+- run `exe env` jobs and snapshots for portable agent environments
 - see web services listening inside a VM with one-click links
 - vibe code inside a VM with streaming agent output
-- browse every vibe-code transcript (CLI runs are recorded too, under
-  `~/.exe/vms/<name>/transcripts/`)
+- browse built-in Agent transcripts under `~/.exe/vms/<name>/transcripts/`;
+  guest CLI agents keep their own history inside the VM
 - expose a VM port to your domain
+- tune the desktop background and use the same windowed UI from mobile, including a dedicated Windows switcher
 - edit the full configuration (saved to `~/.exe/config.json` and hot-reloaded;
   fields marked `*` need a daemon restart)
 
 If `api_token` is set, paste it into the token field in the header (stored in
 localStorage). Bind `listen` to your Tailscale IP to use the UI from your phone.
+
+## Portable agent environments
+
+`exe env` is a CLI path for repeatable guest environments. It can read common
+project manifests, bootstrap a Debian VM, run commands or scripts with attached
+files, return one-shot download URLs for outputs, and snapshot or restore the
+VM disk:
+
+```sh
+./exe env init demo --from docker-compose.yml --from pyproject.toml
+./exe env run demo --cmd "pytest -q" --file patch.diff
+./exe env snap demo create "before refactor"
+./exe env snap demo restore <snapshot-id>
+```
+
+Manifests are interpreted as setup hints rather than containers: compose
+images, GitHub Actions setup steps, `pyproject.toml` dependencies, and simple
+text package lists become Debian packages and Python packages installed inside
+the VM.
 
 ## Agent skill guide (/skill.md)
 
