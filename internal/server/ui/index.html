@@ -48,6 +48,8 @@ a { color: #202a87; text-decoration: underline; }
 }
 .menu { display: flex; align-items: center; padding: 0 10px; font-weight: bold; }
 .menu.appl { padding: 0 12px; }
+.menu.drawer { display: none; }
+.menu.windows-menu { display: none; }
 .menu.open { background: var(--hl); color: #fff; }
 .mb-right { margin-left: auto; display: flex; align-items: stretch; }
 #cf-dot { display: flex; align-items: center; gap: 5px; padding: 0 10px; border: none;
@@ -58,6 +60,19 @@ a { color: #202a87; text-decoration: underline; }
   display: inline-block; }
 #clock { display: flex; align-items: center; padding: 0 12px; font-weight: bold;
   border-left: 1px solid var(--g600); box-shadow: inset 1px 0 0 #fff; }
+#host-res { display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 11px;
+  border-left: 1px solid var(--g600); box-shadow: inset 1px 0 0 #fff; white-space: nowrap; }
+#host-res .hot { color: var(--red); font-weight: bold; }
+.res-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  padding: 4px 8px; background: var(--g300); border-bottom: 1px solid var(--black);
+  font-size: 11px; }
+.res-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.res-item .lbl { color: #555; }
+.res-meter { width: 52px; height: 8px; border: 1px solid var(--black); background: #fff;
+  box-shadow: inset 1px 1px 0 #fff; position: relative; }
+.res-meter > i { display: block; height: 100%; background: var(--hl); }
+.res-meter.hot > i { background: var(--red); }
+.res-item.hot .val { color: var(--red); font-weight: bold; }
 .dropdown {
   position: fixed; top: 20px; z-index: 3001; min-width: 200px;
   background: var(--g200); border: 1px solid var(--black); padding: 2px 1px;
@@ -69,7 +84,15 @@ a { color: #202a87; text-decoration: underline; }
 .dd-item:hover { background: var(--hl); color: #fff; }
 .dd-item.dis { color: #888; }
 .dd-item.dis:hover { background: none; color: #888; }
+.dd-item.win-active::before { content: "✓ "; margin-left: -10px; }
 .dd-sep { height: 1px; background: var(--g600); margin: 3px 2px; box-shadow: 0 1px 0 #fff; }
+.dd-head { padding: 4px 22px 2px 18px; font-size: 10px; font-weight: bold; color: #555; }
+#dd-drawer { width: min(250px, calc(100vw - 8px)); max-height: calc(100dvh - 28px); overflow-y: auto; }
+.win-list-inline:empty { display: none; }
+@media (max-width: 768px) {
+  .menu.drawer, .menu.windows-menu { display: flex; }
+  .menu[data-m="file"], .menu[data-m="vm"], .menu[data-m="special"], .menu[data-m="help"] { display: none; }
+}
 /* Finder contextual menu, sampled from a real OS 9 capture: #ddd face
    (menubar menus are lighter), same groove separators and hard shadow */
 #ctx-menu { top: auto; background: var(--g300); min-width: 170px; z-index: 5000;
@@ -77,11 +100,25 @@ a { color: #202a87; text-decoration: underline; }
 
 /* ---------- desktop icons ---------- */
 #desktop { position: fixed; inset: 20px 0 0 0; }
-#icons { position: absolute; top: 14px; right: 8px; bottom: 190px;
-  display: flex; flex-direction: column; flex-wrap: wrap-reverse; align-content: flex-end;
-  gap: 16px 8px; z-index: 1; }
-.dicon { width: 82px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+#desktop-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+body.custom-desk { background-image: none; }
+.desk-preview { height: 110px; border: 1px solid var(--black); background: var(--lav);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--g600); margin-bottom: 10px; }
+.desk-modes { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.desk-modes label { display: flex; align-items: center; gap: 4px; }
+#icons { position: absolute; inset: 8px 8px 8px 8px; z-index: 1; }
+.dicon { width: 82px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  position: absolute; cursor: grab; }
+.dicon.dragging { opacity: .85; cursor: grabbing; z-index: 50; }
 .dicon svg { filter: drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
+/* app icons use <img>; kill native image-drag so they feel like Workspace/VM icons */
+.dicon img, .dicon svg { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
+body.win-drag iframe, body.win-drag .app-frame { pointer-events: none; }
+.msg .mermaid { margin: 8px 0; background: #fff; border: 1px solid var(--black); padding: 6px; overflow: auto; }
+.msg .mermaid img { max-width: 100%; display: block; }
+#a-launchers { flex-wrap: nowrap; overflow-x: auto; }
+.tool-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.tool-grid .ghost.sm { min-width: 88px; }
 /* integer line-height: the inherited 1.45 makes the label 15.9375px tall,
    which pushes every following 32px crispEdges glyph onto fractional pixels */
 .dicon .lbl { max-width: 82px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -130,9 +167,12 @@ a { color: #202a87; text-decoration: underline; }
   z-index: 2; box-shadow: inset 0 0 0 1px var(--black); }
 .tbox.zoom::before { content: ""; position: absolute; top: 1px; left: 1px; width: 7px; height: 7px;
   z-index: 2; box-shadow: inset 0 0 0 1px var(--black); }
+.tbox.min::before { content: ""; position: absolute; left: 2px; right: 2px; bottom: 2px; height: 2px;
+  z-index: 2; background: var(--black); }
 .window:not(.front) .stripe { visibility: hidden; }
 .window:not(.front) .tbox { visibility: hidden; }
 .window:not(.front) .title { color: #777; }
+.window.minimized { display: none !important; }
 .window.shaded { padding-bottom: 1px; }
 .window.shaded .win-frame { display: none; }
 /* desktop app windows (~/.exe/apps) host their UI in an iframe set into the
@@ -194,20 +234,26 @@ a { color: #202a87; text-decoration: underline; }
 .vflush::-webkit-scrollbar-button:vertical:disabled { border-right: 0; }
 .vflush::-webkit-scrollbar-button:vertical:end:increment:enabled { height: 14px; border-top: 0; border-bottom: 0; }
 
-/* Workspace window: Finder icon view over ~/.exe/workspace */
+/* Workspace window: Finder-style tree view over ~/.exe/workspace */
 .finder-status { background: var(--g300); border-bottom: 1px solid var(--black);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
-  text-align: center; font-size: 12px; padding: 4px 8px 3px; }
-.finder-icons { background: #fff; height: 336px; display: flex; flex-wrap: wrap;
-  align-content: flex-start; padding: 10px 0 0 10px; }
-.fitem { width: 120px; height: 64px; flex: none; display: flex; flex-direction: column;
-  align-items: center; gap: 2px; }
-.fitem .lbl { max-width: 116px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 12px; padding: 0 3px; }
-.fitem.sel svg, .fitem.drop svg { filter: brightness(.55) saturate(1.3); }
-.fitem.sel .lbl, .fitem.drop .lbl { background: var(--hl); color: #fff; }
+  text-align: center; font-size: 12px; padding: 4px 8px 3px;
+  display: flex; align-items: center; justify-content: center; gap: 8px; }
+.workspace-tree { background: #fff; height: 336px; padding: 4px 0; overflow: auto; }
+.tree-node { user-select: none; }
+.tree-children[hidden] { display: none; }
+.tree-row { min-height: 22px; display: flex; align-items: center; gap: 4px;
+  padding: 2px 8px; white-space: nowrap; cursor: default; }
+.tree-row.sel, .tree-row.drop { background: var(--hl); color: #fff; }
+.tree-row.sel .tree-ico svg, .tree-row.drop .tree-ico svg { filter: brightness(.55) saturate(1.3); }
+.tree-twist { width: 12px; flex: none; text-align: center; font-size: 12px; }
+.tree-ico { width: 18px; height: 18px; flex: none; display: inline-flex;
+  align-items: center; justify-content: center; }
+.tree-ico svg { width: 18px; height: 18px; }
+.tree-name { overflow: hidden; text-overflow: ellipsis; }
+.tree-empty { padding: 8px 12px; }
 /* drag-and-drop upload targets */
-.finder-window.drop .finder-icons { box-shadow: inset 0 0 0 2px var(--hl); }
+.finder-window.drop .workspace-tree { box-shadow: inset 0 0 0 2px var(--hl); }
 #desktop.drop { box-shadow: inset 0 0 0 3px var(--hl); }
 
 /* Get Info window, OS 9 style: icon + name header, groove rule, then
@@ -219,17 +265,19 @@ a { color: #202a87; text-decoration: underline; }
 .gi-grid span { user-select: text; word-break: break-word; }
 
 /* text editor windows, modeled on BBEdit 2.1.3: a platinum info bar
-   (pencil, doc icon, colon-separated path, Last Saved line) over an
-   unwrapped Monaco text area with both scrollbars and the grow corner */
+   (pencil, doc icon, colon-separated path, Last Saved line) over a
+   wrapping Monaco text area with the grow corner */
 .ed-info { background: var(--g300); border-bottom: 1px solid var(--black);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
   padding: 5px 8px 4px; font-size: 12px;
   display: grid; grid-template-columns: 22px 1fr; row-gap: 3px; align-items: center; }
 .ed-info .ed-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .ed-info .ed-path, .ed-info .ed-saved { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-tools { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 6px; }
 .ed-text { display: block; width: 100%; height: 380px; margin: 0; padding: 4px 6px;
   border: 0; border-radius: 0; box-shadow: none; background: #fff; color: #000;
-  font: 12px/1.4 var(--mono); min-height: 0; resize: none; }
+  font: 12px/1.4 var(--mono); min-height: 0; resize: none;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
 .ed-text:focus { outline: none; }
 
 /* image viewer windows, modeled on PictureViewer: a platinum info bar
@@ -298,6 +346,8 @@ td.actions button + button { margin-left: 8px; }
 .tabpanel { position: relative; border: 1px solid var(--black); background: var(--g200);
   padding: 12px 10px 10px; min-height: 280px;
   box-shadow: inset 1px 1px 0 var(--g400), inset 2px 2px 0 #fff, inset -1px -1px 0 var(--g500); }
+.pane-head { font-weight: bold; margin: 10px 0 4px; }
+.pane-head:first-child { margin-top: 0; }
 /* VM detail: an edge-resized body hands surplus height to the tab panel
    (grow-only — a short window keeps the panel's natural size and scrolls
    the body, as before), and inside each pane the main content stretches
@@ -306,7 +356,7 @@ td.actions button + button { margin-left: 8px; }
 #win-detail .tabpanel { flex: 1 0 auto; display: flex; flex-direction: column; }
 #win-detail .pane:not([hidden]) { flex: 1; display: flex; flex-direction: column; }
 #pane-term #term-box { flex: 1 1 auto; min-height: 160px; }
-#pane-notes #n-text { flex: 1 1 auto; }
+#pane-notes #n-text { flex: 1 1 auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 #pane-tr #t-log { flex: 1 1 380px; max-height: none; }
 /* the terminal is the one pane that can adapt its height (xterm refits
    its rows), so when the body runs short — the 100vh cap on a small
@@ -474,7 +524,7 @@ a.svc:hover { text-decoration: underline; }
    they inflate every ancestor's scrollHeight and typing makes the browser
    scroll .win-body to chase the focused hidden textarea. clip (not hidden)
    also forbids programmatic scrolling of the frame itself. */
-#term-box, .hostterm-box { height: 380px; background: #000; border: 1px solid var(--black);
+#term-box, .hostterm-box, .vmterm-box { height: 380px; background: #000; border: 1px solid var(--black);
   border-right: 0; /* the always-on viewport scrollbar draws the right frame line */
   box-shadow: -1px -1px 0 var(--g600), 1px 1px 0 #fff; overflow: clip; }
 /* enabled end arrows share lines too: borderless 14px second arrow rides
@@ -483,16 +533,18 @@ a.svc:hover { text-decoration: underline; }
   height: 14px; border-top: 0; border-bottom: 0; }
 /* Terminal windows are edge to edge: the win-frame draws the outline and
    the viewport scrollbar is the .vflush 15px flush variant */
-.hostterm-box { border: 0; box-shadow: none; }
+.term-window .win-frame { display: flex; flex-direction: column; }
+.term-window .win-body { flex: 1 1 auto; min-height: 0; display: flex; }
+.hostterm-box, .vmterm-box { border: 0; box-shadow: none; flex: 1 1 auto; min-height: 160px; }
 /* Text inset lives on .xterm, not the box: FitAddon subtracts element padding
    when sizing rows, but the absolutely-positioned viewport anchors to the
    padding box — so the scrollbar runs flush to the frame, OS 9 style. */
-#term-box .xterm, .hostterm-box .xterm { height: 100%; box-sizing: border-box; padding: 5px; }
+#term-box .xterm, .hostterm-box .xterm, .vmterm-box .xterm { width: 100%; height: 100%; box-sizing: border-box; padding: 5px; }
 /* Always-on scrollbar, like a real OS 9 window: the track is permanent
    (disabled-flat when there is no scrollback) and, because the bar exists
    at open time, xterm measures it and sizes cols short of it — with
    overflow:auto the bar appeared later, over the last column of text. */
-#term-box .xterm-viewport, .hostterm-box .xterm-viewport { overflow-y: scroll !important; }
+#term-box .xterm-viewport, .hostterm-box .xterm-viewport, .vmterm-box .xterm-viewport { overflow-y: scroll !important; }
 td .mono, td.mono { user-select: text; }
 
 /* ---------- chat window ---------- */
@@ -700,6 +752,20 @@ body.mobile #desktop .window { position: fixed; inset: 20px 0 0 0 !important;
   width: auto !important; min-width: 0; box-shadow: none;
   border-top: 0; /* the menu bar's bottom border is the separator — two stacked black lines otherwise */
   display: flex; flex-direction: column; }
+body.mobile #desktop .window:not(.minimized) { bottom: var(--mobile-minimized-stack, 0px) !important; }
+body.mobile #desktop .window.minimized {
+  display: flex !important;
+  top: auto !important; left: 0 !important; right: 0 !important;
+  bottom: var(--mobile-min-bottom, 0px) !important;
+  height: 20px !important; min-height: 20px; max-height: 20px;
+  border-top: 1px solid var(--black);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--g600);
+}
+body.mobile #desktop .window.minimized > .win-frame { display: none !important; }
+body.mobile #desktop .window.minimized .titlebar { flex: none; }
+body.mobile #desktop .window.minimized .stripe,
+body.mobile #desktop .window.minimized .tbox { visibility: visible; }
+body.mobile #desktop .window.minimized .title { color: inherit; }
 body.mobile #desktop .window > .win-frame { flex: 1; min-height: 0;
   display: flex; flex-direction: column; }
 body.mobile .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
@@ -714,13 +780,13 @@ body.mobile .term-window .statusbar { padding-right: 8px; }
 body.mobile .tbox.close::before { content: ""; position: absolute; inset: -9px; }
 /* grow-box-resizable content tracks the viewport instead of a saved height */
 body.mobile .win-frame > .app-frame,
-body.mobile .win-frame > .finder-icons,
+body.mobile .win-frame > .workspace-tree,
 body.mobile .win-frame > .ed-text,
 body.mobile .win-frame > .iv-box { flex: 1; min-height: 0; height: auto !important; }
 body.mobile #log-out { height: 100% !important; }
 body.mobile #news-list { height: 100% !important; }
 body.mobile #docs-body { height: 100% !important; }
-body.mobile .term-window .hostterm-box { height: 100%; }
+body.mobile .term-window .hostterm-box, body.mobile .term-window .vmterm-box { height: 100%; }
 body.mobile #term-box { height: calc(100dvh - 260px); min-height: 180px; }
 /* chat: sessions become a strip on top, messages fill the rest */
 body.mobile .chat-wrap { height: 100% !important; flex-direction: column; }
@@ -745,17 +811,65 @@ body.mobile th { border-top: 0;
   box-shadow: inset 1px 0 0 #fff, inset 0 1px 0 #fff, inset 0 -1px 0 #888; }
 body.mobile th.sorted {
   box-shadow: inset 1px 0 0 #555, inset 0 -1px 0 #aaa; }
+/* home-screen icon flow — .dicon is position:absolute on the spatial desk */
+body.mobile #icons { display: flex; }
+body.mobile #icons .dicon, body.mobile #sys-icons .dicon {
+  position: relative; left: auto !important; top: auto !important; }
+body.mobile #sys-icons {
+  position: absolute; left: 8px; right: 8px; bottom: 16px; top: auto;
+  flex-direction: row; justify-content: flex-start; gap: 18px 6px; }
+body.mobile #host-res { display: none; }
+body.mobile #cf-dot span:last-child { display: none; }
+body.mobile #menubar { overflow: hidden; }
+body.mobile .menu { padding: 0 7px; }
+body.mobile .menu.drawer, body.mobile .menu.windows-menu { display: flex; }
+body.mobile .menu[data-m="file"], body.mobile .menu[data-m="vm"],
+body.mobile .menu[data-m="special"], body.mobile .menu[data-m="help"] { display: none; }
+body.mobile .res-bar { gap: 8px; }
+body.mobile .window { max-width: 100vw; }
+/* Chrome desktop resize / DevTools: same layout from the viewport, not UA */
+@media (max-width: 720px) {
+  #host-res { display: none; }
+  #cf-dot span:last-child { display: none; }
+  #menubar { overflow: hidden; }
+  .menu { padding: 0 7px; }
+  .menu.drawer, .menu.windows-menu { display: flex; }
+  .menu[data-m="file"], .menu[data-m="vm"], .menu[data-m="special"], .menu[data-m="help"] { display: none; }
+  #icons { display: flex; left: 8px; right: 8px; top: 14px; bottom: 130px;
+    flex-flow: row wrap; align-content: flex-start; justify-content: flex-start; gap: 18px 6px; }
+  #icons .dicon, #sys-icons .dicon { position: relative !important; left: auto !important; top: auto !important; }
+  #sys-icons { position: absolute; left: 8px; right: 8px; bottom: 16px; top: auto;
+    flex-direction: row; justify-content: flex-start; gap: 18px 6px; }
+  #desktop .window { position: fixed; inset: 20px 0 0 0 !important;
+    width: auto !important; min-width: 0; max-width: 100vw; box-shadow: none;
+    border-top: 0; display: flex; flex-direction: column; }
+  #desktop .window > .win-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
+  .tbox.zoom, .tbox.shade, .grow-box { display: none; }
+  .window.grow .win-frame::before, .window.grow .win-frame::after { content: none; }
+  .chat-wrap { height: 100% !important; flex-direction: column; }
+  .chat-side { width: auto; }
+  .tabbar { flex-wrap: wrap; }
+  #desktop #win-about { inset: auto !important;
+    left: 50% !important; top: 50% !important; transform: translate(-50%, -50%);
+    width: min(92vw, 410px) !important; display: block;
+    border-top: 1px solid var(--black);
+    box-shadow: 2px 2px 0 var(--black), 0 0 0 100vmax rgba(0,0,0,.15); }
+}
 </style>
 </head>
 <body>
 
 <div id="menubar">
   <div class="menu appl" data-m="apple" title="About"><svg width="15" height="15" viewBox="0 0 32 32" shape-rendering="crispEdges"><rect x="6.5" y="1.5" width="19" height="24" fill="#DAD5CA" stroke="#000"/><rect x="9.5" y="4.5" width="13" height="10" fill="#6e6a61" stroke="#000"/><rect x="10.5" y="5.5" width="11" height="8" fill="#7FD67F" stroke="#000"/><rect x="12" y="18" width="8" height="2" fill="#55524B"/><rect x="9.5" y="25.5" width="13" height="3" fill="#C8C3B8" stroke="#000"/></svg></div>
+  <div class="menu drawer" id="menu-drawer" data-m="drawer">Menu</div>
+  <div class="menu windows-menu" id="menu-windows" data-m="windows">Windows</div>
   <div class="menu" data-m="file">File</div>
-  <div class="menu" data-m="windows">Windows</div>
-  <div class="menu" data-m="special">Special</div>
+  <div class="menu" data-m="vm">Virtual Machine</div>
+  <div class="menu" data-m="special">Cloudflare</div>
   <div class="menu" data-m="help">Help</div>
   <div class="mb-right">
+    <div id="host-res" title="Host resources"></div>
     <button id="cf-dot" title="Cloudflare status — checking…">
       <span id="cf-dot-circle" class="dot"></span><span>Cloudflare</span>
     </button>
@@ -767,34 +881,72 @@ body.mobile th.sorted {
   <div class="dd-item" data-act="about">About exe…</div>
 </div>
 <div class="dropdown" id="dd-file" hidden>
-  <div class="dd-item" data-act="newvm">New VM…</div>
+  <div class="dd-item" data-act="desktop">Desktop Background…</div>
   <div class="dd-item" data-act="upload">Upload to Workspace…</div>
   <div class="dd-item" data-act="closewin">Close Window</div>
   <div class="dd-sep"></div>
-  <div class="dd-item" data-act="refresh">Refresh</div>
-</div>
-<div class="dropdown" id="dd-windows" hidden>
-  <div class="dd-item" data-act="winvms">Virtual Machines</div>
-  <div class="dd-item" data-act="winchat" id="dd-chat-item" hidden>Chat</div>
+  <div class="dd-head">Open Windows</div>
+  <div class="win-list-inline" id="file-windowlist"></div>
+  <div class="dd-sep"></div>
+  <div class="dd-head">Show</div>
+  <div class="dd-item" data-act="winchat" hidden>Chat</div>
   <div class="dd-item" data-act="winnews">Newsfeed</div>
   <div class="dd-item" data-act="winconfig">Configuration</div>
   <div class="dd-item" data-act="winlog">Daemon Log</div>
-</div>
-<div class="dropdown" id="dd-special" hidden>
-  <div class="dd-item" data-act="join">Join…</div>
   <div class="dd-sep"></div>
-  <div class="dd-item" data-act="cfstatus">Cloudflare Status…</div>
-  <div class="dd-item" data-act="cfwizard">Cloudflare Setup Wizard…</div>
+  <div class="dd-item" data-act="refresh">Refresh</div>
   <div class="dd-sep"></div>
   <div class="dd-item" data-act="token">Set API Token…</div>
 </div>
+<div class="dropdown" id="dd-windows" hidden>
+  <div class="dd-head">Open Windows</div>
+  <div class="win-list-inline" id="mobile-windowlist"></div>
+</div>
+<div class="dropdown" id="dd-vm" hidden>
+  <div class="dd-item" data-act="newvm">New VM…</div>
+  <div class="dd-item" data-act="winvms">Virtual Machines</div>
+</div>
+<div class="dropdown" id="dd-special" hidden>
+  <div class="dd-item" data-act="cfstatus">Status…</div>
+  <div class="dd-item" data-act="cfwizard">Setup Wizard…</div>
+  <div class="dd-sep"></div>
+  <div class="dd-item" data-act="join">Join node…</div>
+</div>
 <div class="dropdown" id="dd-help" hidden>
+  <div class="dd-item" data-act="docs">exe Documentation…</div>
+  <div class="dd-item" data-act="skillguide">Agent Skill Guide…</div>
+</div>
+<div class="dropdown" id="dd-drawer" hidden>
+  <div class="dd-head">File</div>
+  <div class="dd-item" data-act="desktop">Desktop Background…</div>
+  <div class="dd-item" data-act="upload">Upload to Workspace…</div>
+  <div class="dd-item" data-act="closewin">Close Window</div>
+  <div class="dd-item" data-act="refresh">Refresh</div>
+  <div class="dd-item" data-act="token">Set API Token…</div>
+  <div class="dd-sep"></div>
+  <div class="dd-head">Virtual Machine</div>
+  <div class="dd-item" data-act="newvm">New VM…</div>
+  <div class="dd-item" data-act="winvms">Virtual Machines</div>
+  <div class="dd-sep"></div>
+  <div class="dd-head">Show</div>
+  <div class="dd-item" data-act="winchat" id="dd-drawer-chat-item" hidden>Chat</div>
+  <div class="dd-item" data-act="winnews">Newsfeed</div>
+  <div class="dd-item" data-act="winconfig">Configuration</div>
+  <div class="dd-item" data-act="winlog">Daemon Log</div>
+  <div class="dd-sep"></div>
+  <div class="dd-head">Cloudflare</div>
+  <div class="dd-item" data-act="cfstatus">Status…</div>
+  <div class="dd-item" data-act="cfwizard">Setup Wizard…</div>
+  <div class="dd-item" data-act="join">Join node…</div>
+  <div class="dd-sep"></div>
+  <div class="dd-head">Help</div>
   <div class="dd-item" data-act="docs">exe Documentation…</div>
   <div class="dd-item" data-act="skillguide">Agent Skill Guide…</div>
 </div>
 <div class="dropdown" id="ctx-menu" hidden></div>
 
 <div id="desktop">
+  <div id="desktop-bg"></div>
   <div id="icons"></div>
   <div id="sys-icons">
     <!-- newspaper in the same pixel style: masthead, photo block, text
@@ -811,7 +963,7 @@ body.mobile th.sorted {
     </div>
     <!-- speech balloon in the same pixel style as the Mac icons; hidden until
          Ollama is detected, like the Windows → Chat menu item -->
-    <div class="dicon" id="chat-icon" title="Chat — double-click to talk to your VM cloud" hidden>
+    <div class="dicon" id="chat-icon" title="Chat — control plane LLM, not a VM agent" hidden>
       <svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
         <rect x="3.5" y="5.5" width="25" height="15" fill="#DAD5CA" stroke="#000"/>
         <rect x="4.5" y="6.5" width="23" height="2" fill="#EDEAE2"/>
@@ -833,6 +985,7 @@ body.mobile th.sorted {
       <div class="title">Virtual Machines</div>
       <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
     <div class="win-frame paper">
+      <div id="vm-res" class="res-bar" title="Host resources — this machine, not a VM"></div>
       <div class="win-body">
         <table>
           <thead><tr id="vm-head"></tr></thead>
@@ -865,7 +1018,7 @@ body.mobile th.sorted {
         <div class="tabbar">
           <div class="tab active" data-tab="svc">Services</div>
           <div class="tab" data-tab="term">Terminal</div>
-          <div class="tab" data-tab="vibe">Agent</div>
+          <div class="tab" data-tab="vibe">Agent &amp; Tools</div>
           <div class="tab" data-tab="expose">Expose</div>
           <div class="tab" data-tab="tr">Transcripts</div>
           <div class="tab" data-tab="notes">Notes</div>
@@ -881,22 +1034,32 @@ body.mobile th.sorted {
 
           <div class="pane" id="pane-term" hidden>
             <div class="row">
-              <span class="muted" id="term-hint">Not connected.</span>
-              <button class="ghost sm" id="term-open" style="margin-left:auto">Connect</button>
-              <button class="ghost sm" id="term-close" style="margin-left:auto" hidden>Disconnect</button>
+              <span class="muted" id="term-hint">Not connected. Copy/paste: hold Ctrl, select, right-click to copy — Ctrl+right-click pastes.</span>
+              <button class="ghost sm" id="term-pop" style="margin-left:auto">Open window</button>
+              <button class="ghost sm" id="term-open">Connect here</button>
+              <button class="ghost sm" id="term-close" hidden>Disconnect</button>
             </div>
             <div id="term-box" hidden></div>
           </div>
 
           <div class="pane" id="pane-vibe" hidden>
-            <div class="muted" style="margin-bottom:8px">Tell the agent what you want — it gets a shell in this VM and can install packages, write code, and start services on its own. Progress streams in a Chat pinned to this VM, where you can keep the conversation going.</div>
-            <textarea id="a-prompt" placeholder="Build a snake game and serve it on port 8000"></textarea>
-            <div class="row actions" style="margin-top:10px">
-              <button class="btn" id="a-run">Run Agent</button>
-            </div>
+            <div class="pane-head">Code-agent CLIs</div>
+            <div class="muted" style="margin-bottom:6px">These launch inside this VM terminal. Missing CLIs install first, then the TUI owns the terminal. Keys, history and sessions stay in the guest; these runs do <b>not</b> create host transcripts.</div>
+            <div class="row actions" id="a-launchers" style="flex-wrap:nowrap; gap:8px"></div>
+            <div class="pane-head">Developer tools</div>
+            <div class="muted" style="margin-bottom:6px">Click to open a VM shell; install if missing, then you get a prompt.</div>
+            <div class="tool-grid" id="a-tools"></div>
           </div>
 
           <div class="pane" id="pane-expose" hidden>
+            <div class="muted" style="margin-bottom:8px">
+              Expose publishes one guest TCP port on the internet as
+              <span class="mono">https://&lt;subdomain&gt;.&lt;cloudflare.domain&gt;</span>
+              through the Cloudflare tunnel. The process inside the VM must
+              listen on <span class="mono">0.0.0.0</span> (not localhost).
+              Finish the Cloudflare wizard first. Unexpose from the Services tab.
+              Without Cloudflare this only adds a local proxy route.
+            </div>
             <div class="row actions">
               <div class="field" style="width:100px">
                 <label for="e-port">VM port</label>
@@ -912,16 +1075,24 @@ body.mobile th.sorted {
           </div>
 
           <div class="pane" id="pane-tr" hidden>
-            <div id="t-list"><span class="muted">No agent runs yet — each run in this VM is logged here.</span></div>
+            <div class="muted" style="margin-bottom:8px">
+              Transcripts are the host-side log of built-in vibecode / Agent
+              runs in this VM (prompt, model, stream). They live next to the
+              disk and survive stop/start. Click a row to replay. Named guest
+              CLIs (claude / codex / gemini / …) keep their own history inside
+              the VM and do not create host transcripts.
+            </div>
+            <div id="t-list"><span class="muted">No built-in Agent runs yet — VM CLI agent launches are not logged here.</span></div>
             <pre class="out" id="t-log" hidden></pre>
           </div>
 
           <div class="pane" id="pane-notes" hidden>
             <div class="row" style="margin-bottom:6px">
-              <span class="muted">Notes about this VM — saved automatically.</span>
+              <span class="muted notes-help">Notes about this VM — saved automatically.</span>
               <span class="muted" id="n-status" style="margin-left:auto"></span>
+              <button class="ghost sm danger" id="notes-delete" type="button">Delete</button>
             </div>
-            <textarea id="n-text" style="min-height:220px" spellcheck="false" placeholder="What runs here, why it exists, how to rebuild it…"></textarea>
+            <textarea id="n-text" style="min-height:220px" wrap="soft" spellcheck="false" placeholder="What runs here, why it exists, how to rebuild it…"></textarea>
           </div>
         </div>
       </div>
@@ -1035,9 +1206,14 @@ body.mobile th.sorted {
             <div class="listbox chat-sessions" id="chat-sessions"></div>
           </div>
           <div class="chat-main">
+            <div class="row" style="margin-bottom:6px; gap:8px">
+              <select id="chat-agent" title="Host agent (uses ~/.grok ~/.claude ~/.codex)"></select>
+              <select id="chat-model" title="Model from that host agent"></select>
+              <input id="chat-title-edit" placeholder="Chat title" style="flex:1" title="Rename this chat">
+            </div>
             <div class="chat-msgs" id="chat-msgs"></div>
             <div class="chat-inrow">
-              <textarea id="chat-input" rows="2" placeholder="Ask for anything — e.g. create a vm named blog and serve a hello page from it"></textarea>
+              <textarea id="chat-input" rows="2" placeholder="Host Chat operates the VM cloud (create/start/stop). Work inside a VM with Agent or exe env."></textarea>
               <button class="btn" id="chat-send">Send</button>
             </div>
           </div>
@@ -1228,28 +1404,73 @@ body.mobile th.sorted {
   </div>
 </div>
 
+<!-- Desktop Background (Appearance) -->
+<div id="desk-overlay" class="overlay" hidden>
+  <div class="window modal front" style="max-width:400px">
+    <div class="titlebar"><button class="tbox close" id="desk-x"></button><div class="stripe"></div>
+      <div class="title">Desktop Background</div>
+      <div class="stripe"></div></div>
+    <div class="win-frame">
+      <div class="win-body">
+        <div id="desk-preview" class="desk-preview"></div>
+        <div class="row" style="gap:8px; margin-bottom:8px">
+          <button class="ghost sm" id="desk-choose">Choose Picture…</button>
+          <button class="ghost sm" id="desk-clear">Default pattern</button>
+          <input id="desk-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/bmp" hidden>
+        </div>
+        <div class="field" style="margin-bottom:8px">
+          <label for="desk-color">Desktop color</label>
+          <input id="desk-color" type="color" value="#ccccff" style="width:56px;height:22px;padding:0">
+        </div>
+        <div class="muted">Picture position</div>
+        <div class="desk-modes">
+          <label><input type="radio" name="desk-mode" value="center"> Center</label>
+          <label><input type="radio" name="desk-mode" value="stretch"> Stretch</label>
+          <label><input type="radio" name="desk-mode" value="cover"> Expand all (keep ratio)</label>
+        </div>
+        <div class="row" style="justify-content:flex-end; gap:11px; margin-top:10px">
+          <button class="btn" id="desk-ok">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Platinum confirm / note (replaces window.confirm) -->
+<div id="ask-overlay" class="overlay" hidden>
+  <div class="window modal front" style="max-width:360px">
+    <div class="titlebar"><button class="tbox close" id="ask-x"></button><div class="stripe"></div>
+      <div class="title" id="ask-title">Confirm</div>
+      <div class="stripe"></div></div>
+    <div class="win-frame">
+      <div class="win-body">
+        <div id="ask-msg" style="white-space:pre-wrap; line-height:1.45; margin-bottom:12px"></div>
+        <textarea id="ask-paste" hidden rows="4" style="width:100%; margin-bottom:10px" spellcheck="false"></textarea>
+        <div class="row" style="justify-content:flex-end; gap:11px">
+          <button class="ghost" id="ask-cancel">Cancel</button>
+          <button class="btn" id="ask-ok">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Chat backend switcher (modal, opened from the Chat window's status line) -->
 <div id="cb-overlay" class="overlay" hidden>
   <div class="window modal front" style="max-width:360px">
     <div class="titlebar"><button class="tbox close" id="cb-x"></button><div class="stripe"></div>
-      <div class="title">Chat Backend</div>
+      <div class="title">Host agent</div>
       <div class="stripe"></div></div>
     <div class="win-frame">
       <div class="win-body">
+        <div class="muted" style="margin-bottom:10px">Uses the host CLI you already signed in with. No API keys in exe.</div>
         <div class="field" style="margin-bottom:10px">
-          <label for="cb-provider">provider</label>
-          <select id="cb-provider">
-            <option value="ollama">ollama</option>
-            <option value="openai">openai (ChatGPT)</option>
-          </select>
+          <label for="cb-provider">agent</label>
+          <select id="cb-provider"></select>
         </div>
         <div class="field" style="margin-bottom:10px">
           <label for="cb-model">model</label>
           <select id="cb-model"></select>
-        </div>
-        <div class="field">
-          <label for="cb-effort">effort</label>
-          <select id="cb-effort"><!-- options filled per provider by cbFill --></select>
         </div>
         <div class="row" style="margin-top:14px">
           <span class="muted" id="cb-status" style="flex:1"></span>
@@ -1377,10 +1598,15 @@ const $ = s => document.querySelector(s);
 // the shared desktop layout snapshot. Tablets and desktops keep the
 // spatial windows. The UA test catches phone browsers; the media test
 // catches other small coarse-pointer screens; ?mobile=1 / ?mobile=0 forces it.
-const IS_MOBILE = new URLSearchParams(location.search).has("mobile")
-  ? new URLSearchParams(location.search).get("mobile") !== "0"
-  : /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(navigator.userAgent)
-    || (matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) < 700);
+function detectMobile() {
+  const q = new URLSearchParams(location.search);
+  if (q.has("mobile")) return q.get("mobile") !== "0";
+  if (/iPhone|iPod|Android.*Mobile|Windows Phone/i.test(navigator.userAgent)) return true;
+  if (matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) < 700) return true;
+  // Chrome desktop resize / DevTools device mode — follow the viewport
+  return window.innerWidth < 720;
+}
+let IS_MOBILE = detectMobile();
 if (IS_MOBILE) document.body.classList.add("mobile");
 // iOS Safari auto-zooms into focused inputs whose font is under 16px;
 // maximum-scale=1 disables only that auto-zoom (pinch zoom still works
@@ -1409,6 +1635,35 @@ function toast(msg) {
   b._t = setTimeout(() => b.classList.remove("show"), 3500);
 }
 const fmtTime = iso => new Date(iso).toLocaleString();
+
+// Platinum confirm / note / paste — never window.confirm
+let askWait = null;
+function platAsk(message, opts) {
+  opts = opts || {};
+  return new Promise(resolve => {
+    if (askWait) { const prev = askWait; askWait = null; prev(false); }
+    askWait = resolve;
+    $("#ask-title").textContent = opts.title || (opts.note ? "Note" : opts.paste ? "Paste" : "Confirm");
+    $("#ask-msg").textContent = message;
+    $("#ask-ok").textContent = opts.ok || "OK";
+    $("#ask-cancel").hidden = !!opts.note;
+    const ta = $("#ask-paste");
+    ta.hidden = !opts.paste;
+    ta.value = "";
+    $("#ask-overlay").hidden = false;
+    setTimeout(() => (opts.paste ? ta : $("#ask-ok")).focus(), 30);
+  });
+}
+function askFinish(ok) {
+  $("#ask-overlay").hidden = true;
+  const r = askWait; askWait = null;
+  if (!r) return;
+  if (ok && !$("#ask-paste").hidden) r($("#ask-paste").value);
+  else r(!!ok);
+}
+$("#ask-ok").onclick = () => askFinish(true);
+$("#ask-cancel").onclick = () => askFinish(false);
+$("#ask-x").onclick = () => askFinish(false);
 
 // ---- api ----
 const tokenInput = $("#token");
@@ -1446,6 +1701,13 @@ function focusWin(w) {
 // on screen and remembers it, so closing walks back through the stack like
 // a phone's back button; closing the last one lands on the desktop icons.
 let mobileStack = [];
+function updateMobileMinimizedBars() {
+  const mins = [...document.querySelectorAll("#desktop .window.minimized")]
+    .filter(w => !w.hidden && !MOB_DIALOG.has(w.id))
+    .sort((a, b) => (+a.style.zIndex || 0) - (+b.style.zIndex || 0));
+  mins.forEach((w, i) => w.style.setProperty("--mobile-min-bottom", (i * 20) + "px"));
+  document.body.style.setProperty("--mobile-minimized-stack", IS_MOBILE ? (mins.length * 20) + "px" : "0px");
+}
 // dialog-ish windows float centered over the current window like the
 // Cloudflare status modal instead of going fullscreen; they never enter
 // the back-stack and just vanish when the user switches windows
@@ -1453,7 +1715,7 @@ const MOB_DIALOG = new Set(["win-about"]);
 function mobileSwapIn(w) {
   mobileStack = mobileStack.filter(id => id !== w.id);
   document.querySelectorAll("#desktop .window").forEach(x => {
-    if (x !== w && !x.hidden) {
+    if (x !== w && !x.hidden && !x.classList.contains("minimized")) {
       x.hidden = true;
       if (!MOB_DIALOG.has(x.id)) mobileStack.push(x.id);
     }
@@ -1467,7 +1729,7 @@ const MOB_RESTORE = new Set(["win-vms", "win-config", "win-log", "win-chat", "wi
 const mobRestorable = id => MOB_RESTORE.has(id)
   || id.startsWith("win-app-") || id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-");
 function mobSave() {
-  const vis = [...document.querySelectorAll("#desktop .window")].find(w => !w.hidden && !MOB_DIALOG.has(w.id));
+  const vis = [...document.querySelectorAll("#desktop .window")].find(w => !w.hidden && !w.classList.contains("minimized") && !MOB_DIALOG.has(w.id));
   localStorage.setItem("exe_mobile_winstate", JSON.stringify({
     stack: mobileStack.filter(mobRestorable),
     top: vis && mobRestorable(vis.id) ? vis.id : null,
@@ -1495,16 +1757,21 @@ function mobRestore() {
 }
 function openWin(sel) {
   const w = typeof sel === "string" ? $(sel) : sel;
+  if (!w) return null;
+  w.classList.remove("minimized");
   if (IS_MOBILE && !MOB_DIALOG.has(w.id)) mobileSwapIn(w);
   w.hidden = false;
   w.classList.remove("shaded");
   focusWin(w);
+  updateMobileMinimizedBars();
   if (IS_MOBILE) mobSave();
   return w;
 }
 function closeWin(w) {
+  if (!w) return;
   const wasFront = w.classList.contains("front");
   w.hidden = true;
+  w.classList.remove("minimized");
   if (w.id === "win-detail") { closeTerm(); flushNotes(); currentVM = null; }
   if (w.id === "win-newvm") $("#c-status").textContent = "";
   if (w.id === "win-upload") {
@@ -1524,14 +1791,32 @@ function closeWin(w) {
   } else if (wasFront) {
     // OS 9: closing the active window activates the one revealed beneath
     // it — z order doubles as activation recency since zTop is monotonic
-    const wins = [...document.querySelectorAll("#desktop .window")].filter(x => !x.hidden);
+    const wins = [...document.querySelectorAll("#desktop .window")].filter(x => !x.hidden && !x.classList.contains("minimized"));
     wins.sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0));
     if (wins[0]) focusWin(wins[0]);
   }
+  updateMobileMinimizedBars();
+  winSave();
+}
+function minimizeWin(w) {
+  if (!w || w.hidden || w.classList.contains("modal")) return;
+  const wasFront = w.classList.contains("front");
+  w.classList.add("minimized");
+  w.classList.remove("front");
+  if (IS_MOBILE) {
+    const prev = document.getElementById(mobileStack.pop() || "");
+    if (prev) { prev.hidden = false; focusWin(prev); }
+    mobSave();
+  } else if (wasFront) {
+    const wins = [...document.querySelectorAll("#desktop .window")].filter(x => !x.hidden && !x.classList.contains("minimized"));
+    wins.sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0));
+    if (wins[0]) focusWin(wins[0]);
+  }
+  updateMobileMinimizedBars();
   winSave();
 }
 function closeFrontWindow() {
-  const wins = [...document.querySelectorAll("#desktop .window")].filter(w => !w.hidden);
+  const wins = [...document.querySelectorAll("#desktop .window")].filter(w => !w.hidden && !w.classList.contains("minimized"));
   wins.sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0));
   if (wins[0]) closeWin(wins[0]);
 }
@@ -1540,22 +1825,31 @@ function initWindow(w) {
   const tb = w.querySelector(".titlebar");
   const cb = tb.querySelector(".tbox.close");
   if (cb && !cb.id) cb.addEventListener("click", e => { e.stopPropagation(); closeWin(w); });
+  if (!w.classList.contains("modal") && cb && !tb.querySelector(".tbox.min")) {
+    const mb = el("button", { class: "tbox min", title: "Minimize" });
+    cb.after(mb);
+    mb.addEventListener("click", e => { e.stopPropagation(); minimizeWin(w); });
+  }
   const sb = tb.querySelector(".tbox.shade");
   if (sb) sb.addEventListener("click", e => { e.stopPropagation(); w.classList.toggle("shaded"); termResize(); winSave(); });
   const zb = tb.querySelector(".tbox.zoom");
   if (zb) zb.addEventListener("click", e => {
     e.stopPropagation();
+    const box = w.querySelector(".hostterm-box, .vmterm-box, .ed-text, .workspace-tree, .app-frame, .iv-box, .chat-wrap");
     if (w._zoom) {
-      Object.assign(w.style, w._zoom);
+      Object.assign(w.style, w._zoom.style);
+      if (box && w._zoom.boxH != null) box.style.height = w._zoom.boxH;
       w._zoom = null;
     } else {
-      w._zoom = { left: w.style.left, top: w.style.top, width: w.style.width };
-      w.style.left = "8px";
-      w.style.top = "8px";
-      w.style.width = Math.min(window.innerWidth - 24, 1100) + "px";
+      w._zoom = { style: { left: w.style.left, top: w.style.top, width: w.style.width }, boxH: box ? box.style.height : null };
+      w.style.left = "4px";
+      w.style.top = "4px";
+      w.style.width = Math.max(320, window.innerWidth - 12) + "px";
+      if (box) box.style.height = Math.max(200, window.innerHeight - 58) + "px";
     }
     focusWin(w);
     termResize();
+    if (w._termResize) w._termResize();
   });
   tb.addEventListener("dblclick", e => {
     if (IS_MOBILE || e.target.closest(".tbox") || w.classList.contains("modal")) return;
@@ -1564,8 +1858,9 @@ function initWindow(w) {
     winSave();
   });
   // mobile windows are fullscreen and pinned — no titlebar drag
-  if (w.classList.contains("modal") || IS_MOBILE) return;
+  if (w.classList.contains("modal")) return;
   tb.addEventListener("pointerdown", e => {
+    if (IS_MOBILE) return;
     if (e.target.closest(".tbox")) return;
     e.preventDefault();
     focusWin(w);
@@ -1578,6 +1873,7 @@ function initWindow(w) {
     const ox = e.clientX - w.offsetLeft, oy = e.clientY - w.offsetTop;
     const width = w.offsetWidth;
     winDragging = w;
+    document.body.classList.add("win-drag");
     const move = ev => {
       w.style.left = Math.min(window.innerWidth - 60, Math.max(60 - width, ev.clientX - ox)) + "px";
       w.style.top = Math.min(window.innerHeight - 46, Math.max(0, ev.clientY - oy)) + "px";
@@ -1585,6 +1881,7 @@ function initWindow(w) {
     };
     const up = () => {
       winDragging = null;
+      document.body.classList.remove("win-drag");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       winSave();
@@ -1718,15 +2015,16 @@ let winRev = 0;
 function winSnapshot() {
   const st = {};
   document.querySelectorAll("#desktop .window").forEach(w => {
+    if (w.id.startsWith("win-app-") && isHiddenDesktopApp(w.id.slice(8))) return;
     // style.*, not offset*: hidden windows are display:none, which reads 0
     st[w.id] = {
       l: parseInt(w.style.left) || 0, t: parseInt(w.style.top) || 0,
       w: parseInt(w.style.width) || w.offsetWidth,
       z: +w.style.zIndex || 0,
-      open: !w.hidden, shaded: w.classList.contains("shaded"),
+      open: !w.hidden, shaded: w.classList.contains("shaded"), minimized: w.classList.contains("minimized"),
     };
     // app, Finder, editor, image, chat and terminal windows are also resizable
-    const g = w.querySelector(".app-frame, .finder-icons, .ed-text, .iv-box, .chat-wrap");
+    const g = w.querySelector(".app-frame, .workspace-tree, .ed-text, .iv-box, .chat-wrap");
     if (g) st[w.id].h = parseInt(g.style.height) || g.offsetHeight || 0;
   });
   st["win-log"].h = parseInt($("#log-out").style.height) || $("#log-out").offsetHeight || 380;
@@ -1751,6 +2049,10 @@ function applyWinState(st) {
     for (const [id, v] of Object.entries(st)) {
       const w = document.getElementById(id);
       if (id.startsWith("win-app-")) {
+        if (isHiddenDesktopApp(id.slice(8))) {
+          if (w) w.remove();
+          continue;
+        }
         // app windows are created on demand, so this browser may not have
         // the element yet — openAppWin builds it before pass 2 places it
         if (v.open && !w) openAppWin(id.slice(8));
@@ -1786,6 +2088,7 @@ function applyWinState(st) {
       if (v.t !== undefined) w.style.top = Math.min(window.innerHeight - 46, Math.max(0, v.t)) + "px";
       if (v.z) { w.style.zIndex = v.z; maxZ = Math.max(maxZ, v.z); }
       w.classList.toggle("shaded", !!v.shaded);
+      w.classList.toggle("minimized", !!v.minimized);
       if (id === "win-log" && v.h) $("#log-out").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-news" && v.h) $("#news-list").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       if (id === "win-docs" && v.h) $("#docs-body").style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
@@ -1796,7 +2099,7 @@ function applyWinState(st) {
       if (id === "win-detail") $("#win-detail .win-body").style.height = v.h ? Math.max(360, Math.min(window.innerHeight - 170, v.h)) + "px" : "";
       if (id === "win-chat" && v.h) $(".chat-wrap").style.height = Math.max(240, Math.min(window.innerHeight - 190, v.h)) + "px";
       if ((id.startsWith("win-ws-") || id.startsWith("win-ed-") || id.startsWith("win-iv-")) && v.h) {
-        const g = w.querySelector(".finder-icons, .ed-text, .iv-box");
+        const g = w.querySelector(".workspace-tree, .ed-text, .iv-box");
         if (g) g.style.height = Math.max(96, Math.min(window.innerHeight - 170, v.h)) + "px";
       }
       if (id.startsWith("win-app-") && v.h) {
@@ -1805,7 +2108,7 @@ function applyWinState(st) {
       }
     }
     zTop = Math.max(zTop, maxZ);
-    const wins = [...document.querySelectorAll("#desktop .window")].filter(x => !x.hidden);
+    const wins = [...document.querySelectorAll("#desktop .window")].filter(x => !x.hidden && !x.classList.contains("minimized"));
     wins.sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0));
     document.querySelectorAll("#desktop .window").forEach(x => x.classList.toggle("front", x === wins[0]));
     termResize();
@@ -1853,6 +2156,33 @@ function winSubscribe() {
   };
 }
 tokenInput.addEventListener("change", () => { if (winES) winSubscribe(); });
+function applyMobileMode(on) {
+  const was = document.body.classList.contains("mobile");
+  IS_MOBILE = !!on;
+  document.body.classList.toggle("mobile", IS_MOBILE);
+  const hint = $("#vm-hint");
+  if (hint) hint.textContent = IS_MOBILE ? "tap a VM to open it" : "double-click a VM to open it";
+  if (IS_MOBILE && !was) {
+    const wins = [...document.querySelectorAll("#desktop .window")].filter(w => !w.hidden && !MOB_DIALOG.has(w.id));
+    wins.sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0));
+    if (wins[0]) mobileSwapIn(wins[0]);
+  } else if (!IS_MOBILE && was) {
+    mobileStack = [];
+    try {
+      const cached = JSON.parse(localStorage.getItem("exe_winstate") || "null");
+      if (cached) applyWinState(cached);
+    } catch (e) {}
+  }
+  updateMobileMinimizedBars();
+  termResize();
+  document.querySelectorAll(".term-window").forEach(w => { if (w._termResize) w._termResize(); });
+}
+function syncMobileMode() { applyMobileMode(detectMobile()); }
+window.addEventListener("resize", () => {
+  clearTimeout(syncMobileMode._t);
+  syncMobileMode._t = setTimeout(syncMobileMode, 80);
+});
+
 function winRestore() {
   // mobile restores its own phone-local state, never the desktop snapshot
   if (IS_MOBILE) { mobRestore(); return; }
@@ -1873,16 +2203,58 @@ let openMenuEl = null;
 function menuClose() {
   if (!openMenuEl) return;
   openMenuEl.classList.remove("open");
-  $("#dd-" + openMenuEl.dataset.m).hidden = true;
+  const dd = $("#dd-" + openMenuEl.dataset.m);
+  if (dd) dd.hidden = true;
   openMenuEl = null;
+}
+function winMenuLabel(w) {
+  const label = (w.querySelector(".title")?.textContent || w.id.replace(/^win-/, "")).trim();
+  return w.classList.contains("minimized") ? label + " — minimized" : label;
+}
+function windowMenuItems() {
+  const seen = new Set(), out = [];
+  const add = w => {
+    if (!w || seen.has(w.id) || MOB_DIALOG.has(w.id)) return;
+    if (w.id.startsWith("win-app-") && isHiddenDesktopApp(w.id.slice(8))) return;
+    if (!w.closest("#desktop")) return;
+    seen.add(w.id);
+    out.push(w);
+  };
+  [...document.querySelectorAll("#desktop .window")]
+    .filter(w => !w.hidden && !MOB_DIALOG.has(w.id))
+    .sort((a, b) => (+b.style.zIndex || 0) - (+a.style.zIndex || 0))
+    .forEach(add);
+  if (IS_MOBILE) [...mobileStack].reverse().forEach(id => add(document.getElementById(id)));
+  return out;
+}
+function renderWindowListMenu(target) {
+  if (!target) return;
+  target.replaceChildren();
+  const wins = windowMenuItems();
+  if (!wins.length) {
+    target.append(el("div", { class: "dd-item dis" }, "No open windows"));
+    return;
+  }
+  for (const w of wins) {
+    const item = el("div", {
+      class: "dd-item"
+        + (w.classList.contains("front") ? " win-active" : "")
+        + (w.classList.contains("minimized") ? " win-minimized" : ""),
+    }, winMenuLabel(w));
+    item.addEventListener("click", () => { menuClose(); openWin(w); });
+    target.append(item);
+  }
 }
 function menuShow(m) {
   menuClose();
   openMenuEl = m;
   m.classList.add("open");
+  if (m.dataset.m === "file") renderWindowListMenu($("#file-windowlist"));
+  if (m.dataset.m === "windows") renderWindowListMenu($("#mobile-windowlist"));
   const dd = $("#dd-" + m.dataset.m);
+  if (!dd) return;
   dd.hidden = false;
-  dd.style.left = Math.min(m.getBoundingClientRect().left, window.innerWidth - dd.offsetWidth - 4) + "px";
+  dd.style.left = Math.max(4, Math.min(m.getBoundingClientRect().left, window.innerWidth - dd.offsetWidth - 4)) + "px";
 }
 document.querySelectorAll(".menu[data-m]").forEach(m => {
   m.addEventListener("mousedown", e => {
@@ -1897,6 +2269,7 @@ document.addEventListener("mousedown", e => {
 const ACTIONS = {
   about: () => openAboutWin(),
   newvm: () => { openWin("#win-newvm"); $("#c-name").focus(); },
+  desktop: () => openDesktopWin(),
   upload: () => openWin("#win-upload"),
   closewin: closeFrontWindow,
   refresh: () => { Promise.all([loadVMs(), loadApps()]).then(() => toast("Refreshed")).catch(e => toast(e.message)); },
@@ -2012,6 +2385,102 @@ function tickClock() {
 tickClock();
 setInterval(tickClock, 10000);
 
+// ---- desktop background (picture + color) ----
+let deskPrefs = { mode: "center", color: "#ccccff", image: false, rev: 0 };
+function deskWallpaperURL() {
+  const tok = tokenInput.value ? "&token=" + encodeURIComponent(tokenInput.value) : "";
+  return "/v1/desktop/wallpaper?r=" + (deskPrefs.rev || Date.now()) + tok;
+}
+function paintDeskLayer(el, prefs, preview) {
+  prefs = prefs || deskPrefs;
+  el.style.backgroundColor = prefs.color || "#ccccff";
+  if (!prefs.image) {
+    el.style.backgroundImage = preview ? "none" : "";
+    el.style.backgroundSize = "";
+    el.style.backgroundRepeat = "";
+    el.style.backgroundPosition = "";
+    return;
+  }
+  el.style.backgroundImage = "url(\"" + deskWallpaperURL() + "\")";
+  el.style.backgroundRepeat = "no-repeat";
+  el.style.backgroundPosition = "center center";
+  if (prefs.mode === "stretch") el.style.backgroundSize = "100% 100%";
+  else if (prefs.mode === "cover") el.style.backgroundSize = "cover";
+  else el.style.backgroundSize = "auto";
+}
+function applyDesktop() {
+  const bg = $("#desktop-bg");
+  document.body.classList.toggle("custom-desk", !!deskPrefs.image);
+  if (deskPrefs.color) document.body.style.backgroundColor = deskPrefs.color;
+  else document.body.style.backgroundColor = "";
+  if (!bg) return;
+  if (!deskPrefs.image) {
+    bg.style.backgroundImage = "";
+    bg.style.backgroundSize = "";
+    bg.style.backgroundColor = "";
+    return;
+  }
+  paintDeskLayer(bg, deskPrefs, false);
+}
+async function loadDesktop() {
+  try { deskPrefs = await j("/v1/desktop"); } catch (e) { return; }
+  applyDesktop();
+}
+function deskModeValue() {
+  const n = document.querySelector("input[name=desk-mode]:checked");
+  return n ? n.value : "center";
+}
+function deskFillForm() {
+  $("#desk-color").value = /^#[0-9a-fA-F]{6}$/.test(deskPrefs.color) ? deskPrefs.color : "#ccccff";
+  document.querySelectorAll("input[name=desk-mode]").forEach(r => { r.checked = r.value === (deskPrefs.mode || "center"); });
+  paintDeskLayer($("#desk-preview"), {
+    mode: deskModeValue(), color: $("#desk-color").value, image: deskPrefs.image, rev: deskPrefs.rev,
+  }, true);
+}
+function openDesktopWin() {
+  deskFillForm();
+  $("#desk-overlay").hidden = false;
+}
+function deskClose() { $("#desk-overlay").hidden = true; }
+async function deskSavePrefs() {
+  try {
+    deskPrefs = await j("/v1/desktop", { method: "PUT", json: { mode: deskModeValue(), color: $("#desk-color").value } });
+    applyDesktop();
+    deskFillForm();
+  } catch (e) { toast(e.message); }
+}
+$("#desk-x").onclick = deskClose;
+$("#desk-ok").onclick = async () => { await deskSavePrefs(); deskClose(); };
+$("#desk-color").addEventListener("input", () => {
+  deskPrefs.color = $("#desk-color").value;
+  applyDesktop();
+  deskFillForm();
+});
+$("#desk-color").addEventListener("change", deskSavePrefs);
+document.querySelectorAll("input[name=desk-mode]").forEach(r => r.addEventListener("change", deskSavePrefs));
+$("#desk-choose").onclick = () => $("#desk-file").click();
+$("#desk-file").onchange = async () => {
+  const f = $("#desk-file").files[0];
+  $("#desk-file").value = "";
+  if (!f) return;
+  if (f.size > 8 << 20) { toast("picture larger than 8 MB"); return; }
+  try {
+    const r = await api("/v1/desktop/wallpaper", { method: "PUT", body: f, headers: { "Content-Type": f.type || "application/octet-stream" } });
+    deskPrefs = await r.json();
+    applyDesktop();
+    deskFillForm();
+    toast("Desktop picture set");
+  } catch (e) { toast(e.message); }
+};
+$("#desk-clear").onclick = async () => {
+  try {
+    deskPrefs = await j("/v1/desktop/wallpaper", { method: "DELETE" });
+    applyDesktop();
+    deskFillForm();
+    toast("Default desktop pattern");
+  } catch (e) { toast(e.message); }
+};
+
 // ---- desktop icons ----
 const SCREEN_COLORS = { running: "#7FD67F", starting: "#E8B34B", stopping: "#E8B34B", stopped: "#3A3F46", error: "#D66A6A" };
 function macIcon(state, size) {
@@ -2027,11 +2496,79 @@ function macIcon(state, size) {
 }
 $("#about-icon").innerHTML = macIcon("running", 44);
 let selectedIcon = null;
+const ICON_GW = 88, ICON_GH = 80;
+function loadIconPos() {
+  try { return JSON.parse(localStorage.getItem("exe_iconpos") || "{}"); } catch (e) { return {}; }
+}
+function saveIconPos(p) { localStorage.setItem("exe_iconpos", JSON.stringify(p)); }
+function snapIcon(x, y) {
+  const desk = $("#desktop");
+  const maxX = Math.max(0, desk.clientWidth - 82);
+  const maxY = Math.max(0, desk.clientHeight - 70);
+  x = Math.max(0, Math.min(maxX, Math.round(x / ICON_GW) * ICON_GW));
+  y = Math.max(0, Math.min(maxY, Math.round(y / ICON_GH) * ICON_GH));
+  return { x, y };
+}
+function placeDicon(ic, key, index) {
+  const pos = loadIconPos()[key];
+  const desk = $("#desktop");
+  let x, y;
+  if (pos) { x = pos.x; y = pos.y; }
+  else {
+    x = Math.max(0, (desk.clientWidth || 800) - 96);
+    y = 12 + index * ICON_GH;
+  }
+  const s = snapIcon(x, y);
+  ic.style.left = s.x + "px";
+  ic.style.top = s.y + "px";
+  wireIconDrag(ic, key);
+}
+function wireIconDrag(ic, key) {
+  if (ic._dragWired) return;
+  ic._dragWired = true;
+  // native <img> / shortcut drag looks like "dragging a file" and steals
+  // the pointer — same handler for Workspace, Terminal, VMs and desk apps
+  ic.addEventListener("dragstart", e => e.preventDefault());
+  ic.querySelectorAll("img").forEach(img => { img.draggable = false; });
+  ic.addEventListener("pointerdown", e => {
+    if (IS_MOBILE) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const r = ic.getBoundingClientRect();
+    const desk = $("#desktop").getBoundingClientRect();
+    const ox = e.clientX - r.left, oy = e.clientY - r.top;
+    const sx = e.clientX, sy = e.clientY;
+    let moved = false;
+    try { ic.setPointerCapture(e.pointerId); } catch (err) {}
+    const move = ev => {
+      if (!moved && (ev.clientX - sx) ** 2 + (ev.clientY - sy) ** 2 < 16) return;
+      if (!moved) { moved = true; ic.classList.add("dragging"); }
+      ic.style.left = (ev.clientX - desk.left - ox) + "px";
+      ic.style.top = (ev.clientY - desk.top - oy) + "px";
+    };
+    const up = ev => {
+      ic.classList.remove("dragging");
+      try { ic.releasePointerCapture(ev.pointerId); } catch (err) {}
+      ic.removeEventListener("pointermove", move);
+      ic.removeEventListener("pointerup", up);
+      if (!moved) return;
+      const s = snapIcon(parseFloat(ic.style.left) || 0, parseFloat(ic.style.top) || 0);
+      ic.style.left = s.x + "px";
+      ic.style.top = s.y + "px";
+      const all = loadIconPos();
+      all[key] = s;
+      saveIconPos(all);
+    };
+    ic.addEventListener("pointermove", move);
+    ic.addEventListener("pointerup", up);
+  });
+}
 function renderIcons(vms) {
   const box = $("#icons");
   box.replaceChildren();
+  let slot = 0;
   {
-    const ic = el("div", { class: "dicon" + (selectedIcon === "ws" ? " sel" : ""), title: "Workspace — files shared between you, apps and VMs" });
+    const ic = el("div", { class: "dicon" + (selectedIcon === "ws" ? " sel" : ""), title: "Host Workspace — not inside a VM" });
     ic.innerHTML = FOLDER_ICON;
     ic.append(el("span", { class: "lbl" }, "Workspace"));
     ic.addEventListener("click", e => {
@@ -2042,9 +2579,10 @@ function renderIcons(vms) {
     });
     tapOpen(ic, () => openFinderWin(""));
     box.append(ic);
+    placeDicon(ic, "ws", slot++);
   }
   {
-    const ic = el("div", { class: "dicon" + (selectedIcon === "hostterm" ? " sel" : ""), title: "Terminal — a shell on this Mac" });
+    const ic = el("div", { class: "dicon" + (selectedIcon === "hostterm" ? " sel" : ""), title: "Host Terminal — the only host workplace" });
     ic.innerHTML = TERMINAL_ICON;
     ic.append(el("span", { class: "lbl" }, "Terminal"));
     ic.addEventListener("click", e => {
@@ -2055,6 +2593,7 @@ function renderIcons(vms) {
     });
     tapOpen(ic, () => openHostTermWin());
     box.append(ic);
+    placeDicon(ic, "hostterm", slot++);
   }
   for (const vm of vms) {
     const ic = el("div", { class: "dicon" + (selectedIcon === vm.name ? " sel" : ""), title: `${vm.name} — ${vm.state}` });
@@ -2068,12 +2607,13 @@ function renderIcons(vms) {
     });
     tapOpen(ic, () => openVM(vm.name));
     box.append(ic);
+    placeDicon(ic, "vm:" + vm.name, slot++);
   }
   for (const app of appsList) {
     const key = "app:" + app.name;
     const ic = el("div", { class: "dicon" + (selectedIcon === key ? " sel" : ""), title: app.title || app.name });
     ic.innerHTML = app.icon
-      ? `<img src="/apps/${encodeURIComponent(app.name)}/${app.icon.split("/").map(encodeURIComponent).join("/")}" alt="">`
+      ? `<img src="/apps/${encodeURIComponent(app.name)}/${app.icon.split("/").map(encodeURIComponent).join("/")}" alt="" draggable="false">`
       : APP_FALLBACK_ICON;
     ic.append(el("span", { class: "lbl" }, app.title || app.name));
     ic.addEventListener("click", e => {
@@ -2084,6 +2624,7 @@ function renderIcons(vms) {
     });
     tapOpen(ic, () => openAppWin(app.name));
     box.append(ic);
+    placeDicon(ic, "app:" + app.name, slot++);
   }
 }
 
@@ -2132,8 +2673,13 @@ const TERMINAL_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" shape-ren
   <rect x="20" y="21" width="3" height="2" fill="#B7B2A7"/>
   <rect x="9.5" y="25.5" width="13" height="3" fill="#C8C3B8" stroke="#000"/>
 </svg>`;
+const HIDDEN_DESKTOP_APPS = new Set(["Editor"]);
+function isHiddenDesktopApp(name) { return HIDDEN_DESKTOP_APPS.has(name); }
 async function loadApps() {
-  appsList = await j("/v1/apps");
+  appsList = (await j("/v1/apps")).filter(a => !isHiddenDesktopApp(a.name));
+  document.querySelectorAll("#desktop .app-window").forEach(w => {
+    if (isHiddenDesktopApp(w.id.slice(8))) w.remove();
+  });
   renderIcons(lastVMs);
   // app windows restored from a layout snapshot before the list arrived get
   // their real title and height once metadata is here
@@ -2149,6 +2695,7 @@ async function loadApps() {
   }
 }
 function openAppWin(name) {
+  if (isHiddenDesktopApp(name)) return;
   const id = "win-app-" + name;
   let w = document.getElementById(id);
   if (!w) {
@@ -2185,13 +2732,24 @@ window.addEventListener("message", e => {
   const fr = [...document.querySelectorAll(".app-frame")].find(f => f.contentWindow === e.source);
   if (!fr) return;
   const w = fr.closest(".window");
-  if (e.data.exe === "focus") {
+  if (e.data.exe === "confirm") {
+    platAsk(e.data.message || "Are you sure?", { title: e.data.title || "Confirm" }).then(ok => {
+      try { e.source.postMessage({ exe: "confirm-result", id: e.data.id, ok: !!ok }, location.origin); } catch (err) {}
+    });
+    return;
+  } else if (e.data.exe === "prompt") {
+    platAsk(e.data.message || "", { title: e.data.title || "Name", paste: true, ok: "OK" }).then(val => {
+      try { e.source.postMessage({ exe: "prompt-result", id: e.data.id, value: typeof val === "string" ? val : "" }, location.origin); } catch (err) {}
+    });
+    return;
+  } else if (e.data.exe === "focus") {
     // clicks inside the iframe never reach the window's own mousedown
     // handler, so apps raise their window through the bridge
     focusWin(w);
   } else if (e.data.exe === "grow-start" && !IS_MOBILE) {
     appGrow = { win: w, frame: fr, w: w.offsetWidth, h: fr.offsetHeight };
     winDragging = w;
+    document.body.classList.add("win-drag");
     focusWin(w);
   } else if (e.data.exe === "grow" && appGrow && appGrow.win === w) {
     w.style.width = Math.max(240, Math.min(window.innerWidth - 40, appGrow.w + (+e.data.dx || 0))) + "px";
@@ -2200,6 +2758,7 @@ window.addEventListener("message", e => {
   } else if (e.data.exe === "grow-end" && appGrow && appGrow.win === w) {
     appGrow = null;
     winDragging = null;
+    document.body.classList.remove("win-drag");
     winSave();
   }
 });
@@ -2239,22 +2798,22 @@ function openFinderWin(path, fromWin) {
       <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
       <div class="win-frame">
         <div class="finder-status"><span class="ws-items">…</span></div>
-        <div class="finder-icons doc-scroll"></div>
+        <div class="workspace-tree doc-scroll" role="tree"></div>
         ${GROW_TILE}
       </div>`;
     w.querySelector(".title").textContent = path ? path.split("/").pop() : "Workspace";
     w.dataset.path = path;
-    const box = w.querySelector(".finder-icons");
+    const box = w.querySelector(".workspace-tree");
     box.addEventListener("click", e => {
-      if (e.target === box) box.querySelectorAll(".fitem").forEach(d => d.classList.remove("sel"));
+      if (e.target === box) box.querySelectorAll(".tree-row").forEach(d => d.classList.remove("sel"));
     });
-    // white-area menu: icons run their own contextmenu handler and stop
+    // white-area menu: tree rows run their own contextmenu handler and stop
     // propagation, so anything that reaches the box is empty space
     box.addEventListener("contextmenu", e => {
       e.preventDefault();
       showCtxMenu(e.clientX, e.clientY, [
-        { label: "New Folder…", act: () => nfOpen(w, true) },
-        { label: "New Text File…", act: () => nfOpen(w, false) },
+        { label: "New Folder…", act: () => nfOpen(w, true, w.dataset.path) },
+        { label: "New Text File…", act: () => nfOpen(w, false, w.dataset.path) },
         "-",
         { label: "Upload…", act: () => nfPickUpload(w.dataset.path) },
       ]);
@@ -2267,6 +2826,12 @@ function openFinderWin(path, fromWin) {
   openWin(w);
   loadFinder(w);
 }
+const wsJoin = (dir, name) => dir ? dir + "/" + name : name;
+const wsParent = rel => rel.split("/").slice(0, -1).join("/");
+function selectTreeRow(tree, row) {
+  tree.querySelectorAll(".tree-row.sel").forEach(d => d.classList.remove("sel"));
+  row.classList.add("sel");
+}
 async function loadFinder(w) {
   const path = w.dataset.path, items = w.querySelector(".ws-items");
   let data;
@@ -2275,34 +2840,92 @@ async function loadFinder(w) {
   const n = data.entries.length;
   items.textContent = `${n} item${n === 1 ? "" : "s"}, ${fmtBytes(data.free)} available`;
   w._entries = data.entries; // Duplicate consults this for copy-name collisions
-  const box = w.querySelector(".finder-icons");
+  const box = w.querySelector(".workspace-tree");
   box.replaceChildren();
-  for (const en of data.entries) {
-    const it = el("div", { class: "fitem", title: en.name });
-    it.innerHTML = fileIcon(en);
-    it.append(el("span", { class: "lbl" }, en.name));
-    if (en.dir) it.dataset.dropDir = path ? path + "/" + en.name : en.name;
-    const select = () => {
-      box.querySelectorAll(".fitem").forEach(d => d.classList.remove("sel"));
-      it.classList.add("sel");
-    };
-    it.addEventListener("click", e => { e.stopPropagation(); select(); });
-    tapOpen(it, () => openEntry(en, path ? path + "/" + en.name : en.name, w));
-    it.addEventListener("contextmenu", e => {
-      e.preventDefault(); e.stopPropagation();
-      select();
-      const rel = path ? path + "/" + en.name : en.name;
-      showCtxMenu(e.clientX, e.clientY, [
-        { label: "Open", act: () => openEntry(en, rel, w) },
-        { label: "Move To Trash", act: () => wsTrash(rel, w) },
-        "-",
-        { label: "Get Info", act: () => showGetInfo(en, rel) },
-        { label: "Duplicate", act: () => wsDuplicate(en, rel, w), dis: !!en.dir },
-        { label: "Download", act: () => wsDownload(en, rel), dis: !!en.dir },
-      ]);
-    });
-    box.append(it);
+  if (!data.entries.length) {
+    box.append(el("div", { class: "tree-empty muted" }, "Empty folder"));
+    return;
   }
+  for (const en of data.entries) box.append(renderTreeNode(w, path, en, 0));
+}
+function renderTreeNode(w, base, en, depth) {
+  const rel = wsJoin(base, en.name);
+  const node = el("div", { class: "tree-node " + (en.dir ? "dir" : "file"), title: en.name });
+  node.dataset.path = rel;
+  node.dataset.dir = en.dir ? "1" : "0";
+  const row = el("div", { class: "tree-row", role: "treeitem", tabindex: "0" });
+  row.dataset.path = rel;
+  row.dataset.dir = en.dir ? "1" : "0";
+  row.dataset.dropDir = en.dir ? rel : wsParent(rel);
+  row.style.paddingLeft = (8 + depth * 16) + "px";
+  const twist = el("span", { class: "tree-twist" }, en.dir ? "▸" : "");
+  const ico = el("span", { class: "tree-ico" });
+  ico.innerHTML = fileIcon(en);
+  row.append(twist, ico, el("span", { class: "tree-name" }, en.name));
+  node.append(row);
+  if (en.dir) node.append(el("div", { class: "tree-children", hidden: "" }));
+  row.addEventListener("click", e => {
+    e.stopPropagation();
+    selectTreeRow(w.querySelector(".workspace-tree"), row);
+  });
+  row.addEventListener("keydown", e => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    en.dir ? toggleTreeNode(w, node, rel, depth + 1) : openEntry(en, rel, w);
+  });
+  tapOpen(row, () => en.dir ? toggleTreeNode(w, node, rel, depth + 1) : openEntry(en, rel, w));
+  twist.addEventListener("click", e => {
+    if (!en.dir) return;
+    e.preventDefault(); e.stopPropagation();
+    selectTreeRow(w.querySelector(".workspace-tree"), row);
+    toggleTreeNode(w, node, rel, depth + 1);
+  });
+  row.addEventListener("contextmenu", e => {
+    e.preventDefault(); e.stopPropagation();
+    selectTreeRow(w.querySelector(".workspace-tree"), row);
+    showTreeCtxMenu(e.clientX, e.clientY, w, en, rel, node, depth);
+  });
+  return node;
+}
+async function toggleTreeNode(w, node, rel, depth) {
+  if (!node || node.dataset.dir !== "1") return;
+  const kids = node.querySelector(":scope > .tree-children");
+  const twist = node.querySelector(":scope > .tree-row > .tree-twist");
+  if (node.classList.contains("expanded")) {
+    node.classList.remove("expanded");
+    kids.hidden = true;
+    if (twist) twist.textContent = "▸";
+    return;
+  }
+  if (!node.dataset.loaded) {
+    kids.replaceChildren(el("div", { class: "tree-empty muted" }, "Loading…"));
+    let data;
+    try { data = await j("/v1/workspace?dir=" + encodeURIComponent(rel)); }
+    catch (e) { kids.replaceChildren(el("div", { class: "tree-empty muted" }, e.message)); return; }
+    kids.replaceChildren();
+    if (!data.entries.length) kids.append(el("div", { class: "tree-empty muted" }, "Empty folder"));
+    for (const en of data.entries) kids.append(renderTreeNode(w, rel, en, depth));
+    node.dataset.loaded = "1";
+  }
+  node.classList.add("expanded");
+  kids.hidden = false;
+  if (twist) twist.textContent = "▾";
+}
+function showTreeCtxMenu(x, y, w, en, rel, node, depth) {
+  const targetDir = en.dir ? rel : wsParent(rel);
+  showCtxMenu(x, y, [
+    { label: "Open", act: () => en.dir ? toggleTreeNode(w, node, rel, depth + 1) : openEntry(en, rel, w) },
+    { label: "Edit with Editor", act: () => openEditorWin(rel, w), dis: !!en.dir || !isTextFile(en.name) },
+    { label: "Move To Trash", act: () => wsTrash(rel, w) },
+    "-",
+    { label: "New Folder…", act: () => nfOpen(w, true, targetDir) },
+    { label: "New Text File…", act: () => nfOpen(w, false, targetDir) },
+    { label: "Upload…", act: () => nfPickUpload(targetDir) },
+    "-",
+    { label: "Get Info", act: () => showGetInfo(en, rel) },
+    { label: "Duplicate", act: () => wsDuplicate(en, rel, w), dis: !!en.dir },
+    { label: "Download", act: () => wsDownload(en, rel), dis: !!en.dir },
+  ]);
 }
 function openEntry(en, rel, w) {
   if (en.dir) openFinderWin(rel, w);
@@ -2350,11 +2973,15 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") hideCtxMenu(
 
 // Move To Trash parks the item in the dot-hidden .Trash folder (the move
 // endpoint creates it); a timestamp prefix keeps trashed names unique
+function refreshFinderWindows() {
+  document.querySelectorAll('[id^="win-ws-"]').forEach(f => { if (!f.hidden) loadFinder(f); });
+}
 async function wsTrash(rel, w) {
+  if (!await platAsk("Move “" + rel.split("/").pop() + "” to Trash?", { title: "Move to Trash" })) return;
   try {
     await api(wsUrl(rel), { method: "POST", body: JSON.stringify({ to: ".Trash/" + Date.now() + "-" + rel.split("/").pop() }) });
   } catch (e) {}
-  loadFinder(w);
+  refreshFinderWindows();
 }
 // Download fetches with the auth header, then hands the blob to an <a download>
 async function wsDownload(en, rel) {
@@ -2371,16 +2998,18 @@ async function wsDuplicate(en, rel, w) {
     const base = dot > 0 ? en.name.slice(0, dot) : en.name;
     const ext = dot > 0 ? en.name.slice(dot) : "";
     let cp = base + " copy" + ext, n = 1;
-    while ((w._entries || []).some(x => x.name === cp)) cp = base + " copy " + ++n + ext;
     const dir = rel.split("/").slice(0, -1).join("/");
+    let entries = dir === w.dataset.path ? (w._entries || []) : [];
+    if (dir !== w.dataset.path) entries = (await j("/v1/workspace?dir=" + encodeURIComponent(dir))).entries || [];
+    while (entries.some(x => x.name === cp)) cp = base + " copy " + ++n + ext;
     await api(wsUrl(dir ? dir + "/" + cp : cp), { method: "PUT", body: blob });
   } catch (e) {}
-  loadFinder(w);
+  refreshFinderWindows();
 }
 // ---- New Folder / New Text File: name prompt over a Finder window ----
-let nfWin = null, nfFolder = false;
-function nfOpen(w, folder) {
-  nfWin = w; nfFolder = folder;
+let nfWin = null, nfFolder = false, nfDir = "";
+function nfOpen(w, folder, dir) {
+  nfWin = w; nfFolder = folder; nfDir = dir || "";
   $("#nf-title").textContent = folder ? "New Folder" : "New Text File";
   const inp = $("#nf-name");
   inp.value = folder ? "untitled folder" : "untitled.txt";
@@ -2399,14 +3028,18 @@ $("#nf-go").onclick = async () => {
   if (!name) { toast("name required"); return; }
   // slashes would nest, dot-prefixed names vanish from the listing
   if (name.includes("/") || name.startsWith(".")) { toast("that name won't work"); return; }
-  if ((nfWin._entries || []).some(x => x.name === name)) { toast(`“${name}” is already taken`); return; }
-  const rel = nfWin.dataset.path ? nfWin.dataset.path + "/" + name : name;
+  const targetDir = nfDir || "";
+  let entries = [];
+  try { entries = (await j("/v1/workspace?dir=" + encodeURIComponent(targetDir))).entries || []; }
+  catch (e) { toast(e.message); return; }
+  if (entries.some(x => x.name === name)) { toast(`“${name}” is already taken`); return; }
+  const rel = targetDir ? targetDir + "/" + name : name;
   $("#nf-go").disabled = true;
   try {
     if (nfFolder) await api(wsUrl(rel) + "?mkdir=1", { method: "POST" });
     else await api(wsUrl(rel), { method: "PUT", body: "" });
     nfClose();
-    loadFinder(nfWin);
+    refreshFinderWindows();
   } catch (e) { toast(e.message); }
   $("#nf-go").disabled = false;
 };
@@ -2469,8 +3102,9 @@ function openEditorWin(path, fromWin) {
         <div class="ed-info">
           ${ED_PENCIL}<div class="ed-main">${ED_DOC}<span class="ed-path"></span></div>
           ${ED_MARK}<span class="ed-saved">…</span>
+          <div class="ed-tools"><button class="ghost sm danger ed-delete" type="button">Delete</button></div>
         </div>
-        <textarea class="ed-text doc-scroll" wrap="off" spellcheck="false" autocomplete="off"></textarea>
+        <textarea class="ed-text doc-scroll" wrap="soft" spellcheck="false" autocomplete="off"></textarea>
         ${GROW_TILE}
       </div>`;
     w.querySelector(".title").textContent = path.split("/").pop();
@@ -2479,6 +3113,21 @@ function openEditorWin(path, fromWin) {
     w.dataset.path = path;
     const ta = w.querySelector(".ed-text");
     let saveT = null;
+    w.querySelector(".ed-delete").addEventListener("click", async () => {
+      const curPath = w.dataset.path;
+      if (!curPath) return;
+      if (!await platAsk("Delete “" + curPath.split("/").pop() + "” from Workspace?", { title: "Delete File", ok: "Delete" })) return;
+      clearTimeout(saveT);
+      try {
+        await api(wsUrl(curPath), { method: "DELETE" });
+        delete w.dataset.dirty;
+        closeWin(w);
+        refreshFinderWindows();
+        toast("Deleted " + curPath);
+      } catch (e) {
+        w.querySelector(".ed-saved").textContent = "Delete failed: " + e.message;
+      }
+    });
     ta.addEventListener("input", () => {
       w.dataset.dirty = "1";
       clearTimeout(saveT);
@@ -2508,6 +3157,11 @@ async function loadEditor(w) {
     ta.value = await r.text();
   } catch (e) {
     w.querySelector(".ed-saved").textContent = e.message;
+    if (/404|not found/i.test(e.message || "")) {
+      closeWin(w);
+      w.remove();
+      winSave();
+    }
     return;
   }
   // Last Saved comes from the parent folder's listing, so restores work too
@@ -2596,10 +3250,15 @@ async function loadImage(w) {
   } catch (e) { dims.textContent = e.message; }
 }
 $("#desktop").addEventListener("mousedown", e => {
-  if (e.target === $("#desktop") || e.target === $("#icons")) {
+  if (e.target === $("#desktop") || e.target === $("#icons") || e.target === $("#desktop-bg")) {
     selectedIcon = null;
     document.querySelectorAll(".dicon").forEach(d => d.classList.remove("sel"));
   }
+});
+$("#desktop").addEventListener("contextmenu", e => {
+  if (e.target !== $("#desktop") && e.target !== $("#icons") && e.target !== $("#desktop-bg")) return;
+  e.preventDefault();
+  showCtxMenu(e.clientX, e.clientY, [{ label: "Desktop Background…", act: () => openDesktopWin() }]);
 });
 const trashIcon = $("#trash-icon");
 trashIcon.addEventListener("click", e => { e.stopPropagation(); trashIcon.classList.add("sel"); selectedIcon = null; });
@@ -2696,12 +3355,7 @@ function renderVMList(rawVMs) {
     const del = el("button", { class: "ghost sm danger" }, "Delete");
     del.onclick = async e => {
       e.stopPropagation();
-      if (!del.classList.contains("armed")) {
-        del.classList.add("armed");
-        del.textContent = "Sure?";
-        setTimeout(() => { del.classList.remove("armed"); del.textContent = "Delete"; }, 3000);
-        return;
-      }
+      if (!await platAsk("Delete VM “" + vm.name + "” and its disk? This cannot be undone.", { title: "Delete VM" })) return;
       try { await api("/v1/vms/" + vm.name, { method: "DELETE" }); toast(vm.name + " deleted"); loadVMs(); }
       catch (err) { toast(err.message); }
     };
@@ -2725,7 +3379,6 @@ function renderVMList(rawVMs) {
       showCtxMenu(e.clientX, e.clientY, [
         { label: "Open", act: () => openVM(vm.name) },
         { label: "Open Terminal", act: () => openVM(vm.name, "term") },
-        { label: "Chat with this VM", act: () => openChatWin(vm.name), dis: !chatDetected },
         "-",
         running ? { label: "Stop", act: () => vmAction(vm.name, "stop") }
                 : { label: "Start", act: () => vmAction(vm.name, "start") },
@@ -2758,6 +3411,62 @@ async function vmAction(name, action) {
   catch (e) { toast(e.message); }
   loadVMs();
   if (currentVM === name) refreshDetailHead();
+}
+function fmtRate(n) {
+  n = Math.max(0, +n || 0);
+  if (n < 1000) return Math.round(n) + " B/s";
+  if (n < 1000 * 1000) return (n / 1000).toFixed(n < 10e3 ? 1 : 0) + " KB/s";
+  if (n < 1000 * 1000 * 1000) return (n / 1e6).toFixed(n < 10e6 ? 1 : 0) + " MB/s";
+  return (n / 1e9).toFixed(1) + " GB/s";
+}
+function fmtBytesShort(n) {
+  n = Math.max(0, +n || 0);
+  if (n >= 1e12) return (n / 1e12).toFixed(1) + " TB";
+  if (n >= 1e9) return (n / 1e9).toFixed(n >= 10e9 ? 0 : 1) + " GB";
+  if (n >= 1e6) return (n / 1e6).toFixed(0) + " MB";
+  return Math.round(n / 1024) + " KB";
+}
+function resMeter(pct, hot) {
+  const m = el("span", { class: "res-meter" + (hot ? " hot" : "") });
+  const i = el("i");
+  i.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  m.append(i);
+  return m;
+}
+function renderHostStats(st) {
+  if (!st) return;
+  const cpu = +st.cpu_pct || 0;
+  const dio = (+st.disk_read_bps || 0) + (+st.disk_write_bps || 0);
+  const nio = (+st.net_rx_bps || 0) + (+st.net_tx_bps || 0);
+  const free = +st.disk_free || 0, tot = +st.disk_total || 0;
+  const usedPct = tot > 0 ? (1 - free / tot) * 100 : 0;
+  const cpuHot = cpu >= 85, diskHot = tot > 0 && free / tot < 0.1;
+  const mb = $("#host-res");
+  if (mb) {
+    mb.replaceChildren(
+      el("span", cpuHot ? { class: "hot" } : {}, "CPU " + cpu.toFixed(0) + "%"),
+      el("span", {}, "disk " + fmtRate(dio)),
+      el("span", {}, "net " + fmtRate(nio)),
+      el("span", diskHot ? { class: "hot" } : {}, fmtBytesShort(free) + " free"));
+    mb.title = "Host: CPU " + cpu.toFixed(1) + "% · disk r " + fmtRate(st.disk_read_bps) +
+      " w " + fmtRate(st.disk_write_bps) + " · net ↓ " + fmtRate(st.net_rx_bps) +
+      " ↑ " + fmtRate(st.net_tx_bps) + " · " + fmtBytesShort(free) + " of " + fmtBytesShort(tot) + " free";
+  }
+  const bar = $("#vm-res");
+  if (bar) {
+    const item = (label, val, extra, hot) =>
+      el("span", { class: "res-item" + (hot ? " hot" : "") },
+        el("span", { class: "lbl" }, label), extra || "", el("span", { class: "val" }, val));
+    bar.replaceChildren(
+      item("CPU", cpu.toFixed(0) + "%", resMeter(cpu, cpuHot), cpuHot),
+      item("Disk I/O", "↓ " + fmtRate(st.disk_read_bps) + "  ↑ " + fmtRate(st.disk_write_bps)),
+      item("Net", "↓ " + fmtRate(st.net_rx_bps) + "  ↑ " + fmtRate(st.net_tx_bps)),
+      item("Free", fmtBytesShort(free) + (tot ? " / " + fmtBytesShort(tot) : ""),
+        tot ? resMeter(usedPct, diskHot) : null, diskHot));
+  }
+}
+async function pollHostStats() {
+  try { renderHostStats(await j("/v1/host/stats")); } catch (e) {}
 }
 $("#vms-new").onclick = ACTIONS.newvm;
 $("#vms-refresh").onclick = ACTIONS.refresh;
@@ -2806,8 +3515,9 @@ $("#up-go").onclick = async () => {
 };
 
 // ---- Drag-and-drop upload: a file dropped on the desktop lands in the
-// Workspace root, on a Finder window in its folder, on a folder icon in
-// that folder. Uploads PUT each file; toasts report skips and failures.
+// Workspace root, on a Workspace window in its folder, on a folder tree row
+// in that folder, or on a file tree row in that file's parent folder.
+// Uploads PUT each file; toasts report skips and failures.
 // Genuinely new files (not overwrites) are announced on the Newsfeed. ----
 async function wsUpload(dir, files) {
   let done = 0, last = "";
@@ -2823,8 +3533,7 @@ async function wsUpload(dir, files) {
   }
   if (done) {
     toast(done === 1 ? "Uploaded " + last : "Uploaded " + done + " files");
-    const w = document.getElementById("win-ws-" + encodeURIComponent(dir));
-    if (w && !w.hidden) loadFinder(w);
+    refreshFinderWindows();
   }
   if (fresh.length)
     j("/v1/newsfeed", { method: "POST", json: {
@@ -2870,27 +3579,27 @@ desk.addEventListener("drop", e => {
   wsUpload("", dndDropFiles(e));
 });
 function wireFinderDrop(w) {
-  let hi = null; // the folder icon currently under the drag, if any
+  let hi = null; // the tree row currently under the drag, if any
   const clear = () => {
     w.classList.remove("drop");
     if (hi) { hi.classList.remove("drop"); hi = null; }
   };
-  const folderAt = e => {
-    const it = e.target.closest(".fitem");
-    return it && it.dataset.dropDir !== undefined ? it : null;
+  const rowAt = e => {
+    const row = e.target.closest(".tree-row");
+    return row && row.dataset.dropDir !== undefined ? row : null;
   };
   w.addEventListener("dragover", e => {
     if (!dndHasFiles(e)) return;
     e.dataTransfer.dropEffect = "copy";
     w.classList.add("drop");
-    const t = folderAt(e);
+    const t = rowAt(e);
     if (t !== hi) { if (hi) hi.classList.remove("drop"); hi = t; if (hi) hi.classList.add("drop"); }
   });
   w.addEventListener("dragleave", e => { if (!w.contains(e.relatedTarget)) clear(); });
   w.addEventListener("drop", e => {
     if (!dndHasFiles(e)) return;
     e.preventDefault();
-    const t = folderAt(e);
+    const t = rowAt(e);
     clear();
     wsUpload(t ? t.dataset.dropDir : w.dataset.path, dndDropFiles(e));
   });
@@ -2933,18 +3642,121 @@ async function refreshDetailHead() {
     st.className = "chip " + vm.state;
     st.textContent = vm.state;
     $("#d-ip").textContent = vm.ip || "";
+    return vm;
   } catch (e) { toast(e.message); }
+  return null;
+}
+
+// ---- terminal clipboard: OS copy/paste, no host/browser fight, no junk chars ----
+function sanitizePaste(s) {
+  return String(s || "")
+    .replace(/\uFEFF/g, "")
+    .replace(/[\u200B-\u200D\u2060\u00AD]/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/[\u2028\u2029]/g, "\n")
+    .replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, "...")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+}
+async function copyText(s) {
+  if (!s) return;
+  try { await navigator.clipboard.writeText(s); }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = s; document.body.append(ta); ta.select();
+    try { document.execCommand("copy"); } catch (err) {}
+    ta.remove();
+  }
+}
+function wireXtermClipboard(term, box) {
+  const pasteInto = async raw => {
+    const text = sanitizePaste(raw);
+    if (!text) return;
+    term.paste(text);
+  };
+  // Ctrl+right-click is a user gesture: try the clipboard API, then
+  // execCommand('paste') (works on http:// LAN where readText is blocked).
+  // Never open a modal — if both fail, the next Ctrl+V still hits the box.
+  const pasteDirect = async () => {
+    if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
+      try { await pasteInto(await navigator.clipboard.readText()); return true; } catch (e) {}
+    }
+    const ta = document.createElement("textarea");
+    ta.setAttribute("autocomplete", "off");
+    ta.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;z-index:99999";
+    document.body.append(ta);
+    ta.focus();
+    let got = "";
+    const onPaste = e => {
+      e.preventDefault();
+      got = (e.clipboardData && e.clipboardData.getData("text/plain")) || "";
+    };
+    ta.addEventListener("paste", onPaste);
+    try { document.execCommand("paste"); } catch (e) {}
+    ta.removeEventListener("paste", onPaste);
+    ta.remove();
+    term.focus();
+    if (got) { pasteInto(got); return true; }
+    return false;
+  };
+  term.attachCustomKeyEventHandler(ev => {
+    if (ev.type !== "keydown") return true;
+    const mod = ev.ctrlKey || ev.metaKey;
+    if (mod && ev.code === "KeyC" && !ev.altKey) {
+      if (term.hasSelection()) { ev.preventDefault(); copyText(term.getSelection()); return false; }
+      return true; // no selection → ^C to the guest
+    }
+    if (mod && ev.code === "KeyV" && !ev.altKey) {
+      if (!(navigator.clipboard && navigator.clipboard.readText && window.isSecureContext)) return true;
+      ev.preventDefault();
+      navigator.clipboard.readText().then(pasteInto).catch(() => {});
+      return false;
+    }
+    if (mod && ev.shiftKey && ev.code === "Insert") return false;
+    return true;
+  });
+  box.addEventListener("paste", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    pasteInto(e.clipboardData && e.clipboardData.getData("text/plain"));
+  });
+  box.addEventListener("copy", e => {
+    if (!term.hasSelection()) return;
+    e.preventDefault();
+    const s = sanitizePaste(term.getSelection());
+    e.clipboardData.setData("text/plain", s);
+    copyText(s);
+  });
+  // Ctrl (or ⌘) + right-click: copy selection, or paste. Without Ctrl the
+  // native menu is swallowed so it doesn't look like a file/shortcut drag.
+  box.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    if (!(e.ctrlKey || e.metaKey)) {
+      toast("Hold Ctrl, select text, right-click to copy — Ctrl+right-click pastes");
+      return;
+    }
+    if (term.hasSelection()) { copyText(term.getSelection()); toast("Copied"); }
+    else pasteDirect();
+  });
 }
 
 // ---- terminal ----
-let term = null, termWS = null, fitAddon = null;
+let term = null, termWS = null, fitAddon = null, termFitCtl = null;
 // xterm scrolls its scrollback itself (the viewport is a sibling of the
 // screen the cursor hovers, so it is never in the browser's scroll chain);
 // swallow the default here or leftover wheel deltas scroll the window body.
 $("#term-box").addEventListener("wheel", e => e.preventDefault(), { passive: false });
 function closeTerm() {
   window.removeEventListener("resize", termResize);
-  if (termWS) { termWS.onclose = null; try { termWS.close(); } catch (e) {} termWS = null; }
+  if (termFitCtl) { termFitCtl.stop(); termFitCtl = null; }
+  if (termWS) {
+    if (termWS._watch) termWS._watch.stop();
+    termWS.onclose = null;
+    try { termWS.close(); } catch (e) {}
+    termWS = null;
+  }
   if (term) { term.dispose(); term = null; }
   $("#term-box").hidden = true;
   $("#term-hint").hidden = false;
@@ -2952,30 +3764,62 @@ function closeTerm() {
   $("#term-open").hidden = false;
 }
 function termResize() {
-  if (fitAddon && term && termWS && termWS.readyState === 1) {
-    fitAddon.fit();
+  if (!fitAddon || !term) return;
+  try { fitAddon.fit(); } catch (e) {}
+  if (termWS && termWS.readyState === 1) {
     termWS.send(JSON.stringify({ resize: [term.cols, term.rows] }));
-    termFitCheck();
   }
+  termFitCheck($("#term-box"), term, termWS);
+}
+// Keep xterm cols/rows glued to the box: window zoom, grow-box, edge
+// drag, and font/DPR settle all change the box without a window resize.
+function attachTermFit(term, fit, box, getWS) {
+  let lastC = 0, lastR = 0, tmr = 0;
+  const go = () => {
+    if (box.clientWidth < 8 || box.clientHeight < 8) return;
+    try { fit.fit(); } catch (e) {}
+    const c = term.cols | 0, r = term.rows | 0;
+    if (c < 2 || r < 2) return;
+    const ws = typeof getWS === "function" ? getWS() : getWS;
+    termFitCheck(box, term, ws);
+    if (c === lastC && r === lastR) return;
+    lastC = c; lastR = r;
+    if (ws && ws.readyState === 1) {
+      try { ws.send(JSON.stringify({ resize: [c, r] })); } catch (e) {}
+    }
+  };
+  const schedule = () => {
+    clearTimeout(tmr);
+    tmr = setTimeout(go, 40);
+  };
+  box.addEventListener("mousedown", () => { try { term.focus(); } catch (e) {} });
+  let ro;
+  try {
+    ro = new ResizeObserver(schedule);
+    ro.observe(box);
+  } catch (e) {}
+  return { go, stop: () => { clearTimeout(tmr); if (ro) ro.disconnect(); } };
 }
 // FitAddon trusts the renderer's measured cell height, which Windows
 // fractional display scaling can misreport (a ~5px reading fit ~3x the
 // rows the box holds, overflowing the viewport into a scrollbar). Once
 // the render settles, re-derive rows from the painted screen's actual
 // cell height and correct any gross misfit from that ground truth.
-function termFitCheck() {
+function termFitCheck(box, t, ws) {
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    if (!(term && termWS && termWS.readyState === 1)) return;
-    const scr = document.querySelector("#term-box .xterm-screen");
-    const vp = document.querySelector("#term-box .xterm-viewport");
-    if (!scr || !vp || !term.rows) return;
-    const cell = scr.getBoundingClientRect().height / term.rows;
+    if (!(box && t)) return;
+    const scr = box.querySelector(".xterm-screen");
+    const vp = box.querySelector(".xterm-viewport");
+    if (!scr || !vp || !t.rows) return;
+    const cell = scr.getBoundingClientRect().height / t.rows;
     const rows = Math.floor((vp.clientHeight - 10) / cell); // 10 = .xterm padding
-    if (cell > 0 && rows >= 4 && Math.abs(rows - term.rows) >= 2) {
-      term.resize(term.cols, rows);
-      termWS.send(JSON.stringify({ resize: [term.cols, rows] }));
+    if (cell > 0 && rows >= 4 && Math.abs(rows - t.rows) >= 2) {
+      t.resize(t.cols, rows);
+      if (ws && ws.readyState === 1) {
+        try { ws.send(JSON.stringify({ resize: [t.cols, rows] })); } catch (e) {}
+      }
     }
-    termSpacerFix($("#term-box"), term);
+    termSpacerFix(box, t);
   }));
 }
 // xterm sizes its scroll spacer from the viewport's rounded offsetHeight;
@@ -2990,7 +3834,44 @@ function termSpacerFix(box, t) {
   const h = Math.floor(vp.getBoundingClientRect().height) + "px";
   if (sa.style.height !== h) sa.style.height = h;
 }
+function watchVMSSH(t, status, vm) {
+  let gotData = false, stopped = false;
+  const write = s => { try { if (!stopped) t.write(s); } catch (e) {} };
+  const slow = setTimeout(() => {
+    if (gotData || stopped) return;
+    if (status) status.textContent = vm + " · waiting for SSH…";
+    write("\r\n\x1b[90m[exe] waiting for VM SSH; the guest may still be booting or sshd may be wedged\x1b[0m\r\n");
+  }, 4000);
+  const timeout = setTimeout(() => {
+    if (gotData || stopped) return;
+    if (status) status.textContent = vm + " · SSH not responding";
+    write("\r\n\x1b[33m[exe] no SSH banner yet. If this stays blank, restart the VM and reopen the tool.\x1b[0m\r\n");
+  }, 15000);
+  const clear = () => { clearTimeout(slow); clearTimeout(timeout); };
+  const stop = () => { stopped = true; clear(); };
+  return {
+    stop,
+    open() { if (status) status.textContent = vm + " · SSH handshake…"; },
+    data() { if (!gotData) { gotData = true; clear(); if (status) status.textContent = vm + " · connected"; } },
+    close() {
+      const hadData = gotData;
+      if (!hadData) {
+        write("\r\n\x1b[31m[exe] VM SSH connection failed before any output\x1b[0m\r\n");
+        if (status) status.textContent = "VM SSH unavailable — close and reopen after restart";
+      } else {
+        write("\r\n\x1b[90m[disconnected]\x1b[0m\r\n");
+        if (status) status.textContent = "disconnected — close and reopen";
+      }
+      stop();
+    },
+  };
+}
 $("#term-close").onclick = closeTerm;
+$("#term-pop").onclick = () => {
+  if (!currentVM) { toast("open a VM first"); return; }
+  if ($("#d-state").textContent !== "running") { toast("start the VM first"); return; }
+  openVMTermWin(currentVM);
+};
 $("#term-open").onclick = () => {
   closeTerm();
   $("#term-hint").hidden = true;
@@ -3004,21 +3885,27 @@ $("#term-open").onclick = () => {
   fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
   term.open(box);
-  fitAddon.fit();
+  wireXtermClipboard(term, box);
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const tok = tokenInput.value ? "?token=" + encodeURIComponent(tokenInput.value) : "";
   termWS = new WebSocket(`${proto}://${location.host}/v1/vms/${currentVM}/terminal${tok}`);
   termWS.binaryType = "arraybuffer";
   const enc = new TextEncoder();
+  termFitCtl = attachTermFit(term, fitAddon, box, () => termWS);
+  const fitCtl = termFitCtl;
+  termWS._watch = watchVMSSH(term, null, currentVM);
   termWS.onopen = () => {
-    termWS.send(JSON.stringify({ resize: [term.cols, term.rows] }));
+    termWS._watch.open();
+    fitCtl.go();
     term.focus();
-    termFitCheck();
-    setTimeout(termResize, 500); // late settle: fonts, fractional-DPR remeasure
+    setTimeout(fitCtl.go, 400);
   };
-  termWS.onmessage = e => term.write(new Uint8Array(e.data));
+  termWS.onmessage = e => {
+    if (termWS && termWS._watch) termWS._watch.data();
+    term.write(new Uint8Array(e.data));
+  };
   termWS.onclose = () => {
-    if (term) term.write("\r\n\x1b[90m[disconnected]\x1b[0m\r\n");
+    if (term && termWS && termWS._watch) termWS._watch.close();
     $("#term-close").hidden = true;
     $("#term-open").hidden = false;
   };
@@ -3045,7 +3932,7 @@ function openHostTermWin() {
     <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
     <div class="win-frame">
       <div class="win-body" style="padding:0"><div class="hostterm-box"></div></div>
-      <div class="statusbar"><span class="term-status">…</span></div>
+      <div class="statusbar"><span class="term-status">…</span><span class="muted"> · Ctrl+select+right-click copy</span></div>
       ${GROW_TILE}
     </div>`;
   w.querySelector(".title").textContent = n === 1 ? "Terminal" : "Terminal " + n;
@@ -3063,26 +3950,21 @@ function openHostTermWin() {
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(box);
+  wireXtermClipboard(term, box);
   box.querySelector(".xterm-viewport").classList.add("vflush");
-  fit.fit();
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const tok = tokenInput.value ? "?token=" + encodeURIComponent(tokenInput.value) : "";
   status.textContent = "connecting…";
   const ws = new WebSocket(`${proto}://${location.host}/v1/host/terminal${tok}`);
   ws.binaryType = "arraybuffer";
   const enc = new TextEncoder();
-  const resize = () => {
-    if (ws.readyState === 1) {
-      fit.fit();
-      ws.send(JSON.stringify({ resize: [term.cols, term.rows] }));
-      requestAnimationFrame(() => termSpacerFix(box, term));
-    }
-  };
+  const fitCtl = attachTermFit(term, fit, box, () => ws);
+  const resize = () => fitCtl.go();
   ws.onopen = () => {
     status.textContent = "connected";
-    ws.send(JSON.stringify({ resize: [term.cols, term.rows] }));
+    fitCtl.go();
     term.focus();
-    requestAnimationFrame(() => termSpacerFix(box, term));
+    setTimeout(fitCtl.go, 400);
   };
   ws.onmessage = e => term.write(new Uint8Array(e.data));
   ws.onclose = () => {
@@ -3092,11 +3974,144 @@ function openHostTermWin() {
   term.onData(d => { if (ws.readyState === 1) ws.send(enc.encode(d)); });
   window.addEventListener("resize", resize);
   wireGrow(w.querySelector(".grow-box"), w, box, 400, { minH: 160, onMove: resize });
+  w._termResize = resize;
   w._teardown = () => {
     window.removeEventListener("resize", resize);
+    fitCtl.stop();
     ws.onclose = null;
     try { ws.close(); } catch (e) {}
     term.dispose();
+  };
+}
+
+// ---- VM shell windows: independent of the VM detail tab, zoomable ----
+const VM_AGENTS = [
+  { id: "codex", title: "Codex" },
+  { id: "gemini", title: "Gemini" },
+  { id: "opencode", title: "OpenCode" },
+  { id: "aider", title: "Aider" },
+  { id: "qwen", title: "Qwen Code" },
+  { id: "pi", title: "Pi" },
+  { id: "claude", title: "Claude" },
+];
+const VM_TOOLS = [
+  { id: "git", title: "git" },
+  { id: "build-essential", title: "build-essential" },
+  { id: "python3", title: "Python 3" },
+  { id: "node", title: "Node.js" },
+  { id: "docker", title: "Docker" },
+  { id: "go", title: "Go" },
+  { id: "rust", title: "Rust" },
+  { id: "jq", title: "jq" },
+  { id: "ripgrep", title: "ripgrep" },
+  { id: "fd", title: "fd" },
+  { id: "fzf", title: "fzf" },
+  { id: "tmux", title: "tmux" },
+  { id: "neovim", title: "Neovim" },
+  { id: "htop", title: "htop" },
+  { id: "gh", title: "GitHub CLI" },
+  { id: "cmake", title: "CMake" },
+  { id: "sqlite3", title: "SQLite" },
+  { id: "unzip", title: "zip/unzip" },
+  { id: "tree", title: "tree" },
+  { id: "rsync", title: "rsync" },
+  { id: "uv", title: "uv" },
+  { id: "pnpm", title: "pnpm" },
+  { id: "bun", title: "Bun" },
+  { id: "lazygit", title: "lazygit" },
+  { id: "hyperfine", title: "hyperfine" },
+  { id: "direnv", title: "direnv" },
+  { id: "just", title: "just" },
+  { id: "bat", title: "bat" },
+  { id: "eza", title: "eza" },
+  { id: "httpie", title: "HTTPie" },
+  { id: "yq", title: "yq" },
+  { id: "delta", title: "delta" },
+];
+function openVMTermWin(vm, opts) {
+  opts = opts || {};
+  if (!vm) { toast("open a VM first"); return; }
+  if (opts.run) {
+    const existing = [...document.querySelectorAll(".vmterm-window")]
+      .find(w => w.dataset.vm === vm && w.dataset.run === opts.run && w.dataset.live !== "0");
+    if (existing) {
+      openWin(existing);
+      if (existing._termResize) existing._termResize();
+      return existing;
+    }
+  }
+  const n = ++termSeq;
+  const w = el("div", { class: "window grow term-window vmterm-window", id: "win-vmterm-" + n });
+  w.dataset.vm = vm;
+  w.dataset.run = opts.run || "";
+  w.dataset.live = "1";
+  const open = document.querySelectorAll("#desktop .term-window").length;
+  w.style.left = (160 + open * 26) + "px";
+  w.style.top = (90 + open * 22) + "px";
+  w.style.width = "720px";
+  w.innerHTML = `<div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
+    <div class="title"></div>
+    <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+    <div class="win-frame">
+      <div class="win-body" style="padding:0"><div class="vmterm-box"></div></div>
+      <div class="statusbar"><span class="term-status">…</span><span class="muted"> · Ctrl+select+right-click copy</span></div>
+      ${GROW_TILE}
+    </div>`;
+  w.querySelector(".title").textContent = (opts.title || vm) + " — shell";
+  const box = w.querySelector(".vmterm-box"), status = w.querySelector(".term-status");
+  box.addEventListener("wheel", e => e.preventDefault(), { passive: false });
+  $("#desktop").append(w);
+  initWindow(w);
+  openWin(w);
+
+  const t = new Terminal({
+    fontSize: 13, cursorBlink: true, macOptionIsMeta: true,
+    fontFamily: '"MesloLGS NF", "Monaco", ui-monospace, SFMono-Regular, Menlo, monospace',
+    theme: { background: "#000000" },
+    scrollback: 5000,
+  });
+  const fit = new FitAddon.FitAddon();
+  t.loadAddon(fit);
+  t.open(box);
+  wireXtermClipboard(t, box);
+  box.querySelector(".xterm-viewport").classList.add("vflush");
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const q = new URLSearchParams();
+  if (tokenInput.value) q.set("token", tokenInput.value);
+  if (opts.run) q.set("run", opts.run);
+  const qs = q.toString() ? "?" + q.toString() : "";
+  status.textContent = "connecting…";
+  const ws = new WebSocket(`${proto}://${location.host}/v1/vms/${encodeURIComponent(vm)}/terminal${qs}`);
+  ws.binaryType = "arraybuffer";
+  const enc = new TextEncoder();
+  const fitCtl = attachTermFit(t, fit, box, () => ws);
+  const resize = () => fitCtl.go();
+  ws._watch = watchVMSSH(t, status, vm);
+  ws.onopen = () => {
+    ws._watch.open();
+    fitCtl.go();
+    t.focus();
+    setTimeout(() => { fitCtl.go(); t.focus(); }, 400);
+  };
+  ws.onmessage = e => {
+    ws._watch.data();
+    t.write(new Uint8Array(e.data));
+  };
+  ws.onclose = () => {
+    w.dataset.live = "0";
+    ws._watch.close();
+  };
+  t.onData(d => { if (ws.readyState === 1) ws.send(enc.encode(d)); });
+  window.addEventListener("resize", resize);
+  wireGrow(w.querySelector(".grow-box"), w, box, 480, { minH: 180, onMove: resize });
+  w._termResize = resize;
+  w._teardown = () => {
+    window.removeEventListener("resize", resize);
+    fitCtl.stop();
+    ws._watch.stop();
+    ws.onclose = null;
+    try { ws.close(); } catch (e) {}
+    t.dispose();
   };
 }
 
@@ -3104,6 +4119,14 @@ function openHostTermWin() {
 $("#svc-refresh").onclick = () => loadPorts().catch(() => {});
 async function loadPorts() {
   const box = $("#svc-list");
+  if (!currentVM) {
+    box.replaceChildren(el("span", { class: "muted" }, "Open a VM first."));
+    return;
+  }
+  if ($("#d-state").textContent !== "running") {
+    box.replaceChildren(el("span", { class: "muted" }, "Start the VM first, then refresh services."));
+    return;
+  }
   box.replaceChildren(el("span", { class: "muted" }, "scanning…"));
   let d;
   try {
@@ -3225,22 +4248,26 @@ async function streamLog() {
 }
 wireGrow($("#log-grow"), $("#win-log"), $("#log-out"), 380, { stickEl: $("#log-out") });
 
-// ---- agent: the tab is a launcher — the prompt becomes the first message
-// of a fresh chat session pinned to this VM, and the Chat window opens to
-// stream the run. Follow-up turns continue in the same session. ----
-$("#a-run").onclick = () => {
-  const prompt = $("#a-prompt").value.trim();
-  if (!prompt) { toast("Tell the agent what to do first."); return; }
-  if (!chatDetected) { toast("No chat backend configured (Configuration → Ollama / OpenAI)."); return; }
-  if (chatBusy) { toast("Wait for the current chat reply to finish."); return; }
-  $("#a-prompt").value = "";
-  openChatWin(currentVM);
-  // every run is its own session, even when this VM's chat is already up
-  chatCur = null;
-  chatHint();
-  chatInput.value = prompt;
-  chatSend();
-};
+// ---- Agent & Tools: named CLIs + popular Linux dev tools inside the VM ----
+function launchGuest(item) {
+  if (!currentVM) { toast("open a VM first"); return; }
+  if ($("#d-state").textContent !== "running") { toast("start the VM first"); return; }
+  openVMTermWin(currentVM, { title: currentVM + " · " + item.title, run: item.id });
+}
+(function fillAgentLaunchers() {
+  const box = $("#a-launchers");
+  if (box) for (const a of VM_AGENTS) {
+    const b = el("button", { class: "btn", type: "button" }, a.title);
+    b.onclick = () => launchGuest(a);
+    box.append(b);
+  }
+  const tools = $("#a-tools");
+  if (tools) for (const t of VM_TOOLS) {
+    const b = el("button", { class: "ghost sm", type: "button", title: "Install if missing, then open a shell" }, t.title);
+    b.onclick = () => launchGuest(t);
+    tools.append(b);
+  }
+})();
 
 // ---- expose ----
 function cfIncomplete(cfg) {
@@ -3286,7 +4313,7 @@ async function loadTranscripts() {
   const box = $("#t-list");
   box.replaceChildren();
   if (!list.length) {
-    box.append(el("span", { class: "muted" }, "No agent runs yet — each run in this VM is logged here."));
+    box.append(el("span", { class: "muted" }, "No built-in Agent runs yet — VM CLI agent launches are not logged here."));
     return;
   }
   for (const t of list) {
@@ -3340,6 +4367,21 @@ function flushNotes() {
   notesTimer = null;
   saveNotes(notesVM, notesText.value);
 }
+$("#notes-delete").onclick = async () => {
+  if (!currentVM || notesVM !== currentVM) return;
+  if (!await platAsk("Delete notes for “" + currentVM + "”?", { title: "Delete Notes", ok: "Delete" })) return;
+  clearTimeout(notesTimer);
+  notesTimer = null;
+  try {
+    await api(`/v1/vms/${currentVM}/notes`, { method: "DELETE" });
+    if (notesVM === currentVM) {
+      notesText.value = "";
+      notesStatus("Deleted");
+    }
+  } catch (e) {
+    notesStatus("Delete failed: " + e.message);
+  }
+};
 notesText.addEventListener("input", () => {
   notesStatus("…");
   clearTimeout(notesTimer);
@@ -3439,24 +4481,63 @@ async function deleteNews(id) {
   loadNews().catch(() => {});
 }
 
-// the Chat window only appears once a chat backend is usable: an Ollama
-// endpoint that answers /api/version, or a ChatGPT sign-in
+// the Chat window appears once any host agent (Grok/Claude/Codex) is signed in
+let hostAgents = [];
 async function chatDetect(force) {
   try {
-    const st = await j("/v1/chat/status" + (force ? "?force=1" : ""));
-    chatDetected = !!st.detected;
-    chatProv = st.provider || "";
-    $("#dd-chat-item").hidden = !st.detected;
-    $("#chat-icon").hidden = !st.detected;
-    const eff = st.effort ? " (" + st.effort + ")" : "";
-    $("#chat-status").textContent = st.detected
-      ? (st.provider === "openai"
-          ? "chatgpt — " + (st.model || "no model set") + eff + (st.plan ? " — " + st.plan + " plan" : "")
-          : "ollama " + st.version + " — " + (st.model || "no model set") + eff + " — " + st.base_url)
-      : (st.reason || "no chat backend detected");
-    if (!st.detected && !$("#win-chat").hidden) toast("Chat backend went away: " + (st.reason || ""));
+    const st = await j("/v1/host/agents");
+    hostAgents = st.agents || [];
+    const ready = hostAgents.filter(a => a.ready);
+    chatDetected = ready.length > 0;
+    chatProv = st.host_agent || (ready[0] && ready[0].id) || "";
+    document.querySelectorAll("[data-act=\"winchat\"]").forEach(it => { it.hidden = !chatDetected; });
+    $("#chat-icon").hidden = !chatDetected;
+    fillHostAgentSelects(st.host_agent, st.host_model);
+    const a = ready.find(x => x.id === chatProv) || ready[0];
+    $("#chat-status").textContent = chatDetected
+      ? ((a && a.name || chatProv) + " — " + (st.host_model || (a && a.default_model) || "no model") + (a && a.source ? " — " + a.source : "") + (a && a.email ? " — " + a.email : ""))
+      : "no host agent signed in (~/.grok, ~/.claude, ~/.codex)";
+    if (!chatDetected && !$("#win-chat").hidden) toast("No host agent signed in");
     chatUsage(force);
   } catch (e) { /* daemon unreachable; leave as-is */ }
+}
+function fillHostAgentSelects(prefAgent, prefModel) {
+  const asel = $("#chat-agent"), msel = $("#chat-model");
+  if (!asel || !msel) return;
+  const ready = hostAgents.filter(a => a.ready);
+  const pick = ready.find(a => a.id === prefAgent) || ready[0];
+  asel.replaceChildren(...(ready.length ? ready : hostAgents).map(a =>
+    el("option", { value: a.id }, a.name + (a.ready ? "" : " (not signed in)"))));
+  if (pick) asel.value = pick.id;
+  fillHostModels(msel, pick, prefModel);
+}
+function fillHostModels(sel, agent, prefModel) {
+  const models = (agent && agent.models) || [];
+  const cur = prefModel || (agent && agent.default_model) || "";
+  if (!models.length) {
+    sel.replaceChildren(el("option", { value: cur }, cur || "(no models)"));
+    return;
+  }
+  sel.replaceChildren(...models.map(m => el("option", { value: m }, m)));
+  if (cur && !models.includes(cur)) sel.append(el("option", { value: cur }, cur));
+  sel.value = cur || models[0];
+}
+$("#chat-agent") && $("#chat-agent").addEventListener("change", () => {
+  const a = hostAgents.find(x => x.id === $("#chat-agent").value);
+  fillHostModels($("#chat-model"), a, a && a.default_model);
+  persistHostAgent();
+});
+$("#chat-model") && $("#chat-model").addEventListener("change", persistHostAgent);
+async function persistHostAgent() {
+  try {
+    const cfg = loadedConfig || await j("/v1/config");
+    const nc = JSON.parse(JSON.stringify(cfg));
+    nc.host_agent = $("#chat-agent").value;
+    nc.host_model = $("#chat-model").value;
+    await j("/v1/config", { method: "PUT", json: nc });
+    loadedConfig = nc;
+    chatDetect(true);
+  } catch (e) { /* ignore */ }
 }
 // While ChatGPT is the backend, the status line's far right shows how much
 // of each rolling rate-limit window the subscription has used. Cached for a
@@ -3464,7 +4545,7 @@ async function chatDetect(force) {
 let chatUsageAt = 0;
 async function chatUsage(force) {
   const box = $("#chat-usage");
-  if (chatProv !== "openai" || !chatDetected) { box.hidden = true; chatUsageAt = 0; return; }
+  if (chatProv !== "codex" || !chatDetected) { box.hidden = true; chatUsageAt = 0; return; }
   if ($("#win-chat").hidden) return;
   if (!force && Date.now() - chatUsageAt < 60000) return;
   chatUsageAt = Date.now();
@@ -3497,15 +4578,21 @@ function chatWinLabel(sec) {
 // to its chats and a new chat is pinned to it. No argument (the Chat icon,
 // the menu) shows every session.
 function openChatWin(vm) {
-  const scope = vm === undefined ? null : vm;
-  if (scope !== chatScope) {
+  // Host Chat (icon / Windows menu) is never scoped to a VM.
+  if (vm === undefined) {
+    if (chatScope) {
+      if (chatBusy) { toast("Wait for the current reply to finish."); openWin("#win-chat"); return; }
+      setChatScope(null);
+      chatCurVM = null;
+      chatTitle();
+    }
+  } else if (vm !== chatScope) {
     if (chatBusy) { toast("Wait for the current reply to finish."); openWin("#win-chat"); return; }
-    setChatScope(scope);
-    // entering a VM's scope starts fresh unless its chat is already up;
-    // leaving scope keeps the active session — the pin belongs to it
-    if (scope && chatCurVM !== scope) {
+    setChatScope(vm);
+    if (chatCurVM !== vm) {
       chatCur = null;
-      chatCurVM = scope;
+      chatCurTitle = "";
+      chatCurVM = vm;
       chatTitle();
       chatHint();
     }
@@ -3525,15 +4612,17 @@ $("#chat-scope-x").onclick = () => {
   setChatScope(null);
   loadChatSessions().catch(() => {});
 };
+let chatCurTitle = "";
 function chatTitle() {
-  $("#win-chat .title").textContent = chatCurVM ? "Chat — " + chatCurVM : "Chat";
+  const t = chatCurTitle || "Chat";
+  $("#win-chat .title").textContent = t;
+  const inp = $("#chat-title-edit");
+  if (inp && document.activeElement !== inp) inp.value = chatCurTitle || "";
 }
 function chatHint() {
   chatMsgs.replaceChildren(el("div", { class: "chat-hint" },
-    chatScope
-      ? "This chat operates the VM “" + chatScope + "” — run commands inside it, build things, and publish its ports to the web."
-      : "This chat can operate exe for you: create and manage VMs, run commands inside them, build things, and publish ports to the web.",
-    el("br"), el("br"), chatScope ? "Try: “what's listening in here?”" : "Try: “what's running right now?”"));
+    "Host Chat operates the VM cloud (list/create/start/stop). It is not a VM shell. Work inside a guest with Agent or exe env. Pick a host agent + model above (Grok / Claude / Codex — already signed in on this machine).",
+    el("br"), el("br"), "Try: “what's running right now?”"));
 }
 function chatStick(force) {
   // during streaming only follow the bottom if the user hasn't scrolled up
@@ -3551,12 +4640,27 @@ marked.use({ gfm: true, breaks: true });
 DOMPurify.addHook("afterSanitizeAttributes", n => {
   if (n.tagName === "A") { n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener"); }
 });
-function renderMD(node, text) {
+function renderMD(node, text, live) {
   node.innerHTML = DOMPurify.sanitize(marked.parse(text));
+  if (!live) renderMermaid(node);
+}
+function renderMermaid(node) {
+  node.querySelectorAll("pre code").forEach(code => {
+    const cls = (code.className || "").toLowerCase();
+    if (!cls.includes("mermaid")) return;
+    const src = (code.textContent || "").trim();
+    if (!src) return;
+    const wrap = el("div", { class: "mermaid" });
+    wrap.append(el("img", {
+      src: "https://mermaid.ink/svg/" + btoa(unescape(encodeURIComponent(src))),
+      alt: "mermaid diagram",
+    }));
+    (code.closest("pre") || code).replaceWith(wrap);
+  });
 }
 function addMDMsg(text) {
   const d = addMsg("asst", "");
-  renderMD(d, text);
+  renderMD(d, text, false);
   chatStick(true);
   return d;
 }
@@ -3599,11 +4703,7 @@ async function loadChatSessions() {
     const x = el("button", { class: "ghost sm danger", title: "Delete this chat" }, "×");
     x.onclick = async e => {
       e.stopPropagation();
-      if (!x.classList.contains("armed")) {
-        x.classList.add("armed");
-        setTimeout(() => x.classList.remove("armed"), 3000);
-        return;
-      }
+      if (!await platAsk("Delete chat “" + m.title + "”?", { title: "Delete Chat" })) return;
       try { await api("/v1/chat/sessions/" + m.id, { method: "DELETE" }); } catch (err) { toast(err.message); }
       if (chatCur === m.id) { chatCur = null; chatCurVM = chatScope; chatTitle(); chatHint(); }
       loadChatSessions().catch(() => {});
@@ -3628,6 +4728,7 @@ async function selectChat(id) {
     const sess = await j("/v1/chat/sessions/" + id);
     renderChatSession(sess);
     chatCurVM = sess.vm || null;
+    chatCurTitle = sess.title || "";
     chatTitle();
   } catch (e) { toast(e.message); }
   loadChatSessions().catch(() => {});
@@ -3636,12 +4737,27 @@ async function selectChat(id) {
 $("#chat-new").onclick = () => {
   if (chatBusy) { toast("Wait for the current reply to finish."); return; }
   chatCur = null;
+  chatCurTitle = "";
   chatCurVM = chatScope;
   chatTitle();
   chatHint();
   loadChatSessions().catch(() => {});
   chatInput.focus();
 };
+async function renameCurrentChat() {
+  const inp = $("#chat-title-edit");
+  if (!inp || !chatCur) return;
+  const title = inp.value.trim();
+  if (!title) return;
+  try {
+    const meta = await j("/v1/chat/sessions/" + chatCur, { method: "PUT", json: { title } });
+    chatCurTitle = meta.title || title;
+    chatTitle();
+    loadChatSessions().catch(() => {});
+  } catch (e) { toast(e.message); }
+}
+$("#chat-title-edit") && $("#chat-title-edit").addEventListener("change", renameCurrentChat);
+
 async function chatSend() {
   const text = chatInput.value.trim();
   if (!text || chatBusy) return;
@@ -3658,13 +4774,13 @@ async function chatSend() {
       // grow the streaming assistant bubble in place, re-rendering markdown
       if (!cur) { cur = el("div", { class: "msg asst" }); think.before(cur); curText = ""; }
       curText += ev.text;
-      renderMD(cur, curText);
+      renderMD(cur, curText, true);
       chatStick();
       return;
     }
     cur = null;
     think.remove();
-    if (ev.type === "session") { chatCur = ev.meta.id; chatCurVM = ev.meta.vm || null; chatTitle(); }
+    if (ev.type === "session") { chatCur = ev.meta.id; chatCurVM = ev.meta.vm || null; chatCurTitle = ev.meta.title || ""; chatTitle(); }
     else if (ev.type === "text") addMDMsg(ev.text);
     else if (ev.type === "tool_call") addMsg("tool", "▸ " + ev.summary);
     else if (ev.type === "tool_result") addToolOut(ev.output || "");
@@ -3672,7 +4788,11 @@ async function chatSend() {
     if (ev.type !== "done") { chatMsgs.append(think); chatStick(); }
   };
   try {
-    const resp = await api("/v1/chat/send", { method: "POST", json: { session: chatCur || "", message: text, vm: chatCur ? "" : (chatScope || "") } });
+    const resp = await api("/v1/chat/send", { method: "POST", json: {
+      session: chatCur || "", message: text, vm: chatCur ? "" : (chatScope || ""),
+      agent: ($("#chat-agent") && $("#chat-agent").value) || "",
+      model: ($("#chat-model") && $("#chat-model").value) || "",
+    } });
     const rd = resp.body.getReader();
     const dec = new TextDecoder();
     let buf = "";
@@ -3689,6 +4809,8 @@ async function chatSend() {
     }
   } catch (e) { addMsg("err", e.message); }
   think.remove();
+  const last = [...chatMsgs.querySelectorAll(".msg.asst")].pop();
+  if (last) renderMermaid(last);
   chatBusy = false;
   $("#chat-send").disabled = false;
   loadChatSessions().catch(() => {});
@@ -3702,73 +4824,42 @@ chatInput.addEventListener("keydown", e => {
 });
 
 // ---- chat backend switcher ----
-// Clicking the Chat status line opens a small modal to flip
-// provider/model/effort without a trip through Configuration. It works on
-// a fresh GET of the config so Save can't write back stale fields.
+// Clicking the Chat status line flips the host agent + model.
 let cbCfg = null;
 async function cbOpen() {
   try { cbCfg = await j("/v1/config"); } catch (e) { toast(e.message); return; }
   $("#cb-status").textContent = "";
-  $("#cb-provider").value = cbCfg.chat_provider === "openai" ? "openai" : "ollama";
+  const ready = hostAgents.filter(a => a.ready);
+  const list = ready.length ? ready : hostAgents;
+  $("#cb-provider").replaceChildren(...list.map(a =>
+    el("option", { value: a.id }, a.name + (a.ready ? "" : " (not signed in)"))));
+  $("#cb-provider").value = cbCfg.host_agent || (list[0] && list[0].id) || "";
   $("#cb-overlay").hidden = false;
   cbFill();
 }
-function cbConfiguredModel(p) {
-  const sect = (p === "openai" ? cbCfg.openai : cbCfg.ollama) || {};
-  return sect.model || "";
-}
-const CB_EFFORTS = {
-  openai: ["", "none", "minimal", "low", "medium", "high", "xhigh", "max"],
-  ollama: ["", "off", "low", "medium", "high", "max"],
-};
-async function cbFill() {
+function cbFill() {
   const p = $("#cb-provider").value;
-  const sel = $("#cb-model");
-  const cur = cbConfiguredModel(p);
-  sel.replaceChildren(el("option", { value: cur }, cur || "(pick a model)"));
-  const effSel = $("#cb-effort");
-  const effCur = ((p === "openai" ? cbCfg.openai : cbCfg.ollama) || {}).effort || "";
-  effSel.replaceChildren(...CB_EFFORTS[p].map(o => el("option", { value: o }, o === "" ? "(default)" : o)));
-  effSel.value = CB_EFFORTS[p].includes(effCur) ? effCur : "";
-  try {
-    const res = await j("/v1/chat/models?provider=" + p);
-    if ($("#cb-provider").value !== p) return; // user flipped provider meanwhile
-    const models = res.models || [];
-    if (!models.length) return;
-    sel.replaceChildren(...models.map(m => el("option", { value: m }, m)));
-    if (cur && !models.includes(cur)) sel.append(el("option", { value: cur }, cur + " (configured)"));
-    sel.value = cur || models[0];
-  } catch (e) {
-    $("#cb-status").textContent = "model list unavailable: " + e.message;
-  }
+  const a = hostAgents.find(x => x.id === p);
+  fillHostModels($("#cb-model"), a, (cbCfg && cbCfg.host_model) || (a && a.default_model));
 }
 $("#cb-provider").onchange = cbFill;
 $("#cb-x").onclick = () => { $("#cb-overlay").hidden = true; };
 $("#cb-save").onclick = async () => {
   if (!cbCfg) return;
-  const p = $("#cb-provider").value;
   const nc = JSON.parse(JSON.stringify(cbCfg));
-  nc.chat_provider = p;
-  if (p === "openai") {
-    nc.openai = nc.openai || {};
-    nc.openai.model = $("#cb-model").value;
-    nc.openai.effort = $("#cb-effort").value;
-  } else {
-    nc.ollama = nc.ollama || {};
-    nc.ollama.model = $("#cb-model").value;
-    nc.ollama.effort = $("#cb-effort").value;
-  }
+  nc.host_agent = $("#cb-provider").value;
+  nc.host_model = $("#cb-model").value;
   $("#cb-save").disabled = true;
   try {
     await j("/v1/config", { method: "PUT", json: nc });
+    loadedConfig = nc;
     $("#cb-overlay").hidden = true;
-    toast("Chat backend: " + p + " — " + ($("#cb-model").value || "no model set"));
+    toast("Chat: " + nc.host_agent + " — " + nc.host_model);
     chatDetect(true);
-    if (!$("#win-config").hidden) loadConfig().catch(() => {});
   } catch (e) { toast(e.message); }
   $("#cb-save").disabled = false;
 };
-$("#chat-status").title = "Switch provider / model / effort…";
+$("#chat-status").title = "Switch host agent / model…";
 $("#chat-status").onclick = cbOpen;
 
 // ---- config ----
@@ -3787,6 +4878,7 @@ const CONFIG_FIELDS = [
     { path: "default_cpus", num: true },
     { path: "default_memory_mb", num: true },
     { path: "default_disk_gb", num: true },
+    { path: "idle_stop_minutes", num: true, hint: "Stop a running VM after this many minutes with no terminal, job or SSH. 0 = never." },
   ]},
   { group: "Firecracker", fields: [
     { path: "firecracker.binary", restart: true },
@@ -3794,17 +4886,6 @@ const CONFIG_FIELDS = [
     { path: "firecracker.network_helper", restart: true },
     { path: "firecracker.network_cidr", restart: true },
     { path: "firecracker.outbound_interface", restart: true, hint: "empty uses the default route" },
-  ]},
-  { group: "Ollama", fields: [
-    { path: "ollama.base_url", hint: "local daemon or https://ollama.com" },
-    { path: "ollama.api_key", secret: true },
-    { path: "ollama.model", models: "ollama" },
-    { path: "ollama.effort", options: ["", "off", "low", "medium", "high", "max"], hint: "thinking effort for models that support it (Ollama's think option); off disables thinking" },
-  ]},
-  { group: "OpenAI", fields: [
-    { path: "chat_provider", options: ["ollama", "openai"], hint: "which backend the Chat window uses — openai runs on your ChatGPT subscription" },
-    { path: "openai.model", models: "openai", hint: "listed live from the ChatGPT backend once signed in" },
-    { path: "openai.effort", options: ["", "none", "minimal", "low", "medium", "high", "xhigh", "max"], hint: "reasoning effort — empty uses the model's default; a level the model rejects falls back to its default" },
   ]},
   { group: "GitHub", fields: [
     { path: "github.client_id", hint: "an OAuth app client ID with device flow enabled (github.com → Settings → Developer settings → OAuth Apps) — used by Publish to GitHub; the token stays on this host" },
@@ -3863,8 +4944,11 @@ async function loadConfig() {
       pane.append(el("div", { class: "row", style: "justify-content:flex-end; margin-bottom:8px" },
         el("button", { class: "ghost sm", onclick: () => wizOpen(false) }, "Cloudflare Setup Wizard…")));
     }
-    if (g.group === "OpenAI") pane.append(openaiAuthBox());
     if (g.group === "GitHub") pane.append(githubAuthBox());
+    if (g.group === "VM Defaults") {
+      pane.prepend(el("div", { class: "muted", style: "margin-bottom:8px" },
+        "Chat uses host agents already signed in on this machine (Grok ~/.grok, Claude ~/.claude, Codex ~/.codex). There is no LLM tab — pick agent + model in the Chat window."));
+    }
     if (g.group === "Daemon") {
       const tools = el("div", { class: "row", style: "justify-content:flex-end; margin-bottom:8px" });
       const rb = el("button", { class: "ghost sm" }, "Restart Daemon…");
@@ -3967,7 +5051,7 @@ $("#cfg-save").onclick = async () => {
       // contain dots that a selector would parse as class names
       const raw = document.getElementById("cfg-" + f.path).value;
       setPath(nc, f.path, f.list ? raw.split(",").map(s => s.trim()).filter(Boolean)
-        : f.num ? (parseInt(raw, 10) || 0) : raw);
+        : f.num ? (f.path.endsWith("temperature") ? (parseFloat(raw) || 0) : (parseInt(raw, 10) || 0)) : raw);
     }
   }
   $("#cfg-save").disabled = true;
@@ -4333,6 +5417,8 @@ document.addEventListener("keydown", e => {
   if (!$("#cb-overlay").hidden) $("#cb-overlay").hidden = true;
   if (!$("#nf-overlay").hidden) nfClose();
   if (!$("#pub-overlay").hidden) pubClose();
+  if (!$("#ask-overlay").hidden) askFinish(false);
+  if (!$("#desk-overlay").hidden) deskClose();
 });
 
 function wizFeedback(kind, text) {
@@ -4656,13 +5742,14 @@ function workspaceChanged(path, deleted, client) {
   if (client && client === WIN_CLIENT) return; // our own write; already refreshed
   document.querySelectorAll('[id^="win-ws-"]').forEach(w => { if (!w.hidden) loadFinder(w); });
   const ed = document.getElementById("win-ed-" + encodeURIComponent(path));
-  if (ed && !ed.hidden && !deleted) loadEditor(ed);
+  if (ed && !ed.hidden) deleted ? closeWin(ed) : loadEditor(ed);
   const iv = document.getElementById("win-iv-" + encodeURIComponent(path));
-  if (iv && !iv.hidden && !deleted) loadImage(iv);
+  if (iv && !iv.hidden) deleted ? closeWin(iv) : loadImage(iv);
 }
 
 // ---- boot ----
 if (IS_MOBILE) $("#vm-hint").textContent = "tap a VM to open it";
+syncMobileMode();
 winRestore();
 appDataSubscribe();
 renderVMHead();
@@ -4671,7 +5758,20 @@ loadApps().catch(() => {});
 loadConfig().catch(() => {});
 cfHeartbeat(false);
 chatDetect(false);
+pollHostStats();
+loadDesktop().catch(() => {});
 setInterval(() => { if (!document.hidden) loadVMs().catch(() => {}); }, 5000);
+setInterval(() => { if (!document.hidden) pollHostStats(); }, 2000);
+if (!sessionStorage.getItem("exe_startup_note")) {
+  sessionStorage.setItem("exe_startup_note", "1");
+  platAsk(
+    "Terminal copy/paste (host + VM): hold Ctrl, select text, right-click to copy. Ctrl + right-click with no selection pastes.\n\n" +
+    "Desk app icons (Notes, Browser) drag like Workspace — not as files. Editor opens from Workspace text files.\n\n" +
+    "Chat picks a host agent + model (Grok / Claude / Codex) already signed in on this machine.\n\n" +
+    "Expose publishes a VM port via Cloudflare. Transcripts are host logs of built-in Agent runs only.",
+    { title: "exe", note: true, ok: "OK" }
+  );
+}
 </script>
 </body>
 </html>

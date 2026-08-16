@@ -1,191 +1,179 @@
 ---
 name: exe-vms
 description: >
-  Create and drive persistent Linux VMs on this host through the exe daemon:
-  full VM lifecycle over HTTP, command execution and file transfer over SSH
-  (port 2222), service discovery, and publishing VM ports to HTTPS subdomains.
-  Use whenever you need an isolated Linux sandbox to build, run, or test
-  something, or to work on an existing exe VM.
+  Drive exe, a portable Debian agent Environment on this host: VM lifecycle,
+  exe env init/run/snap, SSH gate :2222, jobs with attached files and one-shot
+  download links, and Cloudflare publish. Prefer exe env / HTTP jobs over the
+  host desktop. Named agents (claude, opencode, pi, codex) run inside the VM.
 ---
 
-# exe — drive Linux VMs from any agent
+# exe — portable agent Environment
 
-exe is a single-binary personal VM cloud running on this host. It boots
-persistent Debian VMs (Virtualization.framework on macOS, Firecracker/KVM on
-Linux), gives each one SSH, and can publish any VM port to a real HTTPS
-subdomain. You (an agent) can use it as an isolated sandbox: create a VM,
-run commands inside it, install anything, start servers, and expose them.
+exe boots persistent **Debian** Firecracker VMs on this Linux host. The
+Platinum UI at `$BASE/` is a **minimal host desktop** for a human: VM list,
+Host Terminal, host Workspace / Notes / Editor / Chat / Browser. **Bots
+should use this skill and the HTTP/SSH/CLI APIs — not the desktop.**
 
-**Base URL**: the scheme://host:port you fetched this file from
-(default `http://127.0.0.1:7777`). Examples below use `$BASE` and, for SSH,
-`$HOST` (the same host, without scheme/port).
+**Host vs VM**
+
+| Host (this machine) | Inside a VM |
+|---|---|
+| VM list / create / start / stop / delete | Agent CLIs (claude, opencode, pi, codex) |
+| Host Terminal (`GET /v1/host/terminal`) | VM shell (`GET /v1/vms/{name}/terminal` or `ssh -p 2222`) |
+| Host Workspace, Notes, Editor, Chat, Browser apps | `exe env run` jobs, files you attach |
+| Cloudflare tunnel / expose | Services bound to `0.0.0.0` in the guest |
+
+Do **not** use Host Terminal for project work.
+
+**Base URL**: scheme://host:port you fetched this file from
+(default `http://127.0.0.1:7777` or `http://192.168.8.222:7777`).
+`$HOST` is the same host without scheme/port.
 
 ## Auth
 
-If the daemon has `api_token` set, every `/v1/*` request needs
-`Authorization: Bearer <token>`. WebSocket endpoints also accept
-`?token=<token>` as a query parameter. If no token is configured, calls work
-without it. `GET /healthz` is always open and returns `ok`.
+If `api_token` is set, every `/v1/*` request needs
+`Authorization: Bearer <token>`. WebSockets accept `?token=<token>`.
+`GET /healthz` is open. One-shot job downloads use `GET /dl/{token}`
+(the path token **is** the auth; **one use**, then 410).
 
 ```sh
 curl -s -H "Authorization: Bearer $TOKEN" $BASE/v1/vms
 ```
 
-Errors are JSON: `{"error":"..."}`. `404` = no such VM, `409` = VM not in the
-required state (usually: not running — start it first), `400` = bad request.
+Errors are JSON `{"error":"..."}`. `404` = missing, `409` = wrong VM state
+(usually not running), `400` = bad request.
 
-## The VM object
+## Prefer `exe env` (portable Environment)
+
+```sh
+exe env ls
+exe env init NAME --flavor debian --from docker-compose.yml --from pyproject.toml
+exe env run NAME --cmd 'uname -a'
+exe env run NAME --script setup.sh --file app.py --prompt 'run the tests'
+exe env run NAME --session SESSION --cmd 'make'
+exe env snap NAME create before
+exe env snap NAME ls
+exe env snap NAME restore ID
+exe env snap NAME rm ID
+exe env stop NAME
+exe env rm NAME          # destroy disk
+```
+
+- **Flavor**: Debian 13 only (`flavors/debian.yaml`).
+- **Manifest** (`--from`): docker-compose YAML, GitHub workflow YAML,
+  `pyproject.toml`, or a text package list. These are **init recipes**, not
+  a Docker runtime. Init writes `~/BOOTSTRAP.md` and runs `~/bootstrap.sh`.
+- **Job** (`run`): script and/or argv, multiple `--file` attachments, optional
+  `--prompt` (runs a named agent **in the VM** if installed). Returns
+  `shell_output`, `agent_output`, `session`, and `downloads[].url`.
+- **Snapshot**: copies `disk.raw` (VM is stopped first).
+
+HTTP equivalents:
+
+| Method | Path | Body |
+|---|---|---|
+| `GET` | `/v1/env/flavors` | — |
+| `POST` | `/v1/env/init` | `{"name","flavor","from":[{"name","text"}]}` |
+| `POST` | `/v1/vms/{name}/jobs` | `{"cmd","script","prompt","session","files":[{"name","content":"<base64>"}]}` |
+| `GET` | `/v1/vms/{name}/jobs/{session}` | session turns |
+| `GET/POST` | `/v1/vms/{name}/snaps` | create: `{"label"}` |
+| `POST` | `/v1/vms/{name}/snaps/{id}/restore` | — |
+| `DELETE` | `/v1/vms/{name}/snaps/{id}` | — |
+| `GET` | `/dl/{token}` | one-shot file |
+
+## VM object and lifecycle
 
 ```json
 {
   "name": "demo",
-  "state": "running",        // "running" | "stopped"
+  "state": "running",
   "cpus": 2,
   "memory_mb": 2048,
-  "disk_gb": 20,
-  "mac": "aa:bb:cc:dd:ee:ff",
-  "ip": "172.30.0.2",        // present while running; host-local private IP
-  "created_at": "2026-08-06T12:00:00Z"
+  "disk_gb": 8,
+  "ip": "10.77.0.2",
+  "created_at": "2026-08-16T00:00:00Z"
 }
 ```
 
-Inside every VM: Debian 13, a user named `dev` (configurable as `ssh_user`,
-check `GET /v1/config`) with passwordless sudo, and the daemon's SSH key
-installed. The VM is the sandbox boundary — you may install packages and run
-anything inside it.
+Guest user is `dev` (`ssh_user`) with passwordless sudo. The VM is the
+sandbox boundary.
 
-## VM lifecycle
+| Method & path | Effect |
+|---|---|
+| `GET /v1/vms` | List |
+| `POST /v1/vms` | Create **and boot** (`name` required) |
+| `GET /v1/vms/{name}` | One VM |
+| `POST /v1/vms/{name}/start` | Boot |
+| `POST /v1/vms/{name}/stop` | Power-off (disk stays) |
+| `DELETE /v1/vms/{name}` | Destroy disk — **confirm with the user** |
 
-| Method & path | Body | Effect |
+Create/start are synchronous (wait for SSH). First create may download ~3 GB.
+
+## SSH gate (:2222)
+
+- `ssh -p 2222 <vm>@$HOST` — into the guest (auto-starts). scp/sftp/`-L` work.
+- `ssh -p 2222 exe@$HOST <cmd>` — lobby: `ls`, `new`, `start`, `stop`, `rm`,
+  `ip`, `code`, `expose`, `routes` (`--json`).
+
+Keys: daemon user's `~/.ssh/*.pub`, `~/.exe/ssh/id_ed25519`, or
+`~/.exe/ssh/authorized_clients`.
+
+## Services and publish
+
+- `GET /v1/vms/{name}/ports` — guest listeners on non-loopback (bind `0.0.0.0`).
+- `POST /v1/vms/{name}/expose` `{"port":8000,"subdomain":"guestbook"}` —
+  needs Cloudflare (`cloudflare.domain`).
+- `GET /v1/routes` / `DELETE /v1/routes/{host}`.
+
+## Interactive VM terminal (WebSocket)
+
+`GET /v1/vms/{name}/terminal` — binary frames = PTY bytes; text =
+`{"resize":[cols,rows]}`. Auth `?token=`. Prefer `ssh -p 2222`.
+
+## Named agents
+
+Install and sign in **inside the VM**. The Platinum **Agent & Tools** tab has
+Code-agent CLI buttons (Codex, Gemini CLI, OpenCode, Aider, Qwen Code, Pi,
+Claude) plus a grid of Linux developer tools (git, build-essential, Python,
+Node, Docker, Go, Rust, jq, ripgrep, fd, fzf, tmux, Neovim, htop, gh, cmake,
+sqlite, zip, tree, rsync, uv, pnpm, Bun, lazygit, hyperfine, direnv, just,
+bat, eza, HTTPie, yq, delta). Clicking a button opens a VM PTY that
+**installs if missing** (`?run=`), then execs the agent TUI or drops to a
+shell. CLI-agent sign-in and history stay in the guest; these VM CLI launches
+do not create host transcripts.
+
+Host Chat (desktop File menu / mobile Menu drawer) is a **host** operator for
+VM lifecycle, not a guest agent. It does **not** have its own LLM tab or API
+keys. Pick an **agent + model** that is already signed in on this host:
+
+| Agent | Host files | How to sign in |
 |---|---|---|
-| `GET /v1/vms` | — | List all VMs (array of VM objects) |
-| `POST /v1/vms` | `{"name":"demo","cpus":2,"memory_mb":2048,"disk_gb":20}` | Create **and boot**; only `name` is required (lowercase letters, digits, `-`), the rest defaults to 2 CPU / 2048 MB / 20 GB |
-| `GET /v1/vms/{name}` | — | One VM |
-| `POST /v1/vms/{name}/start` | — | Boot a stopped VM |
-| `POST /v1/vms/{name}/stop` | — | Graceful power-off (disk persists) |
-| `DELETE /v1/vms/{name}` | — | Delete VM **and its disk** |
-| `GET /v1/vms/{name}/notes` | — | Free-form notes about the VM → `{"notes":"..."}` — read them before working in an unfamiliar VM |
-| `PUT /v1/vms/{name}/notes` | `{"notes":"..."}` | Replace the notes (markdown welcome; also editable in the web UI) |
+| Grok | `~/.grok/auth.json`, `~/.grok/config.toml` | `grok` CLI (OAuth) |
+| Claude | `~/.claude/.credentials.json` or `~/.claude.json` | `claude` CLI / `/login` |
+| Codex | `~/.codex/auth.json`, `~/.codex/config.toml` | `codex login` |
 
-`POST /v1/vms` and `/start` are **synchronous**: they return only when the VM
-is booted, has an IP, and SSH answers — the returned object is immediately
-usable. Typical boot is seconds, but the **first create ever downloads a ~3 GB
-base image**, so allow a generous client timeout (10+ minutes) or pre-check
-that other VMs already exist.
+`GET /v1/host/agents` lists ready agents and models. Chat send accepts
+`{"agent","model"}`. Configuration only has **idle_stop_minutes** (stop a
+VM after N minutes with no terminal/job/SSH; `0` = never).
 
-```sh
-curl -s -X POST $BASE/v1/vms -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"demo"}'                      # → 201 + VM object with .ip
-```
+## Other
 
-Don't delete or stop VMs you didn't create unless the user asked.
+`GET /v1/config`, `GET /v1/logs`, `GET /v1/host/agents`.
+`GET /v1/host/stats` — host CPU %, disk I/O B/s, net B/s, disk free/total
+(shown on the Virtual Machines window and the menu bar).
+`GET /v1/browse/https/host/path` (or `?url=`) — same-origin proxy for the
+desk Browser. Forwards HTML/CSS/JS/images, strips frame-busting headers,
+rewrites asset URLs so styles and scripts load.
+`POST /v1/vms/{name}/publish` — GitHub, **only if the user asks**.
+`POST /v1/newsfeed` — host Newsfeed.
 
-## Run commands inside a VM (SSH gate, port 2222)
+**Terminal copy/paste** (host + VM xterm): hold **Ctrl**, select text,
+right-click to copy; Ctrl + right-click with no selection pastes. Do not
+use the browser’s native file-drag on desktop icons.
 
-The daemon speaks SSH on port `2222` of the same host. The SSH **username
-selects the destination**:
+Desktop background: File → Desktop Background… or right-click the desktop.
+`GET/PUT /v1/desktop` `{mode,color}` — mode is `center`, `stretch`, or `cover`
+(expand all, keep ratio). `GET/PUT/DELETE /v1/desktop/wallpaper` is the picture.
 
-- `ssh -p 2222 <vm>@$HOST` — transparent bridge to that VM's sshd (lands as
-  the `dev` user, auto-starts a stopped VM). Non-interactive commands, scp,
-  sftp, and `-L`/`-R` port forwarding all work.
-- `ssh -p 2222 exe@$HOST <cmd>` — the "lobby": VM lifecycle commands with
-  `--json` output (`ls`, `new`, `start`, `stop`, `rm`, `ip`, `code`,
-  `expose`, `routes`). Equivalent to the HTTP API; use whichever is easier.
-
-```sh
-ssh -p 2222 demo@$HOST 'uname -a'                      # run a command
-ssh -p 2222 demo@$HOST 'sudo apt-get install -y jq'    # sudo just works
-scp -P 2222 app.py demo@$HOST:~/                       # copy files in
-ssh -p 2222 -L 8000:localhost:8000 demo@$HOST          # tunnel a VM port
-ssh -p 2222 exe@$HOST ls --json                        # lobby, JSON list
-```
-
-Access requires your SSH public key to be known to the daemon: keys in the
-daemon user's `~/.ssh/*.pub`, the service key `~/.exe/ssh/id_ed25519`, or any
-key listed in `~/.exe/ssh/authorized_clients` (authorized_keys format; edits
-apply immediately). If you run as the same user as the daemon, plain `ssh`
-works out of the box. Use `-o StrictHostKeyChecking=accept-new` on first
-contact.
-
-VM IPs (`.ip`) are private host-local addresses: from **this host** you can
-also `curl http://<vm_ip>:<port>` directly — useful for testing a server you
-just started in the VM. Exception: on Windows hosts VM IPs live inside the
-daemon process; use the per-port `local` addresses from
-`GET /v1/vms/{name}/ports` (e.g. `curl http://127.0.0.1:53422`) instead.
-
-## Built-in coding agent (vibecode)
-
-`POST /v1/vms/{name}/agent` runs exe's own Ollama-backed coding agent inside
-the VM (it gets bash/read/write tools over SSH) and **streams plain text**
-until done. VM must be running.
-
-```sh
-curl -sN -X POST $BASE/v1/vms/demo/agent -H "Authorization: Bearer $TOKEN" \
-  -d '{"prompt":"build a guestbook app on port 8000","model":""}'
-```
-
-`model` empty = configured default. Closing the connection cancels the run.
-Every run is recorded: `GET /v1/vms/{name}/transcripts` lists
-`{id,prompt,model,status,...}`; `GET /v1/vms/{name}/transcripts/{id}` returns
-`{meta, log}`. If you are a coding agent yourself, you usually want the SSH
-gate instead and only reach for this to delegate.
-
-## Discover services, publish to the web
-
-- `GET /v1/vms/{name}/ports` → `{"ip":"...","ports":[{"port":8000,"process":"python3"}]}` —
-  TCP ports listening on non-loopback addresses inside the VM (SSH excluded).
-  Servers must bind `0.0.0.0`, not `127.0.0.1`, to be reachable/exposable.
-  On Windows hosts each entry also carries `"local":"127.0.0.1:NNNN"`, a
-  host-reachable forward to that port.
-- `POST /v1/vms/{name}/expose` body `{"port":8000,"subdomain":"guestbook"}` →
-  `{"host":"guestbook.<domain>","url":"https://...","backend":"http://<vm_ip>:8000"}`.
-  Publishes the VM port through the daemon's reverse proxy and Cloudflare
-  Tunnel. `subdomain` defaults to the VM name. Requires Cloudflare to be
-  configured (`cloudflare.domain` in `GET /v1/config`); a `warnings` array in
-  the response means it only partially applied.
-- `GET /v1/routes` → `{"host": "backend-url", ...}` current published routes;
-  `DELETE /v1/routes/{host}` unpublishes one.
-
-## Interactive terminal (WebSocket)
-
-`GET /v1/vms/{name}/terminal` upgrades to a WebSocket bridged to a shell in
-the VM: **binary** frames carry terminal bytes both ways; **text** frames
-carry `{"resize":[cols,rows]}`. Auth via `?token=` if needed. Prefer plain
-`ssh -p 2222` unless you specifically need a browser-style PTY stream.
-
-## Other endpoints
-
-`GET /v1/config` (full daemon config, incl. `ssh_user` and cloudflare setup),
-`GET /v1/logs` (streams daemon log).
-`POST /v1/vms/{name}/publish` body `{"path":"/home/dev/app","repo":"app","private":true}`
-publishes a VM folder to the signed-in user's GitHub (streams NDJSON progress;
-the daemon holds the token and pushes for the VM). **Only when the user asks**
-— it creates a repository on their account.
-`POST /v1/newsfeed` body `{"title":"...","body":"..."}` posts a note to the
-desktop Newsfeed of this node **and every joined node** — good for announcing
-finished work or problems the user should see.
-Endpoints not listed in this file
-(config PUT, daemon restart, chat, workspace, apps, ui state) back exe's own
-web UI — leave them alone unless the user explicitly asks.
-
-## Recipes
-
-**Fresh sandbox, run a server, verify, publish:**
-
-```sh
-BASE=http://127.0.0.1:7777; HOST=127.0.0.1
-AUTH=(-H "Authorization: Bearer $TOKEN")               # omit if no token
-
-curl -s "${AUTH[@]}" -X POST $BASE/v1/vms -d '{"name":"scratch"}'
-ssh -p 2222 scratch@$HOST 'sudo apt-get update -qq && sudo apt-get install -y -qq python3'
-scp -P 2222 server.py scratch@$HOST:~/
-ssh -p 2222 scratch@$HOST 'nohup python3 server.py >server.log 2>&1 & sleep 1; curl -s localhost:8000/healthz'
-curl -s "${AUTH[@]}" $BASE/v1/vms/scratch/ports        # confirm 8000 is listening
-curl -s "${AUTH[@]}" -X POST $BASE/v1/vms/scratch/expose -d '{"port":8000}'
-```
-
-**Reuse an existing VM:** `GET /v1/vms`, pick by name, `POST .../start` if
-`"state":"stopped"` (synchronous), then SSH in.
-
-**Clean up when the user is done:** `POST .../stop` keeps the disk;
-`DELETE` destroys it — confirm with the user before deleting.
+Leave config PUT, daemon restart, workspace, apps, and UI state alone
+unless the user explicitly asks.

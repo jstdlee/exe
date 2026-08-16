@@ -81,8 +81,9 @@ type Engine struct {
 	status   map[string]*Status
 	statusAt time.Time
 
-	kick chan struct{}
-	stop chan struct{}
+	kick     chan struct{}
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 // validKey guards every file path sync touches: a key must be "App/relpath"
@@ -206,7 +207,7 @@ func (e *Engine) Start() {
 	}()
 }
 
-func (e *Engine) Stop() { close(e.stop) }
+func (e *Engine) Stop() { e.stopOnce.Do(func() { close(e.stop) }) }
 
 // ReconcileNow schedules an immediate pass (after pairing).
 func (e *Engine) ReconcileNow() {

@@ -51,6 +51,7 @@ Usage:
   exe expose <name> -port N [-sub name]    publish https://<sub>.<domain> -> VM port
   exe unexpose <host>                      remove a proxy route
   exe routes                               show proxy routes
+  exe env …                                portable agent Environment (init/stop/rm/run/snap)
 
 The daemon also speaks SSH on :2222 (config ssh_listen):
   ssh -p 2222 exe@<mac>     lobby: ls / new / rm / code / expose ... (--json for scripts)
@@ -92,6 +93,8 @@ func main() {
 		err = cmdUnexpose(args)
 	case "routes":
 		err = cmdRoutes()
+	case "env":
+		err = cmdEnv(args)
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:

@@ -16,6 +16,7 @@ import (
 	"exe/internal/chat"
 	"exe/internal/codex"
 	"exe/internal/config"
+	"exe/internal/hostagent"
 	"exe/internal/sshexec"
 	"exe/internal/vmm"
 )
@@ -70,99 +71,77 @@ func chatSystemPrompt(sshUser, domain, vm string) string {
 // chatProvider is the Chat window's backend: "openai" (ChatGPT
 // subscription) when configured, otherwise "ollama".
 func chatProvider(cfg *config.Config) string {
-	if cfg.ChatProvider == "openai" {
-		return "openai"
+	switch cfg.ChatProvider {
+	case "openai", "claude", "grok", "custom":
+		return cfg.ChatProvider
+	default:
+		return "ollama"
 	}
-	return "ollama"
 }
 
-// handleChatStatus reports whether the chat backend is usable, cached for a
-// minute so the UI can ask freely; ?force=1 bypasses the cache. The ChatGPT
-// path is a local credentials check — no probe, no cache needed.
+// handleChatStatus reports whether a host agent is ready. Chat no longer
+// stores API keys — it uses ~/.grok, ~/.claude and ~/.codex.
 func (s *Server) handleChatStatus(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Config()
-	if chatProvider(cfg) == "openai" {
-		res := map[string]any{"provider": "openai", "detected": false,
-			"model": cfg.OpenAI.Model, "effort": cfg.OpenAI.Effort}
-		if c := s.codexCreds(); c != nil {
-			res["detected"] = true
-			res["plan"] = c.Plan
-			res["email"] = c.Email
-		} else {
-			res["reason"] = "not signed in to ChatGPT (Configuration → OpenAI)"
+	agents := hostagent.List()
+	res := map[string]any{
+		"provider": cfg.HostAgent,
+		"model":    cfg.HostModel,
+		"detected": false,
+		"agents":   agents,
+		"source":   "host",
+	}
+	var ready []hostagent.Info
+	for _, a := range agents {
+		if a.Ready {
+			ready = append(ready, a)
 		}
+	}
+	if len(ready) == 0 {
+		res["reason"] = "no host agent is signed in (Grok ~/.grok, Claude ~/.claude, Codex ~/.codex)"
 		writeJSON(w, http.StatusOK, res)
 		return
 	}
-	key := cfg.Ollama.BaseURL + "|" + cfg.Ollama.APIKey + "|" + cfg.Ollama.Model + "|" + cfg.Ollama.Effort
-	s.chatStatMu.Lock()
-	if s.chatStatRes != nil && s.chatStatKey == key &&
-		time.Since(s.chatStatAt) < time.Minute && r.URL.Query().Get("force") != "1" {
-		res := s.chatStatRes
-		s.chatStatMu.Unlock()
-		writeJSON(w, http.StatusOK, res)
-		return
-	}
-	s.chatStatMu.Unlock()
-
-	res := map[string]any{"provider": "ollama", "detected": false,
-		"model": cfg.Ollama.Model, "effort": cfg.Ollama.Effort, "base_url": cfg.Ollama.BaseURL}
-	switch {
-	case cfg.Ollama.BaseURL == "":
-		res["reason"] = "ollama.base_url is not configured"
-	case cfg.Ollama.APIKey == "" && strings.Contains(cfg.Ollama.BaseURL, "ollama.com"):
-		res["reason"] = "ollama.api_key is not configured (or set OLLAMA_API_KEY)"
-	default:
-		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-		defer cancel()
-		v, err := agent.Version(ctx, agent.Config{BaseURL: cfg.Ollama.BaseURL, APIKey: cfg.Ollama.APIKey})
-		if err != nil {
-			res["reason"] = err.Error()
-		} else {
-			res["detected"] = true
-			res["version"] = v
+	res["detected"] = true
+	pick := cfg.HostAgent
+	var info hostagent.Info
+	found := false
+	for _, a := range ready {
+		if a.ID == pick {
+			info = a
+			found = true
+			break
 		}
 	}
-	s.chatStatMu.Lock()
-	s.chatStatAt, s.chatStatKey, s.chatStatRes = time.Now(), key, res
-	s.chatStatMu.Unlock()
+	if !found {
+		info = ready[0]
+		pick = info.ID
+	}
+	res["provider"] = pick
+	if cfg.HostModel != "" {
+		res["model"] = cfg.HostModel
+	} else {
+		res["model"] = info.DefaultModel
+	}
+	res["auth"] = info.Auth
+	res["email"] = info.Email
+	res["source"] = info.Source
 	writeJSON(w, http.StatusOK, res)
 }
 
-// handleChatModels lists the models a backend offers, for the
-// Configuration window's model dropdowns. ?provider=ollama|openai picks
-// which backend to ask (default: the active chat provider).
+// handleChatModels lists models for a host agent (query ?provider=grok|claude|codex).
 func (s *Server) handleChatModels(w http.ResponseWriter, r *http.Request) {
-	cfg := s.Config()
 	provider := r.URL.Query().Get("provider")
 	if provider == "" {
-		provider = chatProvider(cfg)
+		provider = s.Config().HostAgent
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-	var models []string
-	var err error
-	switch provider {
-	case "openai":
-		var creds *codex.Creds
-		if creds, err = s.codexToken(ctx, false); err == nil {
-			models, err = codex.Models(ctx, creds.AccessToken, creds.AccountID)
+	for _, a := range hostagent.List() {
+		if a.ID == provider {
+			writeJSON(w, http.StatusOK, map[string]any{"provider": provider, "models": a.Models})
+			return
 		}
-	case "ollama":
-		if cfg.Ollama.BaseURL == "" {
-			err = errors.New("ollama.base_url is not configured")
-		} else {
-			models, err = agent.Models(ctx, agent.Config{BaseURL: cfg.Ollama.BaseURL, APIKey: cfg.Ollama.APIKey})
-		}
-	default:
-		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown provider %q", provider))
-		return
 	}
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"provider": provider, "models": models})
+	writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown host agent %q", provider))
 }
 
 // ---- session CRUD ----
@@ -183,6 +162,26 @@ func (s *Server) handleChatSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, sess)
+}
+
+func (s *Server) handleChatSessionPut(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := chat.Rename(s.chatDir(), r.PathValue("id"), req.Title); err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	sess, err := chat.Load(s.chatDir(), r.PathValue("id"))
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sess.Meta)
 }
 
 func (s *Server) handleChatSessionDelete(w http.ResponseWriter, r *http.Request) {
@@ -206,7 +205,9 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		Message string `json:"message"`
 		// VM pins a NEW session to one VM; ignored when Session is set —
 		// the pin is a property of the session, not of the request.
-		VM string `json:"vm"`
+		VM    string `json:"vm"`
+		Agent string `json:"agent"`
+		Model string `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
@@ -216,21 +217,18 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("message is required"))
 		return
 	}
-	provider := chatProvider(cfg)
-	if provider == "openai" {
-		if s.codexCreds() == nil {
-			writeErr(w, http.StatusConflict, errors.New("not signed in to ChatGPT (Configuration → OpenAI)"))
-			return
-		}
-	} else {
-		if cfg.Ollama.BaseURL == "" {
-			writeErr(w, http.StatusConflict, errors.New("ollama.base_url is not configured"))
-			return
-		}
-		if cfg.Ollama.APIKey == "" && strings.Contains(cfg.Ollama.BaseURL, "ollama.com") {
-			writeErr(w, http.StatusConflict, errors.New("ollama.api_key is not configured (or set OLLAMA_API_KEY)"))
-			return
-		}
+	agentID := strings.TrimSpace(req.Agent)
+	if agentID == "" {
+		agentID = cfg.HostAgent
+	}
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = cfg.HostModel
+	}
+	backend, rerr := hostagent.Resolve(agentID, model)
+	if rerr != nil {
+		writeErr(w, http.StatusConflict, rerr)
+		return
 	}
 
 	var sess *chat.Session
@@ -280,23 +278,34 @@ func (s *Server) handleChatSend(w http.ResponseWriter, r *http.Request) {
 	sess.Messages = append(sess.Messages, agent.Message{Role: "user", Content: req.Message})
 	save()
 
-	acfg := agent.Config{BaseURL: cfg.Ollama.BaseURL, APIKey: cfg.Ollama.APIKey,
-		Model: cfg.Ollama.Model, Effort: cfg.Ollama.Effort}
+	acfg := agent.Config{
+		BaseURL: backend.BaseURL, APIKey: backend.APIKey, Model: backend.Model,
+		ExtraHeaders: backend.ExtraHeaders,
+	}
+	if backend.Kind == "openai" {
+		acfg.Style = "openai"
+	}
 	system := agent.Message{Role: "system", Content: chatSystemPrompt(cfg.SSHUser, cfg.Cloudflare.Domain, sess.VM)}
 	tools := chatTools(sess.VM != "")
-	// callModel runs one turn on the configured backend. The ChatGPT path
-	// resolves (and auto-refreshes) the token per turn and retries once
-	// after a 401 in case the token was revoked out from under us.
+	// callModel runs one turn on the host agent. Codex uses the ChatGPT
+	// Responses API via ~/.codex tokens; everything else is OpenAI-compat
+	// or Ollama /api/chat.
 	callModel := func(ctx context.Context, msgs []agent.Message, onDelta func(string)) (*agent.Message, error) {
-		if provider != "openai" {
+		if backend.Kind != "codex" {
 			return agent.ChatStream(ctx, acfg, msgs, tools, onDelta)
 		}
-		creds, err := s.codexToken(ctx, false)
-		if err != nil {
-			return nil, err
+		// Prefer the host Codex CLI login (~/.codex); fall back to the
+		// daemon's own ~/.exe/openai.json if that's what signed in.
+		creds := hostCodexCreds()
+		if creds == nil {
+			var err error
+			creds, err = s.codexToken(ctx, false)
+			if err != nil || creds == nil {
+				return nil, errors.New("Codex is not signed in on this host (~/.codex/auth.json)")
+			}
 		}
 		ccfg := codex.ClientConfig{AccessToken: creds.AccessToken, AccountID: creds.AccountID,
-			Model: cfg.OpenAI.Model, Effort: cfg.OpenAI.Effort, SessionKey: sess.ID}
+			Model: backend.Model, Effort: cfg.OpenAI.Effort, SessionKey: sess.ID}
 		msg, err := codex.ChatStream(ctx, ccfg, msgs, tools, onDelta)
 		if errors.Is(err, codex.ErrUnauthorized) {
 			if creds, err = s.codexToken(ctx, true); err != nil {
@@ -519,6 +528,9 @@ func (s *Server) execChatTool(ctx context.Context, name string, args map[string]
 		s.PostNews("vm", "VM deleted", str("name")+" and its disk were removed.")
 		return "deleted"
 	case "bash":
+		if vm := str("vm"); vm != "" {
+			s.touchVM(vm)
+		}
 		t, err := target(tctx)
 		if err != nil {
 			return "error: " + err.Error()

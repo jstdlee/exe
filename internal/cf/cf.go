@@ -25,6 +25,8 @@ type Client struct {
 	TunnelID  string
 	Domain    string
 	HTTPC     *http.Client
+	// Base overrides api.cloudflare.com (tests).
+	Base string
 }
 
 func (c *Client) Configured() bool {
@@ -56,12 +58,21 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		}
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, apiBase+path, rd)
+	base := apiBase
+	if c.Base != "" {
+		base = strings.TrimRight(c.Base, "/")
+	}
+	req, err := http.NewRequestWithContext(ctx, method, base+path, rd)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Content-Type", "application/json")
+	// 6003 Invalid request headers: GET /user/tokens/verify rejects
+	// Content-Type on a body-less request. Only send it when we have JSON.
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.Token))
+	req.Header.Set("User-Agent", "exe")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	resp, err := c.httpc().Do(req)
 	if err != nil {
 		return err

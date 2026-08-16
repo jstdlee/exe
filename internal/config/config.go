@@ -24,6 +24,8 @@ type OllamaConfig struct {
 	// think option): "low"/"medium"/"high", "off" to disable thinking;
 	// empty uses the model's default.
 	Effort string `json:"effort,omitempty"`
+	// Temperature is sampling temperature; 0 means omit (provider default).
+	Temperature float64 `json:"temperature,omitempty"`
 }
 
 // OpenAIConfig configures the ChatGPT-subscription chat backend. The tokens
@@ -33,7 +35,34 @@ type OpenAIConfig struct {
 	Model string `json:"model"`
 	// Effort is the reasoning effort (minimal/low/medium/high/xhigh);
 	// empty uses the model's default.
-	Effort string `json:"effort,omitempty"`
+	Effort      string  `json:"effort,omitempty"`
+	Temperature float64 `json:"temperature,omitempty"`
+}
+
+// ClaudeConfig is the Anthropic / Claude Code API backend.
+type ClaudeConfig struct {
+	APIKey      string  `json:"api_key"`
+	Model       string  `json:"model"`
+	Effort      string  `json:"effort,omitempty"`
+	Temperature float64 `json:"temperature,omitempty"`
+}
+
+// GrokConfig is xAI Grok (OpenAI-compatible).
+type GrokConfig struct {
+	APIKey      string  `json:"api_key"`
+	BaseURL     string  `json:"base_url,omitempty"`
+	Model       string  `json:"model"`
+	Effort      string  `json:"effort,omitempty"`
+	Temperature float64 `json:"temperature,omitempty"`
+}
+
+// CustomLLMConfig is any OpenAI-compatible or Ollama-native URL.
+type CustomLLMConfig struct {
+	BaseURL     string  `json:"base_url"`
+	APIKey      string  `json:"api_key"`
+	Model       string  `json:"model"`
+	Effort      string  `json:"effort,omitempty"`
+	Temperature float64 `json:"temperature,omitempty"`
 }
 
 // GitHubConfig configures Sign in with GitHub — the OAuth device flow
@@ -110,12 +139,25 @@ type Config struct {
 	DefaultMemoryMB int `json:"default_memory_mb"`
 	DefaultDiskGB   int `json:"default_disk_gb"`
 
-	// ChatProvider picks the Chat window's LLM backend: "ollama" (default)
-	// or "openai" (a ChatGPT subscription via Sign in with ChatGPT).
+	// ChatProvider is kept for older config.json files; Chat now picks a
+	// host agent (HostAgent / HostModel) instead of embedding API keys.
 	ChatProvider string `json:"chat_provider,omitempty"`
+
+	// HostAgent is the host CLI Chat uses: grok, claude, or codex.
+	// Credentials come from ~/.grok, ~/.claude, ~/.codex — not this file.
+	HostAgent string `json:"host_agent,omitempty"`
+	// HostModel is the model id on that host agent.
+	HostModel string `json:"host_model,omitempty"`
+
+	// IdleStopMinutes stops a running VM after this many minutes with no
+	// terminal, job, agent, or SSH activity. 0 (default) never auto-stops.
+	IdleStopMinutes int `json:"idle_stop_minutes,omitempty"`
 
 	Ollama      OllamaConfig      `json:"ollama"`
 	OpenAI      OpenAIConfig      `json:"openai"`
+	Claude      ClaudeConfig      `json:"claude"`
+	Grok        GrokConfig        `json:"grok"`
+	CustomLLM   CustomLLMConfig   `json:"custom_llm"`
 	GitHub      GitHubConfig      `json:"github"`
 	Cloudflare  CloudflareConfig  `json:"cloudflare"`
 	Firecracker FirecrackerConfig `json:"firecracker"`
@@ -256,6 +298,11 @@ func (c *Config) Normalize() {
 	c.SSHListen = NormalizeListen(c.SSHListen)
 	c.AdvertiseHost = strings.TrimSpace(c.AdvertiseHost)
 	c.ChatProvider = strings.ToLower(strings.TrimSpace(c.ChatProvider))
+	c.HostAgent = strings.ToLower(strings.TrimSpace(c.HostAgent))
+	c.HostModel = strings.TrimSpace(c.HostModel)
+	if c.IdleStopMinutes < 0 {
+		c.IdleStopMinutes = 0
+	}
 	c.Ollama.Effort = strings.ToLower(strings.TrimSpace(c.Ollama.Effort))
 	c.OpenAI.Model = strings.TrimSpace(c.OpenAI.Model)
 	c.OpenAI.Effort = strings.ToLower(strings.TrimSpace(c.OpenAI.Effort))

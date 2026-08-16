@@ -142,6 +142,9 @@ func (s *Server) handleApps(w http.ResponseWriter, r *http.Request) {
 			if !e.IsDir() || !validAppName(e.Name()) || seen[e.Name()] {
 				continue
 			}
+			if e.Name() == "Editor" {
+				continue
+			}
 			m, err := s.loadAppMeta(root, e.Name())
 			if err != nil {
 				log.Printf("apps: skipping %s: %v", e.Name(), err)
@@ -208,16 +211,45 @@ type storedFile struct {
 }
 
 func handleFileList(w http.ResponseWriter, root string) {
+	handleFileListFiltered(w, root, false)
+}
+
+func handleWorkspaceFileList(w http.ResponseWriter, root string) {
+	handleFileListFiltered(w, root, true)
+}
+
+func hiddenRelPath(rel string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
+}
+
+func handleFileListFiltered(w http.ResponseWriter, root string, hideHidden bool) {
 	files := []storedFile{}
 	filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		info, err := d.Info()
 		if err != nil {
 			return nil
 		}
 		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return nil
+		}
+		if rel == "." {
+			return nil
+		}
+		if hideHidden && hiddenRelPath(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
 		if err != nil {
 			return nil
 		}
@@ -427,7 +459,7 @@ func (s *Server) handleWorkspaceList(w http.ResponseWriter, r *http.Request) {
 		handleDirList(w, s.workspaceDir(), r.URL.Query().Get("dir"))
 		return
 	}
-	handleFileList(w, s.workspaceDir())
+	handleWorkspaceFileList(w, s.workspaceDir())
 }
 
 // dirEntry is one row of a Finder-style folder listing.

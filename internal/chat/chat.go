@@ -99,6 +99,16 @@ func Load(dir, id string) (*Session, error) {
 	return &s, nil
 }
 
+// Rename sets the session title and persists it.
+func Rename(dir, id, title string) error {
+	s, err := Load(dir, id)
+	if err != nil {
+		return err
+	}
+	s.Title = Title(title)
+	return Save(dir, s)
+}
+
 func Delete(dir, id string) error {
 	p, err := path(dir, id)
 	if err != nil {
