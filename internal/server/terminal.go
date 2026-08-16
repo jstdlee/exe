@@ -9,7 +9,11 @@ import (
 
 	"github.com/coder/websocket"
 	"golang.org/x/crypto/ssh"
+
+	"exe/internal/sshexec"
 )
+
+func quoteGuest(s string) string { return sshexec.Quote(s) }
 
 // wsWriter serializes terminal output into binary WebSocket frames.
 type wsWriter struct {
@@ -38,38 +42,43 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := s.vmTarget(info)
-	dctx, dcancel := context.WithTimeout(r.Context(), 15*time.Second)
-	client, err := target.Dial(dctx)
-	dcancel()
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, err)
-		return
-	}
-
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 	if err != nil {
-		client.Close()
 		return
 	}
 	c.SetReadLimit(1 << 20)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer client.Close()
 	defer c.CloseNow()
+
+	out := &wsWriter{ctx: ctx, c: c}
+	dctx, dcancel := context.WithTimeout(ctx, 15*time.Second)
+	client, err := target.Dial(dctx)
+	dcancel()
+	if err != nil {
+		out.Write([]byte("\r\n\x1b[31m[exe] VM SSH unavailable: " + err.Error() + "\x1b[0m\r\n"))
+		c.Close(websocket.StatusTryAgainLater, "VM SSH unavailable")
+		return
+	}
+	defer client.Close()
 
 	sess, err := client.NewSession()
 	if err != nil {
+		out.Write([]byte("\r\n\x1b[31m[exe] could not open SSH session: " + err.Error() + "\x1b[0m\r\n"))
 		c.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
-	defer sess.Close()
+	defer func() {
+		_ = sess.Signal(ssh.SIGHUP)
+		_ = sess.Close()
+	}()
 
-	out := &wsWriter{ctx: ctx, c: c}
 	sess.Stdout = out
 	sess.Stderr = out
 	stdin, err := sess.StdinPipe()
 	if err != nil {
+		out.Write([]byte("\r\n\x1b[31m[exe] could not open terminal input: " + err.Error() + "\x1b[0m\r\n"))
 		c.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
@@ -79,10 +88,21 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 		ssh.TTY_OP_OSPEED: 14400,
 	}
 	if err := sess.RequestPty("xterm-256color", 24, 80, modes); err != nil {
+		out.Write([]byte("\r\n\x1b[31m[exe] could not allocate VM PTY: " + err.Error() + "\x1b[0m\r\n"))
 		c.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
-	if err := sess.Shell(); err != nil {
+	// ?run=claude|git|… starts that program as the PTY so the TUI owns
+	// stdin from the first byte (typing an installer into a login shell
+	// left agents deaf and leftover keystrokes in the buffer).
+	if script := GuestRunScript(r.URL.Query().Get("run")); script != "" {
+		if err := sess.Start("bash -lc " + quoteGuest(script)); err != nil {
+			out.Write([]byte("\r\n\x1b[31m[exe] could not start VM tool: " + err.Error() + "\x1b[0m\r\n"))
+			c.Close(websocket.StatusInternalError, err.Error())
+			return
+		}
+	} else if err := sess.Shell(); err != nil {
+		out.Write([]byte("\r\n\x1b[31m[exe] could not start VM shell: " + err.Error() + "\x1b[0m\r\n"))
 		c.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
@@ -100,6 +120,7 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 		}
 		switch typ {
 		case websocket.MessageBinary:
+			s.touchVM(name)
 			if _, err := stdin.Write(data); err != nil {
 				return
 			}
@@ -108,7 +129,10 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 				Resize []int `json:"resize"`
 			}
 			if json.Unmarshal(data, &msg) == nil && len(msg.Resize) == 2 {
-				sess.WindowChange(msg.Resize[1], msg.Resize[0])
+				cols, rows := msg.Resize[0], msg.Resize[1]
+				if cols >= 2 && rows >= 2 {
+					sess.WindowChange(rows, cols)
+				}
 			}
 		}
 	}

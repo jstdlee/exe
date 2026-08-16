@@ -250,6 +250,19 @@ func (s *Server) handleNotesPut(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }
 
+func (s *Server) handleNotesDelete(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := s.VMs.Get(r.Context(), name); err != nil {
+		writeErr(w, errCode(err), err)
+		return
+	}
+	if err := os.Remove(s.notesPath(name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
 func (s *Server) handleConfigGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Config())
 }

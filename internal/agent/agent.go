@@ -28,6 +28,12 @@ type Config struct {
 	// "low"/"medium"/"high" pick a thinking level, "off" disables thinking,
 	// empty leaves the model's default (and sends nothing).
 	Effort string
+	// Temperature is forwarded as options.temperature when > 0.
+	Temperature float64
+	// ExtraHeaders are set on OpenAI-compatible requests (Claude oauth, etc.).
+	ExtraHeaders map[string]string
+	// Style is "openai" for /v1/chat/completions; empty uses Ollama /api/chat.
+	Style string
 }
 
 type Logf func(format string, args ...any)
@@ -93,8 +99,9 @@ type chatRequest struct {
 	Tools    []Tool    `json:"tools,omitempty"`
 	// Think is Ollama's thinking control: a level string or false; nil
 	// (omitted) keeps the model's default.
-	Think  any  `json:"think,omitempty"`
-	Stream bool `json:"stream"`
+	Think   any            `json:"think,omitempty"`
+	Stream  bool           `json:"stream"`
+	Options map[string]any `json:"options,omitempty"`
 }
 
 type ChatResponse struct {
@@ -222,6 +229,9 @@ func Models(ctx context.Context, cfg Config) ([]string, error) {
 // whole exchange (including streaming reads) to 5 minutes.
 func chatHTTP(ctx context.Context, cfg Config, msgs []Message, tools []Tool, stream bool) (*http.Response, context.CancelFunc, error) {
 	creq := chatRequest{Model: cfg.Model, Messages: msgs, Tools: tools, Stream: stream}
+	if cfg.Temperature > 0 {
+		creq.Options = map[string]any{"temperature": cfg.Temperature}
+	}
 	switch cfg.Effort {
 	case "":
 	case "off", "false":
@@ -295,6 +305,9 @@ func Chat(ctx context.Context, cfg Config, msgs []Message, tools []Tool) (*ChatR
 // content fragment as it arrives, and returns the fully assembled message
 // (content concatenated, tool calls collected across chunks).
 func ChatStream(ctx context.Context, cfg Config, msgs []Message, tools []Tool, onDelta func(string)) (*Message, error) {
+	if cfg.Style == "openai" {
+		return ChatStreamOpenAI(ctx, cfg, msgs, tools, onDelta)
+	}
 	resp, cancel, err := chatHTTP(ctx, cfg, msgs, tools, true)
 	if err != nil {
 		return nil, err

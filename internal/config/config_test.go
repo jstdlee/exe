@@ -38,3 +38,21 @@ func TestLoadPreservesFirecrackerDefaultsForExistingConfig(t *testing.T) {
 		t.Fatalf("kernel URL %q does not select %s", config.Firecracker.KernelURL, wantArch)
 	}
 }
+
+func TestIdleStopAndHostAgentNormalize(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("EXE_HOME", dir)
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"idle_stop_minutes":-5,"host_agent":" Grok ","host_model":" grok-4.6 "}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.IdleStopMinutes != 0 {
+		t.Fatalf("idle = %d", cfg.IdleStopMinutes)
+	}
+	if cfg.HostAgent != "grok" || cfg.HostModel != "grok-4.6" {
+		t.Fatalf("host %q %q", cfg.HostAgent, cfg.HostModel)
+	}
+}

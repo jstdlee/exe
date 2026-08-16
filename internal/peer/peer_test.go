@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+func TestEngineStopIsIdempotent(t *testing.T) {
+	e := &Engine{stop: make(chan struct{})}
+	e.Stop()
+	e.Stop()
+}
+
 func TestManifestBumpApplyPersist(t *testing.T) {
 	dir := t.TempDir()
 	m, err := LoadManifest(dir)

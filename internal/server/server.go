@@ -26,6 +26,7 @@ import (
 	"exe/internal/config"
 	"exe/internal/github"
 	"exe/internal/hostinfo"
+	"exe/internal/hoststats"
 	"exe/internal/peer"
 	"exe/internal/proxy"
 	"exe/internal/sshexec"
@@ -99,12 +100,19 @@ type Server struct {
 	// One-writer guard for this node's Newsfeed journal (see newsfeed.go).
 	newsMu  sync.Mutex
 	newsSeq int64
+
+	// Last activity per VM for idle-stop (see idle.go).
+	idleMu sync.Mutex
+	idleAt map[string]time.Time
+
+	hostStats hoststats.Sampler
 }
 
 func New(cfg *config.Config, vms vmm.Manager, px *proxy.Proxy, keyPath, stateDir string) *Server {
-	s := &Server{VMs: vms, Proxy: px, KeyPath: keyPath, StateDir: stateDir}
+	s := &Server{VMs: vms, Proxy: px, KeyPath: keyPath, StateDir: stateDir, idleAt: map[string]time.Time{}}
 	s.cfg.Store(cfg)
 	s.ensureStateDirs()
+	s.startIdleWatcher()
 	return s
 }
 
@@ -131,6 +139,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/vms/{name}/transcripts/{id}", s.handleTranscript)
 	mux.HandleFunc("GET /v1/vms/{name}/notes", s.handleNotesGet)
 	mux.HandleFunc("PUT /v1/vms/{name}/notes", s.handleNotesPut)
+	mux.HandleFunc("DELETE /v1/vms/{name}/notes", s.handleNotesDelete)
 	mux.HandleFunc("GET /v1/apps", s.handleApps)
 	mux.HandleFunc("GET /v1/apps/events", s.handleAppDataEvents)
 	mux.HandleFunc("GET /v1/apps/{app}/data", s.handleAppDataList)
@@ -147,8 +156,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/newsfeed/{id}", s.handleNewsfeedDelete)
 	mux.HandleFunc("GET /v1/chat/status", s.handleChatStatus)
 	mux.HandleFunc("GET /v1/chat/models", s.handleChatModels)
+	mux.HandleFunc("GET /v1/host/agents", s.handleHostAgents)
+	mux.HandleFunc("GET /v1/browse", s.handleBrowse)
+	mux.HandleFunc("POST /v1/browse", s.handleBrowse)
+	mux.HandleFunc("GET /v1/browse/{path...}", s.handleBrowse)
+	mux.HandleFunc("POST /v1/browse/{path...}", s.handleBrowse)
+	mux.HandleFunc("HEAD /v1/browse/{path...}", s.handleBrowse)
 	mux.HandleFunc("GET /v1/chat/sessions", s.handleChatSessions)
 	mux.HandleFunc("GET /v1/chat/sessions/{id}", s.handleChatSession)
+	mux.HandleFunc("PUT /v1/chat/sessions/{id}", s.handleChatSessionPut)
 	mux.HandleFunc("DELETE /v1/chat/sessions/{id}", s.handleChatSessionDelete)
 	mux.HandleFunc("POST /v1/chat/send", s.handleChatSend)
 	mux.HandleFunc("GET /v1/vms/{name}/publish/scan", s.handlePublishScan)
@@ -168,6 +184,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/daemon/restart", s.handleDaemonRestart)
 	mux.HandleFunc("GET /v1/tailscale", s.handleTailscale)
 	mux.HandleFunc("GET /v1/hostinfo", s.handleHostInfo)
+	mux.HandleFunc("GET /v1/host/stats", s.handleHostStats)
+	mux.HandleFunc("GET /v1/desktop", s.handleDesktopGet)
+	mux.HandleFunc("PUT /v1/desktop", s.handleDesktopPut)
+	mux.HandleFunc("GET /v1/desktop/wallpaper", s.handleDesktopWallpaperGet)
+	mux.HandleFunc("PUT /v1/desktop/wallpaper", s.handleDesktopWallpaperPut)
+	mux.HandleFunc("DELETE /v1/desktop/wallpaper", s.handleDesktopWallpaperDelete)
 	mux.HandleFunc("GET /v1/routes", s.handleRoutes)
 	mux.HandleFunc("DELETE /v1/routes/{host}", s.handleRouteDelete)
 	mux.HandleFunc("GET /v1/logs", s.handleLogs)
@@ -187,6 +209,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /v1/peer/file/{app}/{path...}", s.handlePeerFilePut)
 	mux.Handle("GET /apps/", s.appStatic())
 	mux.Handle("GET /ui/", uiStatic)
+	s.registerEnvRoutes(mux)
 	mux.HandleFunc("GET /", s.handleUI)
 	return s.auth(mux)
 }
@@ -197,7 +220,7 @@ func (s *Server) Handler() http.Handler {
 // instead, and expose nothing beyond app-data sync.
 func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/v1/peer/") {
+		if strings.HasPrefix(r.URL.Path, "/v1/peer/") || strings.HasPrefix(r.URL.Path, "/dl/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -206,6 +229,11 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			if got == "" {
 				// Browsers cannot set headers on WebSocket connects.
 				got = r.URL.Query().Get("token")
+			}
+			if got == "" && strings.HasPrefix(r.URL.Path, "/v1/browse") {
+				if c, err := r.Cookie(browseCookie); err == nil {
+					got = c.Value
+				}
 			}
 			if got != tok {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -274,6 +302,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errCode(err), err)
 		return
 	}
+	s.touchVM(info.Name)
 	s.PostNews("vm", "VM created", vmNewsLine(spec))
 	writeJSON(w, http.StatusCreated, info)
 }
@@ -293,6 +322,7 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errCode(err), err)
 		return
 	}
+	s.touchVM(info.Name)
 	writeJSON(w, http.StatusOK, info)
 }
 
@@ -375,6 +405,7 @@ func (s *Server) agentRun(ctx context.Context, info *vmm.Info, name, prompt, mod
 	}
 	s.activeRuns.Store(rec.ID(), struct{}{})
 	defer s.activeRuns.Delete(rec.ID())
+	s.touchVM(name)
 	logf := func(format string, args ...any) {
 		line := fmt.Sprintf(format, args...)
 		rec.Append(line)
@@ -676,6 +707,10 @@ func (s *Server) handleHostInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"hostname": host, "machine": hostinfo.Model(), "lan_ip": lan, "tailscale_ip": ts,
 	})
+}
+
+func (s *Server) handleHostStats(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.hostStats.Sample(s.StateDir))
 }
 
 func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request) {

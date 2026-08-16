@@ -7,15 +7,41 @@ through your Cloudflare Tunnel. This desktop is its control panel — and
 everything you see here can also be driven from a terminal or by an agent
 over HTTP and SSH.
 
+## Context, permissions and exposed ports
+
+exe has two security contexts:
+
+- Host windows and apps — Workspace, Terminal, Notes, Browser, Chat,
+  Configuration and this desktop — run against the host daemon and host files
+  under `~/.exe`. They are not inside a VM sandbox.
+- VM windows — Terminal, Agent, Services, Expose, Transcripts and VM Notes —
+  act on one named guest. Agents get passwordless sudo inside that guest; the
+  VM boundary is the sandbox.
+
+Treat the UI/API listener as a control-plane port. If `listen` is bound to
+`127.0.0.1`, only local browsers can reach it. If it is bound to a LAN IP,
+`0.0.0.0`, or a Tailscale IP, every device on that network path can try to
+reach it, so set `api_token` first and keep the token out of screenshots,
+logs and shared browser profiles. Tailscale limits reachability to your
+tailnet; LAN binding exposes it to the local network; `0.0.0.0` exposes it on
+every host interface.
+
+Publishing a VM service is a separate exposure path. Expose/Cloudflare Tunnel
+routes traffic from the public hostname to exe's host reverse proxy
+(`proxy_listen`) and then into the VM port. The VM service itself should still
+have application authentication if it handles private data. If you route the UI
+or a VM service through Cloudflare, configure Cloudflare Access or an equivalent
+policy when it should not be public.
+
 ## The desktop
 
 The menu bar works like the classic Mac it resembles:
 
-- **File** — New VM…, Upload to Workspace…, Close Window, Refresh.
-- **Windows** — reopen the core windows: Virtual Machines, Chat, Newsfeed,
-  Configuration, Daemon Log.
+- **File** — Upload to Workspace…, Close Window, the live open-window list,
+  Show shortcuts for core windows, Refresh, Set API Token….
+- **Virtual Machine** — New VM… and reopen the Virtual Machines window.
 - **Special** — Join… (pair another exe machine), Cloudflare Status and
-  Setup Wizard, Set API Token….
+  Setup Wizard.
 - **Help** — this page, and the Agent Skill Guide for handing exe to a
   coding agent.
 
@@ -32,8 +58,10 @@ daemon and mirrored live to every browser looking at this desk, so dragging
 a window here moves it on your other screens too.
 
 On a phone the desktop becomes a home screen of icons and windows go
-fullscreen, one at a time; closing a window walks back through the stack
-like a phone's back button.
+fullscreen, one at a time. The mobile **Windows** menu sits beside **Menu**
+for quick switching, and minimizing collapses a window to a visible bar
+instead of hiding it. Closing a window walks back through the stack like a
+phone's back button.
 
 ## Virtual machines
 
@@ -49,11 +77,13 @@ Double-click a VM in the list to open its window. The tabs:
   plus the routes already published to the web. Servers must bind
   `0.0.0.0` (not `127.0.0.1`) to show up here or be exposable.
 - **Terminal** — a full SSH terminal in the browser.
-- **Agent** — tell the built-in coding agent what to build; it gets a shell
-  in this VM and streams its work live.
+- **Agent & Tools** — launch code-agent CLIs and developer tools inside this
+  VM terminal, or use the built-in coding agent.
 - **Expose** — publish a VM port to an HTTPS subdomain (see below).
-- **Transcripts** — every agent run is recorded and replayable, including
-  runs started from the command line.
+- **Transcripts** — built-in Agent runs are recorded and replayable,
+  including built-in runs started from the command line. VM CLI agents
+  launched from Agent & Tools keep their own history inside the guest and do
+  not create host transcripts.
 - **Notes** — free-form notes about the VM, saved automatically. Agents are
   told to read these before working in an unfamiliar VM, so write down what
   runs where.
@@ -80,20 +110,27 @@ leave on a LAN.
 
 ## The coding agent
 
-Point exe at Ollama in **Windows → Configuration** (`ollama.base_url` and
+Point exe at Ollama in **File → Show → Configuration** (`ollama.base_url` and
 `ollama.model`; `ollama.effort` sets the thinking effort on models that
 support it, or `off` to disable thinking). A local signed-in Ollama at `http://127.0.0.1:11434` can
 use cloud models like `glm-5.2:cloud` with no API key; `https://ollama.com`
 needs one. Then:
 
-- The **Agent** tab in a VM window runs the agent inside that VM. It can
-  install packages, write code and start services — it has passwordless
-  sudo *inside the VM*, and the VM is the sandbox boundary.
+- The **Agent & Tools** tab in a VM window launches code-agent CLIs and dev
+  tools inside that VM. CLI agents keep credentials/history in the guest and
+  do not create host transcripts. The built-in Agent can install packages,
+  write code and start services; it has passwordless sudo *inside the VM*,
+  and the VM is the sandbox boundary.
+  Code-agent CLI buttons include Codex, Gemini CLI, OpenCode, Aider, Qwen
+  Code, Pi and Claude. Developer-tool buttons include git, build-essential,
+  Python, Node, Docker, Go, Rust, jq, ripgrep, fd, fzf, tmux, Neovim, htop,
+  gh, CMake, SQLite, zip/unzip, tree, rsync, uv, pnpm, Bun, lazygit,
+  hyperfine, direnv, just, bat, eza, HTTPie, yq and delta.
 - The **Chat** icon and window appear once a chat backend is usable: a
   conversation that can see and drive your whole VM cloud.
 
 The Chat window can also run on a **ChatGPT subscription** instead of
-Ollama: in **Windows → Configuration → OpenAI**, click **Sign in with
+Ollama: in **File → Show → Configuration → OpenAI**, click **Sign in with
 ChatGPT…** (the OAuth flow the Codex CLI uses — no API key), set
 `chat_provider` to `openai`, pick a model (`gpt-5.4`, `gpt-5.4-codex`, …)
 plus an optional reasoning effort, and Save. The browser sign-in redirects to `localhost:1455`; the daemon
@@ -150,13 +187,17 @@ ever holding a token, on disk or in memory.
 ## Workspace and files
 
 The **Workspace** is `~/.exe/workspace` on this machine: a shared folder
-where you, agents and apps exchange files. The desktop icon opens a Finder
-view — double-click text files to edit them in place, images to view them;
-right-click for Get Info and Download; right-click a window's empty space
-for New Folder, New Text File and Upload; **File → Upload to Workspace…**
-brings files in from this browser. Files can also be dragged from your
-computer onto the desktop (lands in the Workspace root), onto a Finder
-window (lands in its folder), or onto a folder icon (lands in that folder).
+where you, agents and apps exchange files. The desktop icon opens a tree
+view — open folders in the tree, double-click text files to edit them in
+place, and double-click images to view them. Right-click a tree node for
+Open, Edit, Move To Trash, Get Info, Duplicate and Download; New Folder,
+New Text File and Upload target the clicked folder, or the parent folder
+when the clicked node is a file. Right-click the tree's empty space to add
+items to that window's folder. **File → Upload to Workspace…** brings files
+in from this browser. Files can also be dragged from your computer onto the
+desktop (lands in the Workspace root), onto a Workspace window (lands in its
+folder), onto a folder row (lands in that folder), or onto a file row (lands
+beside that file).
 New files brought in this way are announced on the Newsfeed, so every desk
 in the mesh sees them arrive; overwriting an existing file stays quiet.
 
@@ -181,19 +222,22 @@ finished work or problems show up on every desk.
 
 ## Configuration
 
-**Windows → Configuration** edits `~/.exe/config.json` in place; most fields
+**File → Show → Configuration** edits `~/.exe/config.json` in place; most fields
 hot-reload on Save, and fields marked `*` take effect after a daemon
 restart. Highlights:
 
 - `listen` — the address of this UI and API. Bind it to your Tailscale IP
   to use exe from your phone.
 - `api_token` — set it before listening beyond localhost; every API call
-  then needs it. Paste it into **Special → Set API Token…** in each browser
-  (it is kept in localStorage).
+  then needs it. Paste it into **File → Set API Token…** in each browser
+  (or **Menu → Set API Token…** on mobile; it is kept in localStorage).
 - `ssh_user` — the user created in every VM (default `dev`).
-- `ollama.*`, `chat_provider`, `openai.model`, `cloudflare.*` — the agent
-  and publishing sections above.
+- `idle_stop_minutes` — stop a running VM after N minutes with no
+  terminal, job or SSH (`0` = never).
+- Chat has no LLM tab: it uses host agents already signed in
+  (`~/.grok`, `~/.claude`, `~/.codex`). Pick agent + model in the Chat window.
+- `cloudflare.*` — publishing / Expose.
 
-**Windows → Daemon Log** streams the daemon's own log when something needs
+**File → Show → Daemon Log** streams the daemon's own log when something needs
 a closer look. This page lives at `/docs.md`, and the machine-readable
 counterpart for agents at `/skill.md`.
