@@ -60,9 +60,13 @@ a { color: #202a87; text-decoration: underline; }
   display: inline-block; }
 #clock { display: flex; align-items: center; padding: 0 12px; font-weight: bold;
   border-left: 1px solid var(--g600); box-shadow: inset 1px 0 0 #fff; }
-#host-res { display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 11px;
-  border-left: 1px solid var(--g600); box-shadow: inset 1px 0 0 #fff; white-space: nowrap; }
-#host-res .hot { color: var(--red); font-weight: bold; }
+.host-res-btn { display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 11px;
+  border-left: 1px solid var(--g600); box-shadow: inset 1px 0 0 #fff; white-space: nowrap;
+  background: none; border-top: 0; border-right: 0; border-bottom: 0; font: inherit; color: inherit; cursor: pointer; }
+.host-res-btn:hover { background: var(--hl); color: #fff; }
+.host-res-btn .hot { color: var(--red); font-weight: bold; }
+.host-res-btn:hover .hot { color: #fff; }
+body.mobile #host-res { display: none; }
 .res-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
   padding: 4px 8px; background: var(--g300); border-bottom: 1px solid var(--black);
   font-size: 11px; }
@@ -116,7 +120,8 @@ body.custom-desk { background-image: none; }
 body.win-drag iframe, body.win-drag .app-frame { pointer-events: none; }
 .msg .mermaid { margin: 8px 0; background: #fff; border: 1px solid var(--black); padding: 6px; overflow: auto; }
 .msg .mermaid img { max-width: 100%; display: block; }
-#a-launchers { flex-wrap: nowrap; overflow-x: auto; }
+#a-launchers { display: flex; flex-wrap: wrap; gap: 6px; }
+body.mobile #a-launchers { flex-wrap: wrap; }
 .tool-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .tool-grid .ghost.sm { min-width: 88px; }
 /* integer line-height: the inherited 1.45 makes the label 15.9375px tall,
@@ -426,6 +431,7 @@ button.ghost.danger { color: #7a1010; }
 button.ghost.armed { background: var(--red); color: #fff;
   box-shadow: inset 1px 1px 0 #e88, inset -1px -1px 0 #911; }
 button.ghost.sm { padding: 1px 8px; font-size: 10px; border-radius: 3px; }
+button.ghost.sm.dis { opacity: 0.45; pointer-events: none; }
 input, textarea, select {
   background: #fff; color: var(--black); border: 1px solid var(--black); border-radius: 0;
   padding: 3px 5px; font: inherit; font-size: 12px;
@@ -909,7 +915,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="menu" data-m="special">Cloudflare</div>
   <div class="menu" data-m="help">Help</div>
   <div class="mb-right">
-    <div id="host-res" title="Host resources"></div>
+    <button id="host-res" title="Host resources — opens Host Monitor" class="host-res-btn"></button>
     <button id="cf-dot" title="Cloudflare status — checking…">
       <span id="cf-dot-circle" class="dot"></span><span>Cloudflare</span>
     </button>
@@ -1075,7 +1081,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
 
           <div class="pane" id="pane-term" hidden>
             <div class="row">
-              <span class="muted" id="term-hint">Not connected. Copy/paste: hold Ctrl, select, right-click to copy — Ctrl+right-click pastes.</span>
+              <span class="muted" id="term-hint">Not connected. Copy/paste: right-click (or long-press) for the menu; Ctrl+C/V also work.</span>
               <button class="ghost sm" id="term-pop" style="margin-left:auto">Open window</button>
               <button class="ghost sm" id="term-open">Connect here</button>
               <button class="ghost sm" id="term-close" hidden>Disconnect</button>
@@ -1117,11 +1123,15 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
 
           <div class="pane" id="pane-tr" hidden>
             <div class="muted" style="margin-bottom:8px">
-              Transcripts are the host-side log of built-in vibecode / Agent
-              runs in this VM (prompt, model, stream). They live next to the
-              disk and survive stop/start. Click a row to replay. Named guest
-              CLIs (claude / codex / gemini / …) keep their own history inside
-              the VM and do not create host transcripts.
+              Transcripts are saved by the daemon whenever it runs the
+              built-in Agent inside this VM. Each row shows the prompt, model,
+              and streamed output. They are stored on the host next to the VM
+              disk, so they survive stop/start. Click a row to replay the log.
+              Runs started manually from a VM terminal using
+              <span class="mono">claude</span>,
+              <span class="mono">codex</span>,
+              <span class="mono">gemini</span>, etc. keep their own
+              history inside the guest and are not listed here.
             </div>
             <div id="t-list"><span class="muted">No built-in Agent runs yet — VM CLI agent launches are not logged here.</span></div>
             <pre class="out" id="t-log" hidden></pre>
@@ -1414,6 +1424,24 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
     </div>
   </div>
 
+  <!-- Host Monitor -->
+  <div class="window" id="win-host" style="left:80px; top:50px; width:520px;" hidden>
+    <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
+      <div class="title">Host Monitor</div>
+      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+    <div class="win-frame paper">
+      <div id="host-panel" class="res-bar" title="Host resources — this machine, not a VM"></div>
+      <div class="win-body">
+        <div class="pane-head">Top processes</div>
+        <table>
+          <thead><tr><th>PID</th><th>CPU %</th><th>Mem %</th><th>Command</th></tr></thead>
+          <tbody id="host-procs"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="statusbar"><span id="host-count">…</span><span style="flex:1"></span><button class="ghost sm" id="host-refresh">Refresh</button></div>
+    </div>
+  </div>
+
   <!-- Trash -->
   <div class="window" id="win-trash" style="left:340px; top:180px; width:300px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
@@ -1661,6 +1689,22 @@ if (IS_MOBILE && /iPhone|iPod|iPad/i.test(navigator.userAgent))
 // icons and list rows open on double-click on the desktop, single tap on
 // mobile — double-tap is the browser's zoom gesture and fires unreliably
 const tapOpen = (n, fn) => n.addEventListener(IS_MOBILE ? "click" : "dblclick", fn);
+function addLongPressMenu(n, menuFn) {
+  if (!IS_MOBILE) return;
+  let touchStart = null, longTimer = null;
+  const clear = () => { touchStart = null; if (longTimer) { clearTimeout(longTimer); longTimer = null; } };
+  n.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1) return;
+    touchStart = e.touches[0];
+    longTimer = setTimeout(() => {
+      const t = touchStart; if (!t) return;
+      menuFn(t.clientX, t.clientY);
+      clear();
+    }, 650);
+  }, { passive: true });
+  n.addEventListener("touchend", clear, { passive: true });
+  n.addEventListener("touchmove", clear, { passive: true });
+}
 function el(tag, attrs = {}, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -1896,11 +1940,16 @@ function initWindow(w) {
       if (w.classList.contains("maximized")) {
         w.classList.remove("maximized");
         if (w._max) {
-          Object.assign(w.style, w._max.style);
+          ["left","top","width","height"].forEach(k => { w.style[k] = w._max.style[k]; });
           w._max = null;
         }
       } else {
-        w._max = { style: { left: w.style.left, top: w.style.top, width: w.style.width, height: w.style.height } };
+        w._max = { style: {
+          left: w.style.left || (w.offsetLeft + "px"),
+          top: w.style.top || (w.offsetTop + "px"),
+          width: w.style.width || (w.offsetWidth + "px"),
+          height: w.style.height || (w.offsetHeight + "px")
+        }};
         w.classList.add("maximized");
         w.style.left = ""; w.style.top = ""; w.style.width = ""; w.style.height = "";
       }
@@ -2705,6 +2754,10 @@ function renderIcons(vms) {
       ic.classList.add("sel");
     });
     tapOpen(ic, () => openAppWin(app.name));
+    addLongPressMenu(ic, (x, y) => showCtxMenu(x, y, [
+      { label: "Open", act: () => openAppWin(app.name) },
+      { label: "Get Info", act: () => toast(app.title || app.name) },
+    ]));
     box.append(ic);
     placeDicon(ic, "app:" + app.name, slot++);
   }
@@ -2971,6 +3024,11 @@ function renderTreeNode(w, base, en, depth) {
     showTreeCtxMenu(e.clientX, e.clientY, w, en, rel, node, depth);
     if (IS_MOBILE) renderFinderToolbar(w);
   });
+  addLongPressMenu(row, (x, y) => {
+    selectTreeRow(w.querySelector(".workspace-tree"), row);
+    showTreeCtxMenu(x, y, w, en, rel, node, depth);
+    renderFinderToolbar(w);
+  });
   return node;
 }
 async function toggleTreeNode(w, node, rel, depth) {
@@ -3027,7 +3085,7 @@ function renderFinderToolbar(w) {
   const sel = selectedFinderEntry(w);
   const selDir = sel ? (sel.en.dir ? sel.rel : wsParent(sel.rel)) : base;
   const dirOnly = !sel || sel.en.dir;
-  const btn = (label, dis, act) => el("button", { class: "ghost sm", disabled: dis ? "" : null, onclick: act }, label);
+  const btn = (label, dis, act) => el("button", { class: "ghost sm" + (dis ? " dis" : ""), onclick: dis ? null : act }, label);
   bar.replaceChildren(
     btn("New Folder", false, () => nfOpen(w, true, base)),
     btn("New Text", false, () => nfOpen(w, false, base)),
@@ -3482,13 +3540,11 @@ function renderVMList(rawVMs) {
     if (cells[sc]) cells[sc].classList.add("sortcol");
     const row = el("tr", { class: "vm-row" }, ...cells, actions);
     tapOpen(row, () => openVM(vm.name));
-    // desktop: the shared OS 9 contextual menu; mobile keeps the inline
-    // buttons. The row stays highlighted while its menu is up.
-    if (!IS_MOBILE) row.addEventListener("contextmenu", e => {
-      e.preventDefault();
+    // desktop: right-click context menu; mobile: long-press context menu.
+    const vmCtx = (x, y) => {
       row.classList.add("ctx");
       const running = vm.state === "running";
-      showCtxMenu(e.clientX, e.clientY, [
+      showCtxMenu(x, y, [
         { label: "Open", act: () => openVM(vm.name) },
         { label: "Open Terminal", act: () => openVM(vm.name, "term") },
         "-",
@@ -3502,7 +3558,12 @@ function renderVMList(rawVMs) {
         "-",
         { label: "Delete", act: () => del.click() },
       ], () => row.classList.remove("ctx"));
+    };
+    if (!IS_MOBILE) row.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      vmCtx(e.clientX, e.clientY);
     });
+
     tb.append(row);
   }
 }
@@ -3597,6 +3658,18 @@ function renderHostStats(st) {
       " w " + fmtRate(st.disk_write_bps) + " · net ↓ " + fmtRate(st.net_rx_bps) +
       " ↑ " + fmtRate(st.net_tx_bps) + " · " + fmtBytesShort(free) + " of " + fmtBytesShort(tot) + " free";
   }
+  const panel = $("#host-panel");
+  if (panel) {
+    const item = (label, val, extra, hot) =>
+      el("span", { class: "res-item" + (hot ? " hot" : "") },
+        el("span", { class: "lbl" }, label), extra || "", el("span", { class: "val" }, val));
+    panel.replaceChildren(
+      item("CPU", cpu.toFixed(0) + "%", resMeter(cpu, cpuHot), cpuHot),
+      item("Disk I/O", "↓ " + fmtRate(st.disk_read_bps) + "  ↑ " + fmtRate(st.disk_write_bps)),
+      item("Net", "↓ " + fmtRate(st.net_rx_bps) + "  ↑ " + fmtRate(st.net_tx_bps)),
+      item("Free", fmtBytesShort(free) + (tot ? " / " + fmtBytesShort(tot) : ""),
+        tot ? resMeter(usedPct, diskHot) : null, diskHot));
+  }
   const bar = $("#vm-res");
   if (bar) {
     const item = (label, val, extra, hot) =>
@@ -3613,6 +3686,31 @@ function renderHostStats(st) {
 async function pollHostStats() {
   try { renderHostStats(await j("/v1/host/stats")); } catch (e) {}
 }
+async function loadHostProcs() {
+  const tb = $("#host-procs");
+  if (!tb) return;
+  try {
+    const procs = await j("/v1/host/procs");
+    tb.replaceChildren();
+    if (!procs.length) {
+      tb.append(el("tr", {}, el("td", { colspan: "4", class: "muted" }, "No process data")));
+      $("#host-count").textContent = "0 processes";
+      return;
+    }
+    for (const p of procs) {
+      tb.append(el("tr", {},
+        el("td", { class: "mono" }, String(p.pid)),
+        el("td", {}, (p.cpu || 0).toFixed(1) + "%"),
+        el("td", {}, (p.mem || 0).toFixed(1) + "%"),
+        el("td", { class: "mono" }, p.cmd || "—")));
+    }
+    $("#host-count").textContent = procs.length + " process" + (procs.length === 1 ? "" : "es");
+  } catch (e) {
+    tb.replaceChildren(el("tr", {}, el("td", { colspan: "4", class: "muted" }, e.message)));
+  }
+}
+$("#host-res").onclick = () => { openWin("#win-host"); loadHostProcs(); };
+$("#host-refresh").onclick = loadHostProcs;
 $("#vms-new").onclick = ACTIONS.newvm;
 $("#vms-refresh").onclick = ACTIONS.refresh;
 $("#c-cancel").onclick = () => closeWin($("#win-newvm"));
@@ -3822,47 +3920,38 @@ function wireXtermClipboard(term, box) {
     if (!text) return;
     term.paste(text);
   };
-  // Ctrl+right-click is a user gesture: try the clipboard API, then
-  // execCommand('paste') (works on http:// LAN where readText is blocked).
-  // Never open a modal — if both fail, the next Ctrl+V still hits the box.
-  const pasteDirect = async () => {
-    if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
-      try { await pasteInto(await navigator.clipboard.readText()); return true; } catch (e) {}
+  const readClipboard = async () => {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      try { return await navigator.clipboard.readText(); } catch (e) {}
     }
-    const ta = document.createElement("textarea");
-    ta.setAttribute("autocomplete", "off");
-    ta.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;z-index:99999";
-    document.body.append(ta);
-    ta.focus();
-    let got = "";
-    const onPaste = e => {
-      e.preventDefault();
-      got = (e.clipboardData && e.clipboardData.getData("text/plain")) || "";
-    };
-    ta.addEventListener("paste", onPaste);
-    try { document.execCommand("paste"); } catch (e) {}
-    ta.removeEventListener("paste", onPaste);
-    ta.remove();
-    term.focus();
-    if (got) { pasteInto(got); return true; }
-    return false;
+    return "";
   };
+  const copySelection = () => {
+    if (!term.hasSelection()) return false;
+    const s = sanitizePaste(term.getSelection());
+    copyText(s);
+    term.clearSelection();
+    toast("Copied");
+    return true;
+  };
+  // Desktop: Ctrl/Cmd+C copies selection, otherwise passes ^C to guest.
+  // Ctrl/Cmd+V pastes from clipboard.
   term.attachCustomKeyEventHandler(ev => {
     if (ev.type !== "keydown") return true;
     const mod = ev.ctrlKey || ev.metaKey;
     if (mod && ev.code === "KeyC" && !ev.altKey) {
-      if (term.hasSelection()) { ev.preventDefault(); copyText(term.getSelection()); return false; }
-      return true; // no selection → ^C to the guest
+      if (term.hasSelection()) { ev.preventDefault(); copySelection(); return false; }
+      return true;
     }
     if (mod && ev.code === "KeyV" && !ev.altKey) {
-      if (!(navigator.clipboard && navigator.clipboard.readText && window.isSecureContext)) return true;
       ev.preventDefault();
-      navigator.clipboard.readText().then(pasteInto).catch(() => {});
+      readClipboard().then(pasteInto).catch(() => {});
       return false;
     }
-    if (mod && ev.shiftKey && ev.code === "Insert") return false;
     return true;
   });
+  // Browser copy/paste events (work on http LAN via the hidden textarea
+  // fallback when the clipboard API is unavailable).
   box.addEventListener("paste", e => {
     e.preventDefault();
     e.stopPropagation();
@@ -3875,17 +3964,40 @@ function wireXtermClipboard(term, box) {
     e.clipboardData.setData("text/plain", s);
     copyText(s);
   });
-  // Ctrl (or ⌘) + right-click: copy selection, or paste. Without Ctrl the
-  // native menu is swallowed so it doesn't look like a file/shortcut drag.
+  // Pointer-driven copy/paste that works on desktop and mobile.
+  // - Plain right-click / long-press shows a small inline menu with Copy,
+  //   Paste, Select All.
+  // - Ctrl/Cmd+right-click still copies selection or pastes.
+  let touchStart = null, longTimer = null;
+  const clearTouch = () => { touchStart = null; if (longTimer) { clearTimeout(longTimer); longTimer = null; } };
+  const showTermMenu = (x, y) => {
+    const items = [
+      { label: "Copy", act: () => copySelection(), dis: !term.hasSelection() },
+      { label: "Paste", act: () => readClipboard().then(pasteInto).catch(() => {}) },
+      { label: "Select All", act: () => term.selectAll() },
+    ];
+    showCtxMenu(x, y, items);
+  };
   box.addEventListener("contextmenu", e => {
     e.preventDefault();
-    if (!(e.ctrlKey || e.metaKey)) {
-      toast("Hold Ctrl, select text, right-click to copy — Ctrl+right-click pastes");
+    if (e.ctrlKey || e.metaKey) {
+      if (!copySelection()) readClipboard().then(pasteInto).catch(() => {});
       return;
     }
-    if (term.hasSelection()) { copyText(term.getSelection()); toast("Copied"); }
-    else pasteDirect();
+    showTermMenu(e.clientX, e.clientY);
   });
+  box.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1) return;
+    touchStart = e.touches[0];
+    longTimer = setTimeout(() => {
+      const t = touchStart;
+      if (!t) return;
+      showTermMenu(t.clientX, t.clientY);
+      clearTouch();
+    }, 650);
+  }, { passive: true });
+  box.addEventListener("touchend", clearTouch, { passive: true });
+  box.addEventListener("touchmove", clearTouch, { passive: true });
 }
 
 // ---- terminal ----
@@ -4459,7 +4571,7 @@ async function loadTranscripts() {
   const box = $("#t-list");
   box.replaceChildren();
   if (!list.length) {
-    box.append(el("span", { class: "muted" }, "No built-in Agent runs yet — VM CLI agent launches are not logged here."));
+    box.append(el("span", { class: "muted" }, "No daemon-run Agent transcripts yet. Terminal-launched CLIs keep their own history inside the VM."));
     return;
   }
   for (const t of list) {

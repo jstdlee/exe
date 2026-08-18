@@ -185,6 +185,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/tailscale", s.handleTailscale)
 	mux.HandleFunc("GET /v1/hostinfo", s.handleHostInfo)
 	mux.HandleFunc("GET /v1/host/stats", s.handleHostStats)
+	mux.HandleFunc("GET /v1/host/procs", s.handleHostProcs)
 	mux.HandleFunc("GET /v1/desktop", s.handleDesktopGet)
 	mux.HandleFunc("PUT /v1/desktop", s.handleDesktopPut)
 	mux.HandleFunc("GET /v1/desktop/wallpaper", s.handleDesktopWallpaperGet)
@@ -711,6 +712,10 @@ func (s *Server) handleHostInfo(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleHostStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.hostStats.Sample(s.StateDir))
+}
+
+func (s *Server) handleHostProcs(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, hoststats.TopProcs(20))
 }
 
 func (s *Server) handleRoutes(w http.ResponseWriter, r *http.Request) {

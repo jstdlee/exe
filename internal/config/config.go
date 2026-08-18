@@ -201,8 +201,9 @@ func Default() *Config {
 		SSHUser:         "dev",
 		ImageURL:        fmt.Sprintf(defaultImageURLTmpl, arch),
 		DefaultCPUs:     2,
-		DefaultMemoryMB: 2048,
-		DefaultDiskGB:   20,
+		DefaultMemoryMB:   2048,
+		DefaultDiskGB:     20,
+		IdleStopMinutes:   30,
 		Ollama: OllamaConfig{
 			BaseURL: "https://ollama.com",
 			Model:   "glm-5.2",
