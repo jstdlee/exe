@@ -105,3 +105,69 @@ func TestApiTokenDescriptionsOnNotesAndLogin(t *testing.T) {
 		}
 	}
 }
+
+func TestDesktopMaximizeButtonAndRestore(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`.tbox.max::before`,
+		`.window.maximized`,
+		`w.classList.contains("maximized")`,
+		`w._max`,
+		`body.mobile .tbox.max { display: none; }`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("desktop maximize button/restore behavior missing %q", want)
+		}
+	}
+}
+
+func TestVMPanelShowsStatusAndBulkStart(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`id="vm-panel"`,
+		`renderVMPanel`,
+		`vmBulkAction`,
+		`Start All`,
+		`Stop All`,
+		`counts.running`,
+		`counts.stopped`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("VM status/start panel missing %q", want)
+		}
+	}
+}
+
+func TestMobileFinderToolbarReplacesContextMenu(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`.finder-toolbar`,
+		`renderFinderToolbar`,
+		`selectedFinderEntry`,
+		`nfOpen(w, true, base)`,
+		`nfPickUpload(base)`,
+		`showGetInfo(sel.en, sel.rel)`,
+		`wsTrash(sel.rel, w)`,
+		`wsDownload(sel.en, sel.rel)`,
+		`body.mobile .finder-window .finder-toolbar`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("mobile Finder toolbar for right-click replacement missing %q", want)
+		}
+	}
+}
+
+func TestMobileDesktopIconsScrollableAndAllAppsVisible(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`body.mobile #icons { overflow-y: auto;`,
+		`body.mobile #sys-icons { z-index: 2; }`,
+		`for (const app of appsList)`,
+		`const HIDDEN_DESKTOP_APPS = new Set(["Editor"])`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("mobile desktop app visibility missing %q", want)
+		}
+	}
+}
+

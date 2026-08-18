@@ -169,6 +169,17 @@ body.win-drag iframe, body.win-drag .app-frame { pointer-events: none; }
   z-index: 2; box-shadow: inset 0 0 0 1px var(--black); }
 .tbox.min::before { content: ""; position: absolute; left: 2px; right: 2px; bottom: 2px; height: 2px;
   z-index: 2; background: var(--black); }
+.tbox.max::before { content: ""; position: absolute; top: 2px; left: 2px; width: 7px; height: 7px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: linear-gradient(135deg, #9a9a9a 0%, #f1f1f1 100%); }
+.tbox.max::after { content: ""; position: absolute; top: 4px; left: 4px; width: 5px; height: 5px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: #fff; }
+.window.maximized { position: fixed !important; inset: 20px 0 0 0 !important; width: auto !important;
+  height: auto !important; min-width: 0 !important; max-width: none !important; max-height: none !important;
+  transform: none !important; }
+.window.maximized > .win-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.window.maximized .win-body { flex: 1; min-height: 0; }
+.window.maximized .grow-box { display: none; }
+body.mobile .tbox.max { display: none; }
 .window:not(.front) .stripe { visibility: hidden; }
 .window:not(.front) .tbox { visibility: hidden; }
 .window:not(.front) .title { color: #777; }
@@ -239,6 +250,19 @@ body.win-drag iframe, body.win-drag .app-frame { pointer-events: none; }
   box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
   text-align: center; font-size: 12px; padding: 4px 8px 3px;
   display: flex; align-items: center; justify-content: center; gap: 8px; }
+.finder-toolbar { display: none; }
+body.mobile .finder-window .finder-toolbar {
+  display: flex; flex: none; gap: 4px; align-items: center; justify-content: flex-start;
+  padding: 4px 6px; background: var(--g300); border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 #fff; overflow-x: auto; white-space: nowrap; }
+body.mobile .finder-toolbar button { font-size: 11px; padding: 3px 7px; }
+.vm-panel { display: flex; flex: none; gap: 10px; align-items: center; justify-content: space-between;
+  padding: 6px 8px; background: var(--g200); border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 #fff; }
+.vm-panel .vm-stats { display: flex; gap: 10px; align-items: center; }
+.vm-panel .vm-stats .chip { font-size: 10px; }
+body.mobile #icons { overflow-y: auto; padding-bottom: 90px; }
+body.mobile #sys-icons { z-index: 2; }
 .workspace-tree { background: #fff; height: 336px; padding: 4px 0; overflow: auto; }
 .tree-node { user-select: none; }
 .tree-children[hidden] { display: none; }
@@ -999,9 +1023,10 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window edge-grow" id="win-vms" style="left:36px; top:34px; width:680px;">
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title">Virtual Machines</div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox max" title="Maximize"></button><button class="tbox shade"></button></div>
     <div class="win-frame paper">
       <div id="vm-res" class="res-bar" title="Host resources — this machine, not a VM"></div>
+      <div id="vm-panel" class="vm-panel" hidden></div>
       <div class="win-body">
         <table>
           <thead><tr id="vm-head"></tr></thead>
@@ -1862,6 +1887,26 @@ function initWindow(w) {
   }
   const sb = tb.querySelector(".tbox.shade");
   if (sb) sb.addEventListener("click", e => { e.stopPropagation(); w.classList.toggle("shaded"); termResize(); winSave(); });
+  // inject a desktop maximize button next to shade when present
+  if (sb && !tb.querySelector(".tbox.max")) {
+    const maxb = el("button", { class: "tbox max", title: "Maximize" });
+    sb.before(maxb);
+    maxb.addEventListener("click", e => {
+      e.stopPropagation();
+      if (w.classList.contains("maximized")) {
+        w.classList.remove("maximized");
+        if (w._max) {
+          Object.assign(w.style, w._max.style);
+          w._max = null;
+        }
+      } else {
+        w._max = { style: { left: w.style.left, top: w.style.top, width: w.style.width, height: w.style.height } };
+        w.classList.add("maximized");
+        w.style.left = ""; w.style.top = ""; w.style.width = ""; w.style.height = "";
+      }
+      focusWin(w); termResize(); if (w._termResize) w._termResize();
+    });
+  }
   const zb = tb.querySelector(".tbox.zoom");
   if (zb) zb.addEventListener("click", e => {
     e.stopPropagation();
@@ -2835,6 +2880,7 @@ function openFinderWin(path, fromWin) {
       <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
       <div class="win-frame">
         <div class="finder-status"><span class="ws-items">…</span></div>
+        <div class="finder-toolbar"></div>
         <div class="workspace-tree doc-scroll" role="tree"></div>
         ${GROW_TILE}
       </div>`;
@@ -2859,6 +2905,7 @@ function openFinderWin(path, fromWin) {
     wireFinderDrop(w);
     $("#desktop").append(w);
     initWindow(w);
+    if (IS_MOBILE) renderFinderToolbar(w);
   }
   openWin(w);
   loadFinder(w);
@@ -2904,6 +2951,7 @@ function renderTreeNode(w, base, en, depth) {
   row.addEventListener("click", e => {
     e.stopPropagation();
     selectTreeRow(w.querySelector(".workspace-tree"), row);
+    if (IS_MOBILE) renderFinderToolbar(w);
   });
   row.addEventListener("keydown", e => {
     if (e.key !== "Enter" && e.key !== " ") return;
@@ -2921,6 +2969,7 @@ function renderTreeNode(w, base, en, depth) {
     e.preventDefault(); e.stopPropagation();
     selectTreeRow(w.querySelector(".workspace-tree"), row);
     showTreeCtxMenu(e.clientX, e.clientY, w, en, rel, node, depth);
+    if (IS_MOBILE) renderFinderToolbar(w);
   });
   return node;
 }
@@ -2963,6 +3012,31 @@ function showTreeCtxMenu(x, y, w, en, rel, node, depth) {
     { label: "Duplicate", act: () => wsDuplicate(en, rel, w), dis: !!en.dir },
     { label: "Download", act: () => wsDownload(en, rel), dis: !!en.dir },
   ]);
+}
+function selectedFinderEntry(w) {
+  const row = w.querySelector(".workspace-tree .tree-row.sel");
+  if (!row) return null;
+  const path = row.dataset.path;
+  const en = (w._entries || []).find(e => wsJoin(w.dataset.path, e.name) === path);
+  return en ? { row, en, rel: path } : null;
+}
+function renderFinderToolbar(w) {
+  const bar = w.querySelector(".finder-toolbar");
+  if (!bar) return;
+  const base = w.dataset.path;
+  const sel = selectedFinderEntry(w);
+  const selDir = sel ? (sel.en.dir ? sel.rel : wsParent(sel.rel)) : base;
+  const dirOnly = !sel || sel.en.dir;
+  const btn = (label, dis, act) => el("button", { class: "ghost sm", disabled: dis ? "" : null, onclick: act }, label);
+  bar.replaceChildren(
+    btn("New Folder", false, () => nfOpen(w, true, base)),
+    btn("New Text", false, () => nfOpen(w, false, base)),
+    btn("Upload", false, () => nfPickUpload(base)),
+    btn("Info", !sel, () => showGetInfo(sel.en, sel.rel)),
+    btn("Delete", !sel, () => wsTrash(sel.rel, w)),
+    btn("Duplicate", !sel || dirOnly, () => wsDuplicate(sel.en, sel.rel, w)),
+    btn("Download", !sel || dirOnly, () => wsDownload(sel.en, sel.rel)),
+  );
 }
 function openEntry(en, rel, w) {
   if (en.dir) openFinderWin(rel, w);
@@ -3381,6 +3455,7 @@ function renderVMList(rawVMs) {
   tb.replaceChildren();
   $("#vm-empty").hidden = vms.length > 0;
   $("#vm-count").textContent = vms.length + (vms.length === 1 ? " item" : " items");
+  renderVMPanel(vms);
   renderIcons(vms);
   for (const vm of vms) {
     const actions = el("td", { class: "actions" });
@@ -3430,6 +3505,39 @@ function renderVMList(rawVMs) {
     });
     tb.append(row);
   }
+}
+function renderVMPanel(vms) {
+  const panel = $("#vm-panel");
+  if (!panel) return;
+  if (!vms.length) { panel.hidden = true; return; }
+  panel.hidden = false;
+  const counts = { running: 0, stopped: 0, other: 0 };
+  for (const vm of vms) {
+    if (vm.state === "running") counts.running++;
+    else if (vm.state === "stopped") counts.stopped++;
+    else counts.other++;
+  }
+  const anyRunning = counts.running > 0;
+  const anyStopped = counts.stopped > 0;
+  const stat = (label, n, cls) => el("span", { class: "vm-stats" }, el("span", { class: "muted" }, label), el("span", { class: "chip " + cls }, String(n)));
+  const left = el("span", { class: "vm-stats" },
+    stat("running", counts.running, "running"),
+    stat("stopped", counts.stopped, "stopped"),
+    stat("other", counts.other, "stopping"));
+  const right = el("span", { class: "vm-stats" });
+  if (anyStopped) {
+    right.append(el("button", { class: "ghost sm", onclick: () => vmBulkAction(vms.filter(v => v.state === "stopped").map(v => v.name), "start") }, "Start All"));
+  }
+  if (anyRunning) {
+    right.append(el("button", { class: "ghost sm", onclick: () => vmBulkAction(vms.filter(v => v.state === "running").map(v => v.name), "stop") }, "Stop All"));
+  }
+  panel.replaceChildren(left, right);
+}
+async function vmBulkAction(names, action) {
+  toast(`${action}ing ${names.length} VM${names.length > 1 ? "s" : ""}…`);
+  await Promise.all(names.map(n => api(`/v1/vms/${n}/${action}`, { method: "POST", json: {} }).catch(e => toast(`${n}: ${e.message}`))));
+  toast(`${action} done`);
+  loadVMs();
 }
 // no restart endpoint: a plain stop → start sequence
 async function vmRestart(name) {
