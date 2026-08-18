@@ -20,6 +20,15 @@ type Stats struct {
 	DiskTotal    int64   `json:"disk_total"`
 }
 
+type Proc struct {
+	PID  int     `json:"pid"`
+	CPU  float64 `json:"cpu"`
+	Mem  float64 `json:"mem"`
+	Cmd  string  `json:"cmd"`
+}
+
+func TopProcs(n int) []Proc { return readProcs(n) }
+
 type snap struct {
 	cpuIdle, cpuTotal    uint64
 	diskRead, diskWrite  uint64

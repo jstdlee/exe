@@ -171,3 +171,88 @@ func TestMobileDesktopIconsScrollableAndAllAppsVisible(t *testing.T) {
 	}
 }
 
+func TestTerminalCopyPasteMenu(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`showTermMenu`,
+		`"Copy"`,
+		`"Paste"`,
+		`"Select All"`,
+		`box.addEventListener("touchstart"`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("terminal copy/paste menu missing %q", want)
+		}
+	}
+}
+
+func TestHostStatsMovedToMonitorApp(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`id="win-host"`,
+		`id="host-panel"`,
+		`id="host-procs"`,
+		`loadHostProcs`,
+		`Host Monitor`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("Host Monitor app missing %q", want)
+		}
+	}
+}
+
+func TestAgentLaunchersWrapOnMobile(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`#a-launchers { display: flex; flex-wrap: wrap;`,
+		`body.mobile #a-launchers { flex-wrap: wrap; }`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("agent launchers mobile wrap missing %q", want)
+		}
+	}
+}
+
+func TestMaximizeRestoresSize(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`width: w.style.width || (w.offsetWidth + "px")`,
+		`height: w.style.height || (w.offsetHeight + "px")`,
+		`["left","top","width","height"]`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("maximize size restore missing %q", want)
+		}
+	}
+}
+
+func TestLongPressOpensContextMenu(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`function addLongPressMenu`,
+		`addLongPressMenu(row`,
+		`addLongPressMenu(ic`,
+		`setTimeout(`,
+		`650`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("long-press context menu missing %q", want)
+		}
+	}
+}
+
+func TestTranscriptsExplanationClear(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`stored on the host next to the VM
+              disk`,
+		`survive stop/start`,
+		`Click a row to replay the log`,
+		`Terminal-launched CLIs keep their own history`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("transcripts explanation missing %q", want)
+		}
+	}
+}
+
