@@ -25,6 +25,7 @@ import (
 	"exe/internal/codex"
 	"exe/internal/config"
 	"exe/internal/github"
+	"exe/internal/hostagent"
 	"exe/internal/hostinfo"
 	"exe/internal/hoststats"
 	"exe/internal/peer"
@@ -376,31 +377,55 @@ func (s *Server) transcriptDir(vm string) string {
 }
 
 // agentPrecheck validates a vibecode request and resolves the running VM.
-func (s *Server) agentPrecheck(ctx context.Context, name, prompt string) (*vmm.Info, error) {
+func (s *Server) agentPrecheck(ctx context.Context, name, prompt, provider string) (*vmm.Info, error) {
 	cfg := s.Config()
 	if strings.TrimSpace(prompt) == "" {
 		return nil, errors.New("prompt is required")
 	}
-	if cfg.Ollama.APIKey == "" && strings.Contains(cfg.Ollama.BaseURL, "ollama.com") {
+	if provider == "" && cfg.Ollama.APIKey == "" && strings.Contains(cfg.Ollama.BaseURL, "ollama.com") {
 		return nil, errors.New("ollama.api_key is not configured (or set OLLAMA_API_KEY)")
 	}
 	return s.runningVM(ctx, name)
 }
 
 // agentRun executes one vibecode run against info's VM, recording a
-// transcript and streaming output through emit.
-func (s *Server) agentRun(ctx context.Context, info *vmm.Info, name, prompt, model string, emit func(string)) error {
+// transcript and streaming output through emit. provider+model select a
+// host agent so a VM run can reuse the host's already-signed-in LLM
+// without configuring API keys inside the guest.
+func (s *Server) agentRun(ctx context.Context, info *vmm.Info, name, prompt, provider, model string, emit func(string)) error {
 	cfg := s.Config()
-	acfg := agent.Config{
-		BaseURL: cfg.Ollama.BaseURL,
-		APIKey:  cfg.Ollama.APIKey,
-		Model:   cfg.Ollama.Model,
-		Effort:  cfg.Ollama.Effort,
+	var acfg agent.Config
+	var chosen string
+	if provider != "" {
+		backend, err := hostagent.Resolve(provider, model)
+		if err != nil {
+			return fmt.Errorf("host agent %s: %w", provider, err)
+		}
+		acfg = agent.Config{
+			BaseURL:      backend.BaseURL,
+			APIKey:       backend.APIKey,
+			Model:        backend.Model,
+			ExtraHeaders: backend.ExtraHeaders,
+		}
+		if backend.Kind == "openai" {
+			acfg.Style = "openai"
+		} else if backend.Kind == "ollama" {
+			acfg.Style = "openai"
+		}
+		chosen = backend.Model
+	} else {
+		acfg = agent.Config{
+			BaseURL: cfg.Ollama.BaseURL,
+			APIKey:  cfg.Ollama.APIKey,
+			Model:   cfg.Ollama.Model,
+			Effort:  cfg.Ollama.Effort,
+		}
+		if model != "" {
+			acfg.Model = model
+		}
+		chosen = acfg.Model
 	}
-	if model != "" {
-		acfg.Model = model
-	}
-	rec, err := transcript.Start(s.transcriptDir(name), prompt, acfg.Model)
+	rec, err := transcript.Start(s.transcriptDir(name), prompt, chosen)
 	if err != nil {
 		return err
 	}
@@ -413,7 +438,7 @@ func (s *Server) agentRun(ctx context.Context, info *vmm.Info, name, prompt, mod
 		emit(line)
 	}
 	target := s.vmTarget(info)
-	logf("[agent] model %s on vm %s (%s)\n", acfg.Model, name, info.IP)
+	logf("[agent] model %s on vm %s (%s)\n", chosen, name, info.IP)
 	runErr := agent.Run(ctx, acfg, target, name, prompt, logf)
 	if runErr != nil {
 		logf("\n[agent] ERROR: %v\n", runErr)
@@ -427,14 +452,15 @@ func (s *Server) agentRun(ctx context.Context, info *vmm.Info, name, prompt, mod
 func (s *Server) handleAgent(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	var req struct {
-		Prompt string `json:"prompt"`
-		Model  string `json:"model"`
+		Prompt   string `json:"prompt"`
+		Provider string `json:"provider"`
+		Model    string `json:"model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	info, err := s.agentPrecheck(r.Context(), name, req.Prompt)
+	info, err := s.agentPrecheck(r.Context(), name, req.Prompt, req.Provider)
 	if err != nil {
 		writeErr(w, http.StatusConflict, err)
 		return
@@ -444,7 +470,7 @@ func (s *Server) handleAgent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	fl, _ := w.(http.Flusher)
-	s.agentRun(r.Context(), info, name, req.Prompt, req.Model, func(line string) {
+	s.agentRun(r.Context(), info, name, req.Prompt, req.Provider, req.Model, func(line string) {
 		fmt.Fprint(w, line)
 		if fl != nil {
 			fl.Flush()

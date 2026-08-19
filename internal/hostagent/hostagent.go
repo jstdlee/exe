@@ -315,7 +315,9 @@ func resolveGrok(model string) (*Backend, error) {
 				key = token
 			}
 			kind := "openai"
-			if spec.APIStyle == "" && !strings.HasSuffix(base, "/v1") && !strings.Contains(base, "/v1") {
+			if spec.APIStyle == "ollama" ||
+				(spec.APIStyle == "" && !strings.HasSuffix(base, "/v1") && !strings.Contains(base, "/v1")) ||
+				(spec.APIStyle == "" && strings.HasPrefix(spec.ID, "ollama-com_")) {
 				kind = "ollama"
 			}
 			return &Backend{Kind: kind, BaseURL: base, APIKey: key, Model: spec.Model}, nil

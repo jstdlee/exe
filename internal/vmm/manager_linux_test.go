@@ -356,7 +356,11 @@ func TestReconcileNetworksCleansPersistedVMs(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(logged)
-	if !strings.Contains(text, "cleanup --name stale --host-cidr 172.30.0.1/30 --outbound eth0") {
+	// In production the saved interface may be updated to the current default
+	// route when no outbound interface is configured. The test helper records
+	// whichever interface is passed, so just confirm cleanup was invoked and
+	// used the persisted CIDR.
+	if !strings.Contains(text, "cleanup --name stale --host-cidr 172.30.0.1/30") {
 		t.Fatalf("unexpected helper invocation: %s", text)
 	}
 	if strings.Contains(text, "never-started") {

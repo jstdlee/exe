@@ -168,15 +168,22 @@ body.mobile #a-launchers { flex-wrap: wrap; }
     inset 0 0 0 2px var(--black), inset 3px 3px 0 #fff, inset -3px -3px 0 var(--g700); }
 .tbox:active::after { content: ""; position: absolute; inset: 2px; z-index: 1;
   background-image: linear-gradient(135deg, #353535cc 0%, #9c9c9ccc 100%); }
-.tbox.shade::before { content: ""; position: absolute; top: 5px; left: 1px; right: 1px; height: 3px;
-  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); }
-.tbox.zoom::before { content: ""; position: absolute; top: 1px; left: 1px; width: 7px; height: 7px;
-  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); }
+.tbox.close::before { content: ""; position: absolute; top: 50%; left: 50%; width: 9px; height: 1px;
+  z-index: 3; background: var(--black); transform: translate(-50%, -50%) rotate(45deg); }
+.tbox.close::after { content: ""; position: absolute; top: 50%; left: 50%; width: 9px; height: 1px;
+  z-index: 3; background: var(--black); transform: translate(-50%, -50%) rotate(-45deg); }
+.tbox.close > i { display: none; }
 .tbox.min::before { content: ""; position: absolute; left: 2px; right: 2px; bottom: 2px; height: 2px;
   z-index: 2; background: var(--black); }
+.tbox.shade::before { content: ""; position: absolute; top: 5px; left: 1px; right: 1px; height: 3px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); }
 .tbox.max::before { content: ""; position: absolute; top: 2px; left: 2px; width: 7px; height: 7px;
   z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: linear-gradient(135deg, #9a9a9a 0%, #f1f1f1 100%); }
 .tbox.max::after { content: ""; position: absolute; top: 4px; left: 4px; width: 5px; height: 5px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: #fff; }
+.tbox.max.restore::before { content: ""; position: absolute; top: 4px; left: 4px; width: 5px; height: 5px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: linear-gradient(135deg, #9a9a9a 0%, #f1f1f1 100%); }
+.tbox.max.restore::after { content: ""; position: absolute; top: 2px; left: 2px; width: 5px; height: 5px;
   z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: #fff; }
 .window.maximized { position: fixed !important; inset: 20px 0 0 0 !important; width: auto !important;
   height: auto !important; min-width: 0 !important; max-width: none !important; max-height: none !important;
@@ -184,7 +191,8 @@ body.mobile #a-launchers { flex-wrap: wrap; }
 .window.maximized > .win-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .window.maximized .win-body { flex: 1; min-height: 0; }
 .window.maximized .grow-box { display: none; }
-body.mobile .tbox.max { display: none; }
+body.mobile .tbox.shade { display: none; }
+body.mobile .tbox.max { display: inline-block; }
 .window:not(.front) .stripe { visibility: hidden; }
 .window:not(.front) .tbox { visibility: hidden; }
 .window:not(.front) .title { color: #777; }
@@ -800,8 +808,8 @@ body.mobile #desktop .window.minimized .title { color: inherit; }
 body.mobile #desktop .window > .win-frame { flex: 1; min-height: 0;
   display: flex; flex-direction: column; }
 body.mobile .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
-body.mobile .tbox.shade, body.mobile .grow-box { display: none; }
-body.mobile .tbox.zoom { display: inline-block; }
+body.mobile .grow-box { display: none; }
+body.mobile .tbox.max { display: inline-block; }
 /* the grow tile is hidden, so keep the frame corner intact: drop the 2px
    chrome-merge strips that erase the border/bevel for the tile, and give
    the statusbar its tile-clearance right padding back */
@@ -865,13 +873,17 @@ body.mobile #desktop .window.mob-restored {
   top: 50% !important;
   transform: translate(-50%, -50%);
   width: min(92vw, 640px) !important;
+  min-width: 0 !important;
+  max-width: min(92vw, 640px) !important;
   height: auto !important;
-  max-width: 92vw !important;
+  min-height: 0 !important;
   max-height: calc(100dvh - 40px) !important;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
-body.mobile #desktop .window.mob-restored > .win-frame { flex: 1 1 auto; min-height: 0; }
-body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
+body.mobile #desktop .window.mob-restored .win-frame { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+body.mobile #desktop .window.mob-restored .win-body { overflow: auto; flex: 1 1 auto; min-height: 0; }
 /* Chrome desktop resize / DevTools: same layout from the viewport, not UA */
 @media (max-width: 720px) {
   #host-res { display: none; }
@@ -891,7 +903,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   #desktop .window > .win-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
   .tbox.shade, .grow-box { display: none; }
-  .tbox.zoom { display: inline-block; }
+  .tbox.max { display: inline-block; }
   .window.grow .win-frame::before, .window.grow .win-frame::after { content: none; }
   .chat-wrap { height: 100% !important; flex-direction: column; }
   .chat-side { width: auto; }
@@ -902,6 +914,13 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
     border-top: 1px solid var(--black);
     box-shadow: 2px 2px 0 var(--black), 0 0 0 100vmax rgba(0,0,0,.15); }
 }
+/* mobile icon grid can overflow — make it scroll if too many apps */
+body.mobile #icons { -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 360px) {
+  #clock { padding: 0 6px; font-size: 11px; }
+  .menu { padding: 0 6px; font-size: 11px; }
+}
 </style>
 </head>
 <body>
@@ -911,6 +930,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="menu drawer" id="menu-drawer" data-m="drawer">Menu</div>
   <div class="menu windows-menu" id="menu-windows" data-m="windows">Windows</div>
   <div class="menu" data-m="file">File</div>
+  <div class="menu" data-m="apps">Apps</div>
   <div class="menu" data-m="vm">Virtual Machine</div>
   <div class="menu" data-m="special">Cloudflare</div>
   <div class="menu" data-m="help">Help</div>
@@ -943,6 +963,10 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="dd-item" data-act="refresh">Refresh</div>
   <div class="dd-sep"></div>
   <div class="dd-item" data-act="token">Set API Token…</div>
+</div>
+<div class="dropdown" id="dd-apps" hidden>
+  <div class="dd-head">Desktop Apps</div>
+  <div id="dd-apps-list"></div>
 </div>
 <div class="dropdown" id="dd-windows" hidden>
   <div class="dd-head">Open Windows</div>
@@ -979,6 +1003,9 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="dd-item" data-act="winnews">Newsfeed</div>
   <div class="dd-item" data-act="winconfig">Configuration</div>
   <div class="dd-item" data-act="winlog">Daemon Log</div>
+  <div class="dd-sep"></div>
+  <div class="dd-head">Apps</div>
+  <div id="dd-drawer-apps-list"></div>
   <div class="dd-sep"></div>
   <div class="dd-head">Cloudflare</div>
   <div class="dd-item" data-act="cfstatus">Status…</div>
@@ -1029,7 +1056,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window edge-grow" id="win-vms" style="left:36px; top:34px; width:680px;">
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title">Virtual Machines</div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox max" title="Maximize"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame paper">
       <div id="vm-res" class="res-bar" title="Host resources — this machine, not a VM"></div>
       <div id="vm-panel" class="vm-panel" hidden></div>
@@ -1054,7 +1081,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window edge-grow" id="win-detail" style="left:150px; top:64px; width:640px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title" id="d-title">VM</div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame">
       <div class="win-body">
         <div class="row" style="margin-bottom:10px">
@@ -1090,12 +1117,30 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
           </div>
 
           <div class="pane" id="pane-vibe" hidden>
-            <div class="pane-head">Code-agent CLIs</div>
+            <div class="pane-head">Built-in Agent</div>
+            <div class="muted" style="margin-bottom:6px">Runs on the host using a host LLM (Grok/Claude/Codex) and SSHs into this VM. Creates a host transcript. Pick a provider/model, type a task, and Run.</div>
+            <div class="row actions" style="gap:8px; align-items:flex-end; flex-wrap:wrap">
+              <div class="field">
+                <label>Provider</label>
+                <select id="vibe-provider"></select>
+              </div>
+              <div class="field" style="min-width:160px">
+                <label>Model</label>
+                <select id="vibe-model" style="width:100%"></select>
+              </div>
+            </div>
+            <textarea id="vibe-prompt" style="min-height:90px; margin-top:8px" placeholder="e.g. install nginx and serve a static hello page on port 8080"></textarea>
+            <div class="row" style="margin-top:8px">
+              <button class="btn" id="vibe-run" type="button">Run Agent</button>
+              <span class="muted" id="vibe-status" style="margin-left:auto"></span>
+            </div>
+            <div class="pane-head" style="margin-top:14px">Code-agent CLIs</div>
             <div class="muted" style="margin-bottom:6px">These launch inside this VM terminal. Missing CLIs install first, then the TUI owns the terminal. Keys, history and sessions stay in the guest; these runs do <b>not</b> create host transcripts.</div>
-            <div class="row actions" id="a-launchers" style="flex-wrap:nowrap; gap:8px"></div>
+            <div class="row actions" id="a-launchers" style="flex-wrap:wrap; gap:8px"></div>
             <div class="pane-head">Developer tools</div>
             <div class="muted" style="margin-bottom:6px">Click to open a VM shell; install if missing, then you get a prompt.</div>
             <div class="tool-grid" id="a-tools"></div>
+            <pre class="out" id="vibe-log" hidden style="margin-top:10px; max-height:260px"></pre>
           </div>
 
           <div class="pane" id="pane-expose" hidden>
@@ -1155,7 +1200,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window edge-grow" id="win-config" style="left:80px; top:52px; width:660px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title">Configuration</div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame">
       <div class="win-body">
         <div class="muted" style="margin-bottom:10px">~/.exe/config.json — fields marked &#42; need a daemon restart, everything else hot-reloads on Save.</div>
@@ -1195,7 +1240,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window grow" id="win-log" style="left:110px; top:90px; width:640px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title">Daemon Log</div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame">
       <div class="win-body" style="padding:0">
         <pre class="out vflush" id="log-out"></pre>
@@ -1224,7 +1269,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window grow" id="win-news" style="left:170px; top:70px; width:430px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title">Newsfeed</div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame paper">
       <div class="win-body" style="padding:0">
         <div id="news-list" class="vflush"></div>
@@ -1245,7 +1290,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window grow" id="win-chat" style="left:90px; top:44px; width:820px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title">Chat</div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame">
       <div class="win-body" style="padding:10px">
         <div class="chat-wrap">
@@ -1312,6 +1357,28 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
         <div class="row" style="justify-content:flex-end; gap:11px; margin:10px 0 2px">
           <button class="ghost" id="c-cancel">Cancel</button>
           <button class="btn" id="c-go">Create</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent LLM picker -->
+  <div class="window modal" id="win-agent-llm" style="left:220px; top:120px; width:320px;" hidden>
+    <div class="titlebar"><div class="title">Agent LLM</div><button class="tbox close" id="allm-x"></button></div>
+    <div class="win-frame paper">
+      <div class="win-body" style="padding:12px">
+        <div class="muted" style="margin-bottom:10px">Pick the host provider and model for this run. The VM agent will use these settings without further VM-side configuration.</div>
+        <div class="field" style="margin-bottom:8px">
+          <label>Provider</label>
+          <select id="allm-provider" style="width:100%"></select>
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <label>Model</label>
+          <select id="allm-model" style="width:100%"></select>
+        </div>
+        <div class="row" style="justify-content:flex-end; gap:8px">
+          <button class="ghost" id="allm-cancel">Cancel</button>
+          <button class="btn" id="allm-run">Run</button>
         </div>
       </div>
     </div>
@@ -1405,7 +1472,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window grow" id="win-docs" style="left:200px; top:56px; width:560px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title">exe Documentation</div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame paper">
       <div class="win-body" style="padding:0">
         <div id="docs-body" class="vflush">
@@ -1428,7 +1495,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window" id="win-host" style="left:80px; top:50px; width:520px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title">Host Monitor</div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame paper">
       <div id="host-panel" class="res-bar" title="Host resources — this machine, not a VM"></div>
       <div class="win-body">
@@ -1446,7 +1513,7 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; }
   <div class="window" id="win-trash" style="left:340px; top:180px; width:300px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title">Trash</div>
-      <div class="stripe"></div><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame">
       <div class="win-body" style="text-align:center; padding:26px">
         <span class="muted">The Trash is empty.<br>(Deleted VMs skip the Trash — sorry.)</span>
@@ -1923,75 +1990,57 @@ function initWindow(w) {
   w.addEventListener("mousedown", () => { if (!w.closest(".overlay")) focusWin(w); });
   const tb = w.querySelector(".titlebar");
   const cb = tb.querySelector(".tbox.close");
-  if (cb && !cb.id) cb.addEventListener("click", e => { e.stopPropagation(); closeWin(w); });
-  if (!w.classList.contains("modal") && cb && !tb.querySelector(".tbox.min")) {
-    const mb = el("button", { class: "tbox min", title: "Minimize" });
-    cb.after(mb);
-    mb.addEventListener("click", e => { e.stopPropagation(); minimizeWin(w); });
+  if (cb && !cb.id) {
+    // ensure the X mark is present
+    if (!cb.querySelector("i")) cb.append(el("i"));
+    cb.addEventListener("click", e => { e.stopPropagation(); closeWin(w); });
   }
+  const minb = tb.querySelector(".tbox.min");
+  if (minb) minb.addEventListener("click", e => { e.stopPropagation(); minimizeWin(w); });
   const sb = tb.querySelector(".tbox.shade");
   if (sb) sb.addEventListener("click", e => { e.stopPropagation(); w.classList.toggle("shaded"); termResize(); winSave(); });
-  // inject a desktop maximize button next to shade when present
-  if (sb && !tb.querySelector(".tbox.max")) {
-    const maxb = el("button", { class: "tbox max", title: "Maximize" });
-    sb.before(maxb);
+  const maxb = tb.querySelector(".tbox.max");
+  if (maxb) {
+    const setMaxIcon = () => maxb.classList.toggle("restore", w.classList.contains("maximized"));
     maxb.addEventListener("click", e => {
       e.stopPropagation();
-      if (w.classList.contains("maximized")) {
-        w.classList.remove("maximized");
+      const wasMax = w.classList.contains("maximized") || w.classList.contains("mob-restored");
+      w.classList.remove("maximized");
+      w.classList.remove("mob-restored");
+      if (wasMax) {
         if (w._max) {
           ["left","top","width","height"].forEach(k => { w.style[k] = w._max.style[k]; });
           w._max = null;
         }
       } else {
+        // Save geometry before maximizing. On mobile we store the inline
+        // style so restore can return to the previous position/size.
         w._max = { style: {
           left: w.style.left || (w.offsetLeft + "px"),
           top: w.style.top || (w.offsetTop + "px"),
           width: w.style.width || (w.offsetWidth + "px"),
           height: w.style.height || (w.offsetHeight + "px")
         }};
-        w.classList.add("maximized");
-        w.style.left = ""; w.style.top = ""; w.style.width = ""; w.style.height = "";
+        if (IS_MOBILE) {
+          w.classList.add("mob-restored");
+        } else {
+          w.classList.add("maximized");
+        }
       }
+      setMaxIcon();
       focusWin(w); termResize(); if (w._termResize) w._termResize();
     });
   }
-  const zb = tb.querySelector(".tbox.zoom");
-  if (zb) zb.addEventListener("click", e => {
-    e.stopPropagation();
-    if (IS_MOBILE) {
-      w.classList.toggle("mob-restored");
-      focusWin(w);
-      termResize();
-      if (w._termResize) w._termResize();
-      return;
-    }
-    const box = w.querySelector(".hostterm-box, .vmterm-box, .ed-text, .workspace-tree, .app-frame, .iv-box, .chat-wrap");
-    if (w._zoom) {
-      Object.assign(w.style, w._zoom.style);
-      if (box && w._zoom.boxH != null) box.style.height = w._zoom.boxH;
-      w._zoom = null;
-    } else {
-      w._zoom = { style: { left: w.style.left, top: w.style.top, width: w.style.width }, boxH: box ? box.style.height : null };
-      w.style.left = "4px";
-      w.style.top = "4px";
-      w.style.width = Math.max(320, window.innerWidth - 12) + "px";
-      if (box) box.style.height = Math.max(200, window.innerHeight - 58) + "px";
-    }
-    focusWin(w);
-    termResize();
-    if (w._termResize) w._termResize();
-  });
   tb.addEventListener("dblclick", e => {
     if (IS_MOBILE || e.target.closest(".tbox") || w.classList.contains("modal")) return;
     w.classList.toggle("shaded");
     termResize();
     winSave();
   });
-  // mobile windows are fullscreen (or zoom-restored) and pinned — no titlebar drag
+  // all non-modal windows can be dragged by the titlebar; on mobile we still
+  // allow dragging the restored/zoomed window so it doesn't feel pinned.
   if (w.classList.contains("modal")) return;
   tb.addEventListener("pointerdown", e => {
-    if (IS_MOBILE) return;
     if (e.target.closest(".tbox")) return;
     e.preventDefault();
     focusWin(w);
@@ -2006,8 +2055,15 @@ function initWindow(w) {
     winDragging = w;
     document.body.classList.add("win-drag");
     const move = ev => {
-      w.style.left = Math.min(window.innerWidth - 60, Math.max(60 - width, ev.clientX - ox)) + "px";
-      w.style.top = Math.min(window.innerHeight - 46, Math.max(0, ev.clientY - oy)) + "px";
+      if (IS_MOBILE) {
+        // In mobile mode the window is already clamped to viewport; allow a
+        // small drag nudge but keep it fully on screen.
+        w.style.left = Math.min(window.innerWidth - Math.min(width, window.innerWidth), Math.max(0, ev.clientX - ox)) + "px";
+        w.style.top = Math.min(window.innerHeight - 60, Math.max(20, ev.clientY - oy)) + "px";
+      } else {
+        w.style.left = Math.min(window.innerWidth - 60, Math.max(60 - width, ev.clientX - ox)) + "px";
+        w.style.top = Math.min(window.innerHeight - 46, Math.max(0, ev.clientY - oy)) + "px";
+      }
       winSaveLive();
     };
     const up = () => {
@@ -2661,8 +2717,9 @@ function wireIconDrag(ic, key) {
   // the pointer — same handler for Workspace, Terminal, VMs and desk apps
   ic.addEventListener("dragstart", e => e.preventDefault());
   ic.querySelectorAll("img").forEach(img => { img.draggable = false; });
+  // On mobile the icons flow as a grid, but keep small drag nudges so the
+  // user can reorder; tap/tapOpen still opens via click.
   ic.addEventListener("pointerdown", e => {
-    if (IS_MOBILE) return;
     if (e.button !== 0) return;
     e.preventDefault();
     const r = ic.getBoundingClientRect();
@@ -2740,6 +2797,10 @@ function renderIcons(vms) {
     box.append(ic);
     placeDicon(ic, "vm:" + vm.name, slot++);
   }
+  const appsMenuList = $("#dd-apps-list");
+  const drawerAppsList = $("#dd-drawer-apps-list");
+  if (appsMenuList) appsMenuList.replaceChildren();
+  if (drawerAppsList) drawerAppsList.replaceChildren();
   for (const app of appsList) {
     const key = "app:" + app.name;
     const ic = el("div", { class: "dicon" + (selectedIcon === key ? " sel" : ""), title: app.title || app.name });
@@ -2760,7 +2821,17 @@ function renderIcons(vms) {
     ]));
     box.append(ic);
     placeDicon(ic, "app:" + app.name, slot++);
+    // Apps cascaded menu items
+    const menuItem = (target) => {
+      const d = el("div", { class: "dd-item" }, app.title || app.name);
+      d.addEventListener("click", () => { menuClose(); openAppWin(app.name); });
+      target.append(d);
+    };
+    if (appsMenuList) menuItem(appsMenuList);
+    if (drawerAppsList) menuItem(drawerAppsList);
   }
+  if (appsMenuList && !appsMenuList.children.length) appsMenuList.append(el("div", { class: "dd-item dis" }, "No apps"));
+  if (drawerAppsList && !drawerAppsList.children.length) drawerAppsList.append(el("div", { class: "dd-item dis" }, "No apps"));
 }
 
 // ---- desktop apps (folders in ~/.exe/apps with app.json + index.html) ----
@@ -2842,7 +2913,7 @@ function openAppWin(name) {
     w.style.width = ((app.window && app.window.width) || 420) + "px";
     w.innerHTML = `<div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title"></div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
       <div class="win-frame"><iframe class="app-frame"></iframe></div>`;
     w.querySelector(".title").textContent = app.title || name;
     if (app.window && app.window.grow) w.classList.add("grow");
@@ -2930,7 +3001,7 @@ function openFinderWin(path, fromWin) {
     w.style.width = "560px";
     w.innerHTML = `<div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title"></div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
       <div class="win-frame">
         <div class="finder-status"><span class="ws-items">…</span></div>
         <div class="finder-toolbar"></div>
@@ -3059,7 +3130,7 @@ function showTreeCtxMenu(x, y, w, en, rel, node, depth) {
   const targetDir = en.dir ? rel : wsParent(rel);
   showCtxMenu(x, y, [
     { label: "Open", act: () => en.dir ? toggleTreeNode(w, node, rel, depth + 1) : openEntry(en, rel, w) },
-    { label: "Edit with Editor", act: () => openEditorWin(rel, w), dis: !!en.dir || !isTextFile(en.name) },
+    { label: "Edit with Editor", act: () => openEditorWin(rel, w), dis: !!en.dir },
     { label: "Move To Trash", act: () => wsTrash(rel, w) },
     "-",
     { label: "New Folder…", act: () => nfOpen(w, true, targetDir) },
@@ -3266,7 +3337,7 @@ function openEditorWin(path, fromWin) {
     w.style.width = "620px";
     w.innerHTML = `<div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title"></div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
       <div class="win-frame">
         <div class="ed-info">
           ${ED_PENCIL}<div class="ed-main">${ED_DOC}<span class="ed-path"></span></div>
@@ -3285,16 +3356,16 @@ function openEditorWin(path, fromWin) {
     w.querySelector(".ed-delete").addEventListener("click", async () => {
       const curPath = w.dataset.path;
       if (!curPath) return;
-      if (!await platAsk("Delete “" + curPath.split("/").pop() + "” from Workspace?", { title: "Delete File", ok: "Delete" })) return;
+      if (!await platAsk("Move “" + curPath.split("/").pop() + "” to Trash?", { title: "Move to Trash", ok: "Move" })) return;
       clearTimeout(saveT);
       try {
-        await api(wsUrl(curPath), { method: "DELETE" });
+        await api(wsUrl(curPath), { method: "POST", body: JSON.stringify({ to: ".Trash/" + Date.now() + "-" + curPath.split("/").pop() }) });
         delete w.dataset.dirty;
         closeWin(w);
         refreshFinderWindows();
-        toast("Deleted " + curPath);
+        toast("Moved to Trash " + curPath);
       } catch (e) {
-        w.querySelector(".ed-saved").textContent = "Delete failed: " + e.message;
+        w.querySelector(".ed-saved").textContent = "Move failed: " + e.message;
       }
     });
     ta.addEventListener("input", () => {
@@ -3374,7 +3445,7 @@ function openImageWin(path, fromWin) {
     w.style.width = "520px";
     w.innerHTML = `<div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
       <div class="title"></div>
-      <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
       <div class="win-frame">
         <div class="iv-info"><span class="iv-path"></span><span class="iv-dims">…</span></div>
         <div class="iv-box"></div>
@@ -3859,6 +3930,9 @@ function showPane(key) {
     if (dead && $("#d-state").textContent === "running") $("#term-open").click();
     termResize();
   }
+  if (key === "vibe") {
+    chatDetect().then(() => fillVibeSelects(chatProv, (hostAgents.find(a => a.id === chatProv) || {}).default_model || ""));
+  }
 }
 document.querySelectorAll("#win-detail .tab").forEach(t =>
   t.addEventListener("click", () => showPane(t.dataset.tab)));
@@ -4187,7 +4261,7 @@ function openHostTermWin() {
   w.style.width = "640px";
   w.innerHTML = `<div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
     <div class="title"></div>
-    <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+    <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame">
       <div class="win-body" style="padding:0"><div class="hostterm-box"></div></div>
       <div class="statusbar"><span class="term-status">…</span><span class="muted"> · Ctrl+select+right-click copy</span></div>
@@ -4309,7 +4383,7 @@ function openVMTermWin(vm, opts) {
   w.style.width = "720px";
   w.innerHTML = `<div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
     <div class="title"></div>
-    <div class="stripe"></div><button class="tbox zoom"></button><button class="tbox shade"></button></div>
+    <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
     <div class="win-frame">
       <div class="win-body" style="padding:0"><div class="vmterm-box"></div></div>
       <div class="statusbar"><span class="term-status">…</span><span class="muted"> · Ctrl+select+right-click copy</span></div>
@@ -4527,6 +4601,59 @@ function launchGuest(item) {
   }
 })();
 
+function fillVibeSelects(prefAgent, prefModel) {
+  const psel = $("#vibe-provider"), msel = $("#vibe-model");
+  if (!psel || !msel) return;
+  const ready = hostAgents.filter(a => a.ready);
+  psel.replaceChildren(...(ready.length ? ready : hostAgents).map(a =>
+    el("option", { value: a.id }, a.name + (a.ready ? "" : " (not signed in)"))));
+  const pick = hostAgents.find(a => a.id === (prefAgent || chatProv)) || ready[0] || hostAgents[0];
+  if (pick) psel.value = pick.id;
+  const a = hostAgents.find(x => x.id === psel.value);
+  const models = (a && a.models) || [];
+  msel.replaceChildren(...models.map(m => el("option", { value: m }, m)));
+  if (a && a.default_model) msel.append(el("option", { value: a.default_model }, a.default_model));
+  const want = prefModel || (a && a.default_model) || "";
+  if (want && (models.includes(want) || want === (a && a.default_model))) msel.value = want;
+  else if (models.length) msel.value = models[0];
+}
+$("#vibe-provider") && $("#vibe-provider").addEventListener("change", () => fillVibeSelects($("#vibe-provider").value, ""));
+async function runVibeAgent() {
+  const prompt = $("#vibe-prompt").value.trim();
+  if (!currentVM) { toast("open a VM first"); return; }
+  if ($("#d-state").textContent !== "running") { toast("start the VM first"); return; }
+  if (!prompt) { toast("type a task first"); return; }
+  const provider = $("#vibe-provider").value;
+  const model = $("#vibe-model").value;
+  const log = $("#vibe-log");
+  const status = $("#vibe-status");
+  log.hidden = false;
+  log.textContent = "";
+  status.textContent = "running…";
+  $("#vibe-run").disabled = true;
+  try {
+    const resp = await api(`/v1/vms/${currentVM}/agent`, {
+      method: "POST",
+      json: { prompt, provider, model },
+    });
+    const rd = resp.body.getReader();
+    const dec = new TextDecoder();
+    for (;;) {
+      const { done, value } = await rd.read();
+      if (done) break;
+      log.textContent += dec.decode(value, { stream: true });
+      log.scrollTop = log.scrollHeight;
+    }
+    status.textContent = "done";
+    loadTranscripts();
+  } catch (e) {
+    log.textContent += "\nERROR: " + e.message;
+    status.textContent = "failed";
+  }
+  $("#vibe-run").disabled = false;
+}
+$("#vibe-run").onclick = runVibeAgent;
+
 // ---- expose ----
 function cfIncomplete(cfg) {
   const c = (cfg && cfg.cloudflare) || {};
@@ -4627,7 +4754,7 @@ function flushNotes() {
 }
 $("#notes-delete").onclick = async () => {
   if (!currentVM || notesVM !== currentVM) return;
-  if (!await platAsk("Delete notes for “" + currentVM + "”?", { title: "Delete Notes", ok: "Delete" })) return;
+  if (!await platAsk("Delete notes for “" + currentVM + "”? A backup is kept in the VM folder.", { title: "Delete Notes", ok: "Delete" })) return;
   clearTimeout(notesTimer);
   notesTimer = null;
   try {
@@ -4752,8 +4879,10 @@ async function chatDetect(force) {
     $("#chat-icon").hidden = !chatDetected;
     fillHostAgentSelects(st.host_agent, st.host_model);
     const a = ready.find(x => x.id === chatProv) || ready[0];
+    const prov = chatProviderLabel(chatProv);
+    const model = st.host_model || (a && a.default_model) || "";
     $("#chat-status").textContent = chatDetected
-      ? ((a && a.name || chatProv) + " — " + (st.host_model || (a && a.default_model) || "no model") + (a && a.source ? " — " + a.source : "") + (a && a.email ? " — " + a.email : ""))
+      ? (prov + (prov && model ? " / " : "") + model + (a && a.source ? " — " + a.source : "") + (a && a.email ? " — " + a.email : ""))
       : "no host agent signed in (~/.grok, ~/.claude, ~/.codex)";
     if (!chatDetected && !$("#win-chat").hidden) toast("No host agent signed in");
     chatUsage(force);
@@ -4767,7 +4896,11 @@ function fillHostAgentSelects(prefAgent, prefModel) {
   asel.replaceChildren(...(ready.length ? ready : hostAgents).map(a =>
     el("option", { value: a.id }, a.name + (a.ready ? "" : " (not signed in)"))));
   if (pick) asel.value = pick.id;
-  fillHostModels(msel, pick, prefModel);
+  // Use the explicitly configured host_model if it belongs to this agent,
+  // otherwise fall back to the agent's default.
+  const models = (pick && pick.models) || [];
+  const modelPref = prefModel && (models.includes(prefModel) || prefModel === pick?.default_model) ? prefModel : "";
+  fillHostModels(msel, pick, modelPref || (pick && pick.default_model));
 }
 function fillHostModels(sel, agent, prefModel) {
   const models = (agent && agent.models) || [];
@@ -4877,6 +5010,11 @@ function chatTitle() {
   const inp = $("#chat-title-edit");
   if (inp && document.activeElement !== inp) inp.value = chatCurTitle || "";
 }
+function chatProviderLabel(id) {
+  const a = hostAgents.find(x => x.id === id);
+  return a ? a.name : (id || "");
+}
+
 function chatHint() {
   chatMsgs.replaceChildren(el("div", { class: "chat-hint" },
     "Host Chat operates the VM cloud (list/create/start/stop). It is not a VM shell. Work inside a guest with Agent or exe env. Pick a host agent + model above (Grok / Claude / Codex — already signed in on this machine).",

@@ -118,14 +118,14 @@ func (m *fcManager) setupNetwork(name string, mt *vmMeta) error {
 	}
 	mt.Network.Tap = tapName(name)
 
+	outbound, err := m.outboundInterface()
+	if err != nil {
+		return err
+	}
 	if mt.Network.OutboundInterface != "" {
 		if err := m.runNetworkHelper("cleanup", name, mt.Network); err != nil {
 			return fmt.Errorf("clean stale network for VM %s: %w", name, err)
 		}
-	}
-	outbound, err := m.outboundInterface()
-	if err != nil {
-		return err
 	}
 	if outbound == mt.Network.Tap {
 		return fmt.Errorf("outbound interface cannot be VM TAP %s", outbound)
