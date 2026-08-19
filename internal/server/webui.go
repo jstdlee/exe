@@ -256,11 +256,20 @@ func (s *Server) handleNotesDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errCode(err), err)
 		return
 	}
-	if err := os.Remove(s.notesPath(name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	// Move deleted notes into the VM's .Trash so they are recoverable
+	// and consistent with how workspace files are trashed.
+	src := s.notesPath(name)
+	trashDir := filepath.Join(filepath.Dir(src), ".Trash")
+	dst := filepath.Join(trashDir, time.Now().Format("20060102-150405")+"-notes.md")
+	if err := os.MkdirAll(trashDir, 0o755); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	if err := os.Rename(src, dst); err != nil && !errors.Is(err, os.ErrNotExist) {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "trash": dst})
 }
 
 func (s *Server) handleConfigGet(w http.ResponseWriter, r *http.Request) {

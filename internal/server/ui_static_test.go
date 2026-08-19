@@ -49,10 +49,9 @@ func TestMobileMinimizeCollapsesToVisibleBar(t *testing.T) {
 func TestMobileTitlebarControlsStayAvailable(t *testing.T) {
 	ui := readUITemplate(t)
 	for _, want := range []string{
-		`body.mobile .tbox.shade, body.mobile .grow-box { display: none; }`,
-		`body.mobile .tbox.zoom { display: inline-block; }`,
-		`w.classList.toggle("mob-restored")`,
-		`if (IS_MOBILE) return; // no resize in mobile mode`,
+		`body.mobile .grow-box { display: none; }`,
+		`body.mobile .tbox.max { display: inline-block; }`,
+		`w.classList.add("mob-restored")`,
 	} {
 		if !strings.Contains(ui, want) {
 			t.Fatalf("mobile titlebar controls should stay available; missing %q", want)
@@ -67,7 +66,7 @@ func TestMobileRestoreWindowIsCenteredAndClamped(t *testing.T) {
 		`left: 50% !important`,
 		`top: 50% !important`,
 		`transform: translate(-50%, -50%)`,
-		`max-width: 92vw !important`,
+		`max-width: min(92vw, 640px) !important`,
 		`max-height: calc(100dvh - 40px) !important`,
 	} {
 		if !strings.Contains(ui, want) {
@@ -113,7 +112,8 @@ func TestDesktopMaximizeButtonAndRestore(t *testing.T) {
 		`.window.maximized`,
 		`w.classList.contains("maximized")`,
 		`w._max`,
-		`body.mobile .tbox.max { display: none; }`,
+		`body.mobile .tbox.max { display: inline-block; }`,
+		`tbox.max.restore`,
 	} {
 		if !strings.Contains(ui, want) {
 			t.Fatalf("desktop maximize button/restore behavior missing %q", want)

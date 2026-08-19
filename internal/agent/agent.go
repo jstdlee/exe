@@ -284,6 +284,15 @@ func chatHTTP(ctx context.Context, cfg Config, msgs []Message, tools []Tool, str
 
 // Chat sends one non-streaming chat completion request to Ollama.
 func Chat(ctx context.Context, cfg Config, msgs []Message, tools []Tool) (*ChatResponse, error) {
+	// Reuse the streaming OpenAI path when configured; it handles model
+	// aliases and returns a single assembled message.
+	if cfg.Style == "openai" {
+		full, err := ChatStreamOpenAI(ctx, cfg, msgs, tools, nil)
+		if err != nil {
+			return nil, err
+		}
+		return &ChatResponse{Message: *full}, nil
+	}
 	resp, cancel, err := chatHTTP(ctx, cfg, msgs, tools, false)
 	if err != nil {
 		return nil, err

@@ -665,11 +665,11 @@ func (g *SSHGate) lobbyCode(ctx context.Context, out io.Writer, rest []string, f
 	if prompt == "" {
 		return fail("usage: code <vm> [-m model] <prompt>")
 	}
-	info, err := g.s.agentPrecheck(ctx, name, prompt)
+	info, err := g.s.agentPrecheck(ctx, name, prompt, "")
 	if err != nil {
 		return fail("%v", err)
 	}
-	if err := g.s.agentRun(ctx, info, name, prompt, model, func(line string) {
+	if err := g.s.agentRun(ctx, info, name, prompt, "", model, func(line string) {
 		io.WriteString(out, line)
 	}); err != nil {
 		return 1

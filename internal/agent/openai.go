@@ -17,6 +17,15 @@ import (
 // ChatStreamOpenAI talks to an OpenAI-compatible /v1/chat/completions
 // endpoint (xAI, Anthropic's compat layer, ollama.com/v1, custom bridges).
 func ChatStreamOpenAI(ctx context.Context, cfg Config, msgs []Message, tools []Tool, onDelta func(string)) (*Message, error) {
+	// Some OpenAI-compatible proxies expose ollama.com models as
+	// "ollama.com_foo:tag" while the /v1/models list advertises them as
+	// "ollama.com_foo:tag"; build a list of aliases and use the first one
+	// the server accepts.
+	aliases := []string{cfg.Model}
+	if strings.HasPrefix(cfg.Model, "ollama.com_") {
+		base := strings.TrimPrefix(cfg.Model, "ollama.com_")
+		aliases = append(aliases, base, base+":cloud")
+	}
 	type oaiMsg struct {
 		Role       string `json:"role"`
 		Content    any    `json:"content,omitempty"`
@@ -53,13 +62,8 @@ func ChatStreamOpenAI(ctx context.Context, cfg Config, msgs []Message, tools []T
 		}
 		out = append(out, om)
 	}
-	body := map[string]any{
-		"model":    cfg.Model,
-		"messages": out,
-		"stream":   true,
-	}
+	var ots []any
 	if len(tools) > 0 {
-		var ots []any
 		for _, t := range tools {
 			ots = append(ots, map[string]any{
 				"type": "function",
@@ -70,38 +74,55 @@ func ChatStreamOpenAI(ctx context.Context, cfg Config, msgs []Message, tools []T
 				},
 			})
 		}
-		body["tools"] = ots
-	}
-	if cfg.Temperature > 0 {
-		body["temperature"] = cfg.Temperature
-	}
-	raw, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
 	}
 	endpoint := strings.TrimRight(cfg.BaseURL, "/") + "/chat/completions"
 	rctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	req, err := http.NewRequestWithContext(rctx, http.MethodPost, endpoint, bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
+	var lastErr string
+	var resp *http.Response
+	var model string
+	for _, cand := range aliases {
+		model = cand
+		body := map[string]any{
+			"model":    model,
+			"messages": out,
+			"stream":   true,
+		}
+		if len(ots) > 0 { body["tools"] = ots }
+		if cfg.Temperature > 0 { body["temperature"] = cfg.Temperature }
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		req, err := http.NewRequestWithContext(rctx, http.MethodPost, endpoint, bytes.NewReader(raw))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if cfg.APIKey != "" {
+			req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+		}
+		for k, v := range cfg.ExtraHeaders {
+			req.Header.Set(k, v)
+		}
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusOK {
+			lastErr = ""
+			break
+		}
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		lastErr = sshexec.Truncate(string(errBody), 2000)
+		resp.Body.Close()
+		resp = nil
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	}
-	for k, v := range cfg.ExtraHeaders {
-		req.Header.Set(k, v)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
+	if resp == nil {
+		return nil, fmt.Errorf("openai %s: HTTP error: %s", cfg.Model, lastErr)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return nil, fmt.Errorf("openai %s: HTTP %d: %s", cfg.Model, resp.StatusCode, sshexec.Truncate(string(errBody), 2000))
-	}
+
 
 	full := Message{Role: "assistant"}
 	type acc struct {

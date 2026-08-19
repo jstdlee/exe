@@ -339,7 +339,18 @@ func handleFileDelete(w http.ResponseWriter, root, rel string) bool {
 		writeErr(w, http.StatusBadRequest, err)
 		return false
 	}
-	if err := os.Remove(p); err != nil {
+	// Move to .Trash instead of hard-deleting so the user can recover files.
+	trashBase := ".Trash/" + time.Now().Format("20060102-150405") + "-" + filepath.Base(rel)
+	dst, err := scopedPath(root, trashBase)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return false
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return false
+	}
+	if err := os.Rename(p, dst); err != nil {
 		if os.IsNotExist(err) {
 			writeErr(w, http.StatusNotFound, errors.New("not found"))
 		} else {
@@ -347,7 +358,7 @@ func handleFileDelete(w http.ResponseWriter, root, rel string) bool {
 		}
 		return false
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "trash": trashBase})
 	return true
 }
 
