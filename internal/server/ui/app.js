@@ -286,6 +286,7 @@ function initWindow(w) {
     const setMaxIcon = () => maxb.classList.toggle("restore", w.classList.contains("maximized") || w.classList.contains("mob-restored"));
     maxb.addEventListener("click", e => {
       e.stopPropagation();
+      if (IS_MOBILE && w.classList.contains("minimized")) { openWin(w); return; }
       const wasMax = w.classList.contains("maximized") || w.classList.contains("mob-restored");
       w.classList.remove("maximized");
       w.classList.remove("mob-restored");
@@ -316,6 +317,10 @@ function initWindow(w) {
     });
     setMaxIcon();
   }
+  tb.addEventListener("click", e => {
+    if (e.target.closest(".tbox")) return;
+    if (IS_MOBILE && w.classList.contains("minimized")) { openWin(w); return; }
+  });
   tb.addEventListener("dblclick", e => {
     if (IS_MOBILE || e.target.closest(".tbox") || w.classList.contains("modal")) return;
     w.classList.toggle("shaded");
@@ -1008,7 +1013,6 @@ function wireIconDrag(ic, key) {
   // user can reorder; double-click still opens.
   ic.addEventListener("pointerdown", e => {
     if (e.button !== 0) return;
-    e.preventDefault();
     const r = ic.getBoundingClientRect();
     const desk = $("#desktop").getBoundingClientRect();
     const ox = e.clientX - r.left, oy = e.clientY - r.top;
@@ -1017,7 +1021,7 @@ function wireIconDrag(ic, key) {
     try { ic.setPointerCapture(e.pointerId); } catch (err) {}
     const move = ev => {
       if (!moved && (ev.clientX - sx) ** 2 + (ev.clientY - sy) ** 2 < 16) return;
-      if (!moved) { moved = true; ic.classList.add("dragging"); }
+      if (!moved) { moved = true; ic.classList.add("dragging"); ev.preventDefault(); }
       ic.style.left = (ev.clientX - desk.left - ox) + "px";
       ic.style.top = (ev.clientY - desk.top - oy) + "px";
     };
@@ -1166,7 +1170,7 @@ const TERMINAL_ICON = `<svg width="32" height="32" viewBox="0 0 32 32" shape-ren
   <rect x="20" y="21" width="3" height="2" fill="#B7B2A7"/>
   <rect x="9.5" y="25.5" width="13" height="3" fill="#C8C3B8" stroke="#000"/>
 </svg>`;
-const HIDDEN_DESKTOP_APPS = new Set(["Editor"]);
+const HIDDEN_DESKTOP_APPS = new Set(["Editor", "Browser"]);
 function isHiddenDesktopApp(name) { return HIDDEN_DESKTOP_APPS.has(name); }
 async function loadApps() {
   appsList = (await j("/v1/apps")).filter(a => !isHiddenDesktopApp(a.name));
@@ -4460,7 +4464,7 @@ if (!sessionStorage.getItem("exe_startup_note")) {
   sessionStorage.setItem("exe_startup_note", "1");
   platAsk(
     "Terminal copy/paste (host + VM): hold Ctrl, select text, right-click to copy. Ctrl + right-click with no selection pastes.\n\n" +
-    "Desk app icons (Notes, Browser) drag like Workspace — not as files. Editor opens from Workspace text files.\n\n" +
+    "Desk app icons drag like Workspace — not as files. Editor opens from Workspace text files.\n\n" +
     "Chat picks a host agent + model (Grok / Claude / Codex) already signed in on this machine.\n\n" +
     "Expose publishes a VM port via Cloudflare. Transcripts are host logs of built-in Agent runs only.",
     { title: "exe", note: true, ok: "OK" }
