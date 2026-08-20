@@ -8,11 +8,38 @@ import (
 
 func readUITemplate(t *testing.T) string {
 	t.Helper()
-	b, err := os.ReadFile("ui/index.html")
+	var out strings.Builder
+	for _, name := range []string{"ui/index.html", "ui/app.css", "ui/app.js"} {
+		b, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out.Write(b)
+		out.WriteByte('\n')
+	}
+	return out.String()
+}
+
+func TestUIAssetsAreSplit(t *testing.T) {
+	index, err := os.ReadFile("ui/index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(b)
+	html := string(index)
+	for _, want := range []string{
+		`<link rel="stylesheet" href="/ui/app.css">`,
+		`<script src="/ui/app.js"></script>`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("index should load split UI asset %q", want)
+		}
+	}
+	if strings.Contains(html, `<style>`) {
+		t.Fatal("index.html should not carry the full inline stylesheet")
+	}
+	if strings.Contains(html, "\n<script>\n") {
+		t.Fatal("index.html should not carry the full inline app script")
+	}
 }
 
 func TestMobileWindowsMenuIsStandalone(t *testing.T) {
@@ -110,8 +137,11 @@ func TestDesktopMaximizeButtonAndRestore(t *testing.T) {
 	for _, want := range []string{
 		`.tbox.max::before`,
 		`.window.maximized`,
+		`display: flex !important`,
 		`w.classList.contains("maximized")`,
 		`w._max`,
+		`frameHeights: captureWindowFrameHeights(w)`,
+		`restoreWindowFrameHeights(w, w._max.frameHeights)`,
 		`body.mobile .tbox.max { display: inline-block; }`,
 		`tbox.max.restore`,
 	} {
@@ -204,8 +234,10 @@ func TestHostStatsMovedToMonitorApp(t *testing.T) {
 func TestAgentLaunchersWrapOnMobile(t *testing.T) {
 	ui := readUITemplate(t)
 	for _, want := range []string{
-		`#a-launchers { display: flex; flex-wrap: wrap;`,
-		`body.mobile #a-launchers { flex-wrap: wrap; }`,
+		`.agent-tools-panel`,
+		`#a-launchers { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));`,
+		`.tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));`,
+		`body.mobile #a-launchers { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }`,
 	} {
 		if !strings.Contains(ui, want) {
 			t.Fatalf("agent launchers mobile wrap missing %q", want)
@@ -217,8 +249,9 @@ func TestMaximizeRestoresSize(t *testing.T) {
 	ui := readUITemplate(t)
 	for _, want := range []string{
 		`width: w.style.width || (w.offsetWidth + "px")`,
-		`height: w.style.height || (w.offsetHeight + "px")`,
+		`height: w.style.height || ""`,
 		`["left","top","width","height"]`,
+		`clearWindowFrameHeights(w._max.frameHeights)`,
 	} {
 		if !strings.Contains(ui, want) {
 			t.Fatalf("maximize size restore missing %q", want)
@@ -247,7 +280,7 @@ func TestTranscriptsExplanationClear(t *testing.T) {
 		`stored on the host next to the VM
               disk`,
 		`survive stop/start`,
-		`Click a row to replay the log`,
+		`Double-click a row to open the transcript`,
 		`Terminal-launched CLIs keep their own history`,
 	} {
 		if !strings.Contains(ui, want) {
@@ -256,3 +289,47 @@ func TestTranscriptsExplanationClear(t *testing.T) {
 	}
 }
 
+func TestDesktopAppsMenuRemovedFromTopBar(t *testing.T) {
+	ui := readUITemplate(t)
+	if strings.Contains(ui, `<div class="menu" data-m="apps">Apps</div>`) {
+		t.Fatal("desktop top bar should not include the Apps menu")
+	}
+	if !strings.Contains(ui, `id="dd-drawer-apps-list"`) {
+		t.Fatal("mobile drawer should keep app launch entries")
+	}
+}
+
+func TestObjectsOpenOnDoubleClick(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`const objectOpen = (n, fn) => n.addEventListener("dblclick", fn);`,
+		`objectOpen(ic, () => openFinderWin(""))`,
+		`objectOpen(row, () => openVM(vm.name))`,
+		`objectOpen(trashIcon, () => openWin("#win-trash"))`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("objects should open on double-click; missing %q", want)
+		}
+	}
+	if strings.Contains(ui, `const tapOpen = (n, fn) => n.addEventListener(IS_MOBILE ? "click" : "dblclick", fn);`) {
+		t.Fatal("object opening should no longer switch mobile to single-click")
+	}
+}
+
+func TestTranscriptDetailsUseModal(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`id="tr-overlay"`,
+		`id="tr-modal-log"`,
+		`function openTranscriptModal(d)`,
+		`objectOpen(item, async () => {`,
+		`openTranscriptModal(d)`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("transcript modal missing %q", want)
+		}
+	}
+	if strings.Contains(ui, `id="t-log" hidden`) {
+		t.Fatal("transcript pane should not reserve inline detail log space")
+	}
+}
