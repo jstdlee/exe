@@ -79,9 +79,23 @@ func TestMobileTitlebarControlsStayAvailable(t *testing.T) {
 		`body.mobile .grow-box { display: none; }`,
 		`body.mobile .tbox.max { display: inline-block; }`,
 		`w.classList.add("mob-restored")`,
+		`if (IS_MOBILE && w.classList.contains("minimized")) { openWin(w); return; }`,
 	} {
 		if !strings.Contains(ui, want) {
 			t.Fatalf("mobile titlebar controls should stay available; missing %q", want)
+		}
+	}
+}
+
+func TestMobileMinimizedTitlebarRestoresWindow(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`if (IS_MOBILE && w.classList.contains("minimized")) { openWin(w); return; }`,
+		`w.classList.remove("minimized");`,
+		`updateMobileMinimizedBars();`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("mobile minimized titlebar should restore the window; missing %q", want)
 		}
 	}
 }
@@ -193,7 +207,7 @@ func TestMobileDesktopIconsScrollableAndAllAppsVisible(t *testing.T) {
 		`body.mobile #icons { overflow-y: auto;`,
 		`body.mobile #sys-icons { z-index: 2; }`,
 		`for (const app of appsList)`,
-		`const HIDDEN_DESKTOP_APPS = new Set(["Editor"])`,
+		`const HIDDEN_DESKTOP_APPS = new Set(["Editor", "Browser"])`,
 	} {
 		if !strings.Contains(ui, want) {
 			t.Fatalf("mobile desktop app visibility missing %q", want)
@@ -299,6 +313,23 @@ func TestDesktopAppsMenuRemovedFromTopBar(t *testing.T) {
 	}
 }
 
+func TestBrowserAppIsHiddenFromDesktopAndDrawer(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`const HIDDEN_DESKTOP_APPS = new Set(["Editor", "Browser"])`,
+		`appsList = (await j("/v1/apps")).filter(a => !isHiddenDesktopApp(a.name));`,
+		`if (isHiddenDesktopApp(w.id.slice(8))) w.remove();`,
+		`if (isHiddenDesktopApp(name)) return;`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("Browser app should be hidden from desktop app surfaces; missing %q", want)
+		}
+	}
+	if strings.Contains(ui, "Notes, Browser") {
+		t.Fatal("startup copy should not advertise the hidden Browser app")
+	}
+}
+
 func TestObjectsOpenOnDoubleClick(t *testing.T) {
 	ui := readUITemplate(t)
 	for _, want := range []string{
@@ -313,6 +344,18 @@ func TestObjectsOpenOnDoubleClick(t *testing.T) {
 	}
 	if strings.Contains(ui, `const tapOpen = (n, fn) => n.addEventListener(IS_MOBILE ? "click" : "dblclick", fn);`) {
 		t.Fatal("object opening should no longer switch mobile to single-click")
+	}
+}
+
+func TestIconDragDoesNotSuppressDoubleClick(t *testing.T) {
+	ui := readUITemplate(t)
+	if strings.Contains(ui, `ic.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    e.preventDefault();`) {
+		t.Fatal("icon pointerdown should not prevent default before a drag threshold; it suppresses dblclick")
+	}
+	if !strings.Contains(ui, `if (!moved) { moved = true; ic.classList.add("dragging"); ev.preventDefault(); }`) {
+		t.Fatal("icon drag should prevent default only once an actual drag starts")
 	}
 }
 
