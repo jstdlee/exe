@@ -1,0 +1,912 @@
+/* Mac OS 9 Platinum — pixel values from macthemes.garden's implementation */
+:root {
+  --black: #262626;
+  --g200: #eee; --g300: #ddd; --g400: #ccc; --g500: #bbb; --g600: #999; --g700: #808080; --g800: #666;
+  --hl: #333399; --lav: #ccf;
+  --green: #1f9e33; --red: #cc3333; --amber: #cc8400; --gray: #808080;
+  --mono: "Monaco", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font: "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Geneva, Verdana, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; overflow: hidden; font: 12px/1.45 var(--font); color: var(--black);
+  background: var(--lav) url(data:image/png;base64,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) repeat;
+  user-select: none; cursor: default;
+}
+[hidden] { display: none !important; }
+a { color: #202a87; text-decoration: underline; }
+.muted { color: #555; font-size: 11px; }
+.mono { font-family: var(--mono); font-size: 11px; }
+/* click-to-copy IP in the About box */
+.ip-copy { color: var(--hl); cursor: pointer; text-decoration: underline; }
+.ip-copy:active { color: #000; }
+
+/* ---------- menu bar ---------- */
+#menubar {
+  position: fixed; top: 0; left: 0; right: 0; height: 20px; z-index: 3000;
+  background: var(--g300);
+  border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 #fff, inset 1px 0 0 #fff, inset -1px -1px 0 var(--g600);
+  display: flex; align-items: stretch; font-size: 12px;
+}
+.menu { display: flex; align-items: center; padding: 0 10px; font-weight: bold; }
+.menu.appl { padding: 0 12px; }
+.menu.drawer { display: none; }
+.menu.windows-menu { display: none; }
+.menu.open { background: var(--hl); color: #fff; }
+.mb-right { margin-left: auto; display: flex; align-items: stretch; }
+#cf-dot { display: flex; align-items: center; gap: 5px; padding: 0 10px; border: none;
+  background: none; font: inherit; color: inherit; }
+#cf-dot:active { background: var(--hl); color: #fff; }
+.dot { width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(0,0,0,.55);
+  background: radial-gradient(circle at 30% 28%, rgba(255,255,255,.85), rgba(255,255,255,0) 55%), var(--gray);
+  display: inline-block; }
+#clock { display: flex; align-items: center; padding: 0 12px; font-weight: bold;
+  border-left: 1px solid var(--g600); box-shadow: inset 1px 0 0 #fff; }
+.host-res-btn { display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 11px;
+  border-left: 1px solid var(--g600); box-shadow: inset 1px 0 0 #fff; white-space: nowrap;
+  background: none; border-top: 0; border-right: 0; border-bottom: 0; font: inherit; color: inherit; cursor: pointer; }
+.host-res-btn:hover { background: var(--hl); color: #fff; }
+.host-res-btn .hot { color: var(--red); font-weight: bold; }
+.host-res-btn:hover .hot { color: #fff; }
+body.mobile #host-res { display: none; }
+.res-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  padding: 4px 8px; background: var(--g300); border-bottom: 1px solid var(--black);
+  font-size: 11px; }
+.res-item { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.res-item .lbl { color: #555; }
+.res-meter { width: 52px; height: 8px; border: 1px solid var(--black); background: #fff;
+  box-shadow: inset 1px 1px 0 #fff; position: relative; }
+.res-meter > i { display: block; height: 100%; background: var(--hl); }
+.res-meter.hot > i { background: var(--red); }
+.res-item.hot .val { color: var(--red); font-weight: bold; }
+.dropdown {
+  position: fixed; top: 20px; z-index: 3001; min-width: 200px;
+  background: var(--g200); border: 1px solid var(--black); padding: 2px 1px;
+  /* single-line seam: the menubar's border-bottom is the menu's top line */
+  border-top: 0;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--g500), 2px 2px 0 rgba(38,38,38,.85);
+}
+.dd-item { padding: 3px 22px 3px 18px; white-space: nowrap; }
+.dd-item:hover { background: var(--hl); color: #fff; }
+.dd-item.dis { color: #888; }
+.dd-item.dis:hover { background: none; color: #888; }
+.dd-item.win-active::before { content: "✓ "; margin-left: -10px; }
+.dd-sep { height: 1px; background: var(--g600); margin: 3px 2px; box-shadow: 0 1px 0 #fff; }
+.dd-head { padding: 4px 22px 2px 18px; font-size: 10px; font-weight: bold; color: #555; }
+#dd-drawer { width: min(250px, calc(100vw - 8px)); max-height: calc(100dvh - 28px); overflow-y: auto; }
+.win-list-inline:empty { display: none; }
+@media (max-width: 768px) {
+  .menu.drawer, .menu.windows-menu { display: flex; }
+  .menu[data-m="file"], .menu[data-m="vm"], .menu[data-m="special"], .menu[data-m="help"] { display: none; }
+}
+/* Finder contextual menu, sampled from a real OS 9 capture: #ddd face
+   (menubar menus are lighter), same groove separators and hard shadow */
+#ctx-menu { top: auto; background: var(--g300); min-width: 170px; z-index: 5000;
+  border-top: 1px solid var(--black); /* floats at the cursor, away from the menubar line */ }
+
+/* ---------- desktop icons ---------- */
+#desktop { position: fixed; inset: 20px 0 0 0; }
+#desktop-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+body.custom-desk { background-image: none; }
+.desk-preview { height: 110px; border: 1px solid var(--black); background: var(--lav);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--g600); margin-bottom: 10px; }
+.desk-modes { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.desk-modes label { display: flex; align-items: center; gap: 4px; }
+#icons { position: absolute; inset: 8px 8px 8px 8px; z-index: 1; }
+.dicon { width: 82px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  position: absolute; cursor: grab; }
+.dicon.dragging { opacity: .85; cursor: grabbing; z-index: 50; }
+.dicon svg { filter: drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
+/* app icons use <img>; kill native image-drag so they feel like Workspace/VM icons */
+.dicon img, .dicon svg { -webkit-user-drag: none; user-drag: none; pointer-events: none; }
+body.win-drag iframe, body.win-drag .app-frame { pointer-events: none; }
+.msg .mermaid { margin: 8px 0; background: #fff; border: 1px solid var(--black); padding: 6px; overflow: auto; }
+.msg .mermaid img { max-width: 100%; display: block; }
+#a-launchers { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 6px; }
+body.mobile #a-launchers { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 6px; margin-top: 4px; }
+.agent-tools-panel .btn, .agent-tools-panel .ghost.sm { width: 100%; min-width: 0; }
+/* integer line-height: the inherited 1.45 makes the label 15.9375px tall,
+   which pushes every following 32px crispEdges glyph onto fractional pixels */
+.dicon .lbl { max-width: 82px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #fff; text-shadow: 1px 1px 1px #000; padding: 0 4px; font-size: 11px; line-height: 16px; }
+.dicon.sel svg { filter: brightness(.55) saturate(1.3) drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
+.dicon.sel .lbl { background: var(--hl); text-shadow: none; }
+.dicon img { width: 32px; height: 32px; image-rendering: pixelated;
+  filter: drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
+.dicon.sel img { filter: brightness(.55) saturate(1.3) drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
+/* system icons (Chat, Trash) live in their own bottom-anchored column on
+   the same 8px rail and 16px rhythm as #icons, so both groups share one
+   center axis and pitch; hiding Chat keeps Trash pinned at the bottom */
+#sys-icons { position: absolute; bottom: 16px; right: 8px; z-index: 1;
+  display: flex; flex-direction: column; gap: 16px; }
+
+/* ---------- window chrome (macthemes.garden-accurate) ---------- */
+.window {
+  position: absolute; z-index: 10; min-width: 220px;
+  background: var(--g400); border: 1px solid var(--black);
+  box-shadow: 2px 2px 0 var(--black);
+}
+.window::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 4;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.5), inset -1px -1px 0 var(--g600), inset 1px 1px 0 #fff; }
+.titlebar { display: flex; align-items: center; gap: 4px; padding: 2px 4px;
+  background: var(--g400); user-select: none; }
+.titlebar .stripe { flex: 1; height: 12px; min-width: 8px; position: relative;
+  background-color: var(--g300);
+  background-image: linear-gradient(#fff, #fff 50%, #777 50%, #777);
+  background-size: 100% 2px; background-repeat: repeat; }
+.titlebar .stripe::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 1px;
+  background-image: linear-gradient(#fff, #fff 50%, #ccc 50%, #ccc);
+  background-size: 100% 2px; background-repeat: repeat; border-bottom: 1px solid #ccc; }
+.titlebar .stripe::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 1px;
+  background-image: linear-gradient(#ccc, #ccc 50%, #777 50%, #777);
+  background-size: 100% 2px; background-repeat: repeat; }
+.titlebar .title { font-weight: bold; font-size: 12px; line-height: 13px; padding: 0 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%;
+  background: var(--g400); }
+.tbox { width: 13px; height: 13px; flex: none; position: relative; border: none; padding: 0;
+  background: linear-gradient(135deg, #9a9a9a 0%, #f1f1f1 100%) 50% / 9px 9px;
+  box-shadow: inset 1px 1px 0 var(--g700), inset -1px -1px 0 #fff,
+    inset 0 0 0 2px var(--black), inset 3px 3px 0 #fff, inset -3px -3px 0 var(--g700); }
+.tbox:active::after { content: ""; position: absolute; inset: 2px; z-index: 1;
+  background-image: linear-gradient(135deg, #353535cc 0%, #9c9c9ccc 100%); }
+.tbox.close::before { content: ""; position: absolute; top: 50%; left: 50%; width: 9px; height: 1px;
+  z-index: 3; background: var(--black); transform: translate(-50%, -50%) rotate(45deg); }
+.tbox.close::after { content: ""; position: absolute; top: 50%; left: 50%; width: 9px; height: 1px;
+  z-index: 3; background: var(--black); transform: translate(-50%, -50%) rotate(-45deg); }
+.tbox.close > i { display: none; }
+.tbox.min::before { content: ""; position: absolute; left: 2px; right: 2px; bottom: 2px; height: 2px;
+  z-index: 2; background: var(--black); }
+.tbox.shade::before { content: ""; position: absolute; top: 5px; left: 1px; right: 1px; height: 3px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); }
+.tbox.max::before { content: ""; position: absolute; top: 2px; left: 2px; width: 7px; height: 7px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: linear-gradient(135deg, #9a9a9a 0%, #f1f1f1 100%); }
+.tbox.max::after { content: ""; position: absolute; top: 4px; left: 4px; width: 5px; height: 5px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: #fff; }
+.tbox.max.restore::before { content: ""; position: absolute; top: 4px; left: 4px; width: 5px; height: 5px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: linear-gradient(135deg, #9a9a9a 0%, #f1f1f1 100%); }
+.tbox.max.restore::after { content: ""; position: absolute; top: 2px; left: 2px; width: 5px; height: 5px;
+  z-index: 2; box-shadow: inset 0 0 0 1px var(--black); background: #fff; }
+.window.maximized { position: fixed !important; inset: 20px 0 0 0 !important; width: auto !important;
+  height: auto !important; min-width: 0 !important; max-width: none !important; max-height: none !important;
+  transform: none !important; display: flex !important; flex-direction: column; }
+.window.maximized > .win-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.window.maximized .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
+.window.maximized #log-out, .window.maximized #news-list, .window.maximized #docs-body,
+.window.maximized .chat-wrap, .window.maximized .app-frame, .window.maximized .workspace-tree,
+.window.maximized .ed-text, .window.maximized .iv-box { flex: 1 1 auto; height: auto !important; min-height: 0; max-height: none; }
+.window.maximized .grow-box, .window.maximized .win-edge { display: none; }
+body.mobile .tbox.shade { display: none; }
+body.mobile .tbox.max { display: inline-block; }
+.window:not(.front) .stripe { visibility: hidden; }
+.window:not(.front) .tbox { visibility: hidden; }
+.window:not(.front) .title { color: #777; }
+.window.minimized { display: none !important; }
+.window.shaded { padding-bottom: 1px; }
+.window.shaded .win-frame { display: none; }
+/* desktop app windows (~/.exe/apps) host their UI in an iframe set into the
+   sunken frame; the app page brings its own Platinum styling */
+.app-frame { display: block; border: 0; width: 100%; height: 400px; background: var(--g200); }
+/* ---- OS 9 grow box corner, a small framework any window can reuse ----
+   Add class "grow" to a .window and put a 15×15 grow tile at the frame's
+   bottom-right: desktop windows drop in a class="grow-box" SVG (see the
+   Daemon Log window); app windows declare window.grow in app.json and draw
+   the tile inside their iframe. The tile carries its own black top/left
+   separator lines (they continue the scrollbar/statusbar frame lines), and
+   the rules below stop the frame's black border and white bevel along the
+   corner, so the tile face runs straight into the platinum chrome — on a
+   real OS 9 window (CodeWarrior capture) the corner has no trailing lines
+   of its own, just face → #999 → black. */
+.window.grow .win-frame::before { content: ""; position: absolute; right: -2px; bottom: -2px;
+  width: 2px; height: 17px; background: var(--g400); }
+.window.grow .win-frame::after { content: ""; position: absolute; right: -2px; bottom: -2px;
+  width: 17px; height: 2px; background: var(--g400); }
+.grow-box { position: absolute; right: 0; bottom: 0; width: 15px; height: 15px; }
+/* invisible edge grips on resizable windows: left/right drag width, bottom
+   drags height — one-axis versions of the grow corner. Each strip straddles
+   the frame border (2px inside, over the platinum gutter, so scrollbars stay
+   clickable; 3px outside, over the black line and hard shadow) and stops
+   short of the grow tile so the corner keeps its two-axis drag. */
+.win-edge { position: absolute; z-index: 6; }
+.edge-l { left: -3px; top: 0; bottom: 0; width: 5px; cursor: ew-resize; }
+.edge-r { right: -3px; top: 0; bottom: 20px; width: 5px; cursor: ew-resize; }
+.edge-b { bottom: -3px; left: 0; right: 20px; height: 5px; cursor: ns-resize; }
+/* .edge-grow: edge grips on a window with no room for a corner tile
+   (the VM list's statusbar holds buttons) — resizable from the edges
+   only, without .grow's corner-blending chrome rules */
+.window.shaded .win-edge, .window:not(.grow):not(.edge-grow) .win-edge { display: none; }
+/* document-window scroller to pair with .grow: flush 15px OS 9 bars whose
+   trailing edge is the .win-frame border itself (the global 16px spec draws
+   its own trailing line and would double it), with the second end arrow as
+   a 14px borderless cell so every corner seam is a single shared line —
+   same adaptation the Todo app carries internally. */
+.doc-scroll { overflow: scroll; }
+.doc-scroll::-webkit-scrollbar { width: 15px; height: 15px; }
+.doc-scroll::-webkit-scrollbar-track:vertical { border-right: 0; }
+.doc-scroll::-webkit-scrollbar-track:horizontal { border-bottom: 0; }
+.doc-scroll::-webkit-scrollbar-thumb:vertical { border-right: 0; }
+.doc-scroll::-webkit-scrollbar-thumb:horizontal { border-bottom: 0; }
+.doc-scroll::-webkit-scrollbar-button:vertical { border-right: 0; }
+.doc-scroll::-webkit-scrollbar-button:horizontal { border-bottom: 0; }
+.doc-scroll::-webkit-scrollbar-button:vertical:end:increment:enabled { height: 14px; border-top: 0; border-bottom: 0; }
+.doc-scroll::-webkit-scrollbar-button:horizontal:end:increment:enabled { width: 14px; border-left: 0; border-right: 0; }
+.doc-scroll::-webkit-scrollbar-button:vertical:disabled { border-right: 0; }
+.doc-scroll::-webkit-scrollbar-button:horizontal:disabled { border-bottom: 0; }
+/* vertical-only flush scroller (Daemon Log text, Terminal viewports):
+   content runs edge to edge, so the 15px bar's trailing line is the
+   win-frame border and the enabled end pair shares the statusbar's top
+   line — every seam stays a single 1px line */
+.vflush::-webkit-scrollbar { width: 15px; }
+.vflush::-webkit-scrollbar-track:vertical { border-right: 0; }
+.vflush::-webkit-scrollbar-thumb:vertical { border-right: 0; }
+.vflush::-webkit-scrollbar-button:vertical { border-right: 0; }
+.vflush::-webkit-scrollbar-button:vertical:disabled { border-right: 0; }
+.vflush::-webkit-scrollbar-button:vertical:end:increment:enabled { height: 14px; border-top: 0; border-bottom: 0; }
+
+/* Workspace window: Finder-style tree view over ~/.exe/workspace */
+.finder-status { background: var(--g300); border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+  text-align: center; font-size: 12px; padding: 4px 8px 3px;
+  display: flex; align-items: center; justify-content: center; gap: 8px; }
+.finder-toolbar { display: none; }
+body.mobile .finder-window .finder-toolbar {
+  display: flex; flex: none; gap: 4px; align-items: center; justify-content: flex-start;
+  padding: 4px 6px; background: var(--g300); border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 #fff; overflow-x: auto; white-space: nowrap; }
+body.mobile .finder-toolbar button { font-size: 11px; padding: 3px 7px; }
+.vm-panel { display: flex; flex: none; gap: 10px; align-items: center; justify-content: space-between;
+  padding: 6px 8px; background: var(--g200); border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 #fff; }
+.vm-panel .vm-stats { display: flex; gap: 10px; align-items: center; }
+.vm-panel .vm-stats .chip { font-size: 10px; }
+body.mobile #icons { overflow-y: auto; padding-bottom: 90px; }
+body.mobile #sys-icons { z-index: 2; }
+.workspace-tree { background: #fff; height: 336px; padding: 4px 0; overflow: auto; }
+.tree-node { user-select: none; }
+.tree-children[hidden] { display: none; }
+.tree-row { min-height: 22px; display: flex; align-items: center; gap: 4px;
+  padding: 2px 8px; white-space: nowrap; cursor: default; }
+.tree-row.sel, .tree-row.drop { background: var(--hl); color: #fff; }
+.tree-row.sel .tree-ico svg, .tree-row.drop .tree-ico svg { filter: brightness(.55) saturate(1.3); }
+.tree-twist { width: 12px; flex: none; text-align: center; font-size: 12px; }
+.tree-ico { width: 18px; height: 18px; flex: none; display: inline-flex;
+  align-items: center; justify-content: center; }
+.tree-ico svg { width: 18px; height: 18px; }
+.tree-name { overflow: hidden; text-overflow: ellipsis; }
+.tree-empty { padding: 8px 12px; }
+/* drag-and-drop upload targets */
+.finder-window.drop .workspace-tree { box-shadow: inset 0 0 0 2px var(--hl); }
+#desktop.drop { box-shadow: inset 0 0 0 3px var(--hl); }
+
+/* Get Info window, OS 9 style: icon + name header, groove rule, then
+   right-aligned bold labels over a two-column grid */
+#gi-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.gi-sep { height: 1px; background: var(--g600); box-shadow: 0 1px 0 #fff; margin: 6px 0 10px; }
+.gi-grid { display: grid; grid-template-columns: max-content 1fr; gap: 5px 8px; font-size: 12px; }
+.gi-grid b { text-align: right; }
+.gi-grid span { user-select: text; word-break: break-word; }
+
+/* text editor windows, modeled on BBEdit 2.1.3: a platinum info bar
+   (pencil, doc icon, colon-separated path, Last Saved line) over a
+   wrapping Monaco text area with the grow corner */
+.ed-info { background: var(--g300); border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+  padding: 5px 8px 4px; font-size: 12px;
+  display: grid; grid-template-columns: 22px 1fr; row-gap: 3px; align-items: center; }
+.ed-info .ed-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ed-info .ed-path, .ed-info .ed-saved { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-tools { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 6px; }
+.ed-text { display: block; width: 100%; height: 380px; margin: 0; padding: 4px 6px;
+  border: 0; border-radius: 0; box-shadow: none; background: #fff; color: #000;
+  font: 12px/1.4 var(--mono); min-height: 0; resize: none;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+.ed-text:focus { outline: none; }
+
+/* image viewer windows, modeled on PictureViewer: a platinum info bar
+   (colon path, dimensions, size) over the picture on white — natural size
+   when it fits, scaled down (aspect kept) to fit the window when bigger */
+.iv-info { background: var(--g300); border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+  padding: 5px 8px 4px; font-size: 12px;
+  display: flex; justify-content: space-between; gap: 8px; }
+.iv-info span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iv-info .iv-dims { flex: none; }
+.iv-box { background: #fff; height: 300px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; }
+.iv-box img { display: block; max-width: 100%; max-height: 100%; }
+
+/* sunken content frame, inset 4px into the platinum chrome */
+.win-frame { margin: 0 4px 4px; border: 1px solid var(--black); background: var(--g300);
+  position: relative;
+  box-shadow: -1px -1px 0 var(--g600), -1px 0 0 var(--g600), 0 -1px 0 var(--g600),
+    1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
+.win-frame.paper { background: #fff; }
+.win-body { padding: 12px; overflow: auto; max-height: calc(100vh - 130px); }
+#win-vms .win-body { padding: 0; }
+.statusbar { border-top: 1px solid var(--black); background: var(--g300);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa;
+  padding: 3px 8px; font-size: 11px; color: #333; display: flex; align-items: center; gap: 12px; }
+/* OS 9 button-to-button spacing is 8px (sampled from Extensions Manager) */
+.statusbar button + button { margin-left: -4px; }
+td.actions button + button { margin-left: 8px; }
+
+/* the Chat status line opens the backend switcher */
+#chat-status { cursor: pointer; }
+#chat-status:hover { text-decoration: underline; }
+/* ChatGPT token usage sits at the status line's far right */
+#chat-usage { margin-left: auto; white-space: nowrap; }
+#chat-usage .hot { color: #a33; }
+
+/* modal dialogs */
+.overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,.15);
+  display: flex; align-items: center; justify-content: center; }
+.window.modal { position: relative; z-index: 2001; width: 92%; max-width: 540px; }
+.window.modal .win-body { max-height: 74vh; }
+
+/* ---------- Platinum tab control ----------
+   Geometry measured from a real OS 9 Appearance control panel screenshot:
+   trapezoid tabs (sides flare ~10px over 21px height, 3px top radius);
+   inactive fill #ccc with #ddd top-left highlight + #aaa right shadow;
+   active fill #eee (the pane color) and it punches through the pane's
+   top border + bevel rows. Shape drawn as an SVG border-image. */
+.tabbar { display: flex; align-items: flex-start; padding: 0 4px; position: relative; z-index: 2; }
+.tab {
+  height: 22px; color: #000; font-size: 11px; font-weight: bold; line-height: 14px;
+  text-align: center; padding: 0 2px; position: relative;
+  border-style: solid; border-width: 8px 14px 0 14px;
+  /* sides drawn 1px past the bottom edge so the slant runs at full
+     strength into the pane rule instead of fading out */
+  border-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='22'><path d='M4.5 23 L11 5.5 Q11.8 1.5 14 1.5 L30 1.5 Q32.2 1.5 33 5.5 L39.5 23' fill='%23ccc' stroke='%23000'/><path d='M6.2 23 L12 5.8 Q12.6 2.5 14 2.5 L29.5 2.5' fill='none' stroke='%23ddd'/><path d='M30 2.5 Q31.6 2.5 32.2 5.8 L37.8 23' fill='none' stroke='%23aaa'/></svg>") 8 14 0 14 fill stretch;
+}
+.tab + .tab { margin-left: -7px; }
+.tab.active {
+  height: 25px; margin-bottom: -3px; z-index: 3;
+  /* black sides end at the rule (y22); below it only the fill continues,
+     still following the slant, covering the pane's border + bevel rows */
+  border-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='25'><path d='M3.8 25 L11 5.5 Q11.8 1.5 14 1.5 L30 1.5 Q32.2 1.5 33 5.5 L40.2 25 Z' fill='%23eee'/><path d='M4.9 22 L11 5.5 Q11.8 1.5 14 1.5 L30 1.5 Q32.2 1.5 33 5.5 L39.1 22' fill='none' stroke='%23000'/><path d='M6.6 22 L12 5.8 Q12.6 2.5 14 2.5 L29.5 2.5' fill='none' stroke='%23fff'/><path d='M30 2.5 Q31.6 2.5 32.2 5.8 L37.4 22' fill='none' stroke='%23bbb'/></svg>") 8 14 0 14 fill stretch;
+}
+.tabpanel { position: relative; border: 1px solid var(--black); background: var(--g200);
+  padding: 12px 10px 10px; min-height: 280px;
+  box-shadow: inset 1px 1px 0 var(--g400), inset 2px 2px 0 #fff, inset -1px -1px 0 var(--g500); }
+.pane-head { font-weight: bold; margin: 10px 0 4px; }
+.pane-head:first-child { margin-top: 0; }
+/* VM detail: an edge-resized body hands surplus height to the tab panel
+   (grow-only — a short window keeps the panel's natural size and scrolls
+   the body, as before), and inside each pane the main content stretches
+   with it: the terminal, the agent/transcript logs, the notes textarea */
+#win-detail .win-body { display: flex; flex-direction: column; }
+#win-detail .tabpanel { flex: 1 0 auto; display: flex; flex-direction: column; }
+#win-detail .pane:not([hidden]) { flex: 1; display: flex; flex-direction: column; }
+#pane-term #term-box { flex: 1 1 auto; min-height: 160px; }
+#pane-notes #n-text { flex: 1 1 auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+#pane-tr #t-list { flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* the terminal is the one pane that can adapt its height (xterm refits
+   its rows), so when the body runs short — the 100vh cap on a small
+   screen, or a short edge-resize — the squeeze flows into the terminal
+   instead of overflowing the body into a scrollbar */
+#win-detail .tabpanel:has(> #pane-term:not([hidden])) { flex-shrink: 1; }
+#pane-term:not([hidden]) { min-height: 0; }
+/* since the terminal absorbs any squeeze, the body never legitimately
+   scrolls on this tab — clip it so the exact-fit layout can't grow a
+   phantom scrollbar from sub-pixel rounding (Windows fractional display
+   scaling ceils scrollHeight past clientHeight). The floor is the body's
+   360px drag minimum; viewports too short for that keep the scrollbar. */
+@media (min-height: 500px) {
+  #win-detail .win-body:has(#pane-term:not([hidden])) { overflow: clip; }
+}
+
+/* ---------- controls (macthemes.garden pixel bevels) ---------- */
+button { font: inherit; cursor: default; }
+/* Push buttons, verified against a real OS 9 Extensions Manager capture:
+   20px outer height (1px border + 2px bevel + 14px text line), 13px side
+   padding, 12px Charcoal, 8px between adjacent buttons. The 4-layer inset
+   bevel below matches the sampled rows exactly: K | ddd | fff top-left,
+   face | aaa | 777 | K bottom-right. */
+button.btn, button.ghost {
+  background: var(--g300); color: var(--black);
+  border: 1px solid var(--black); border-radius: 3px;
+  padding: 2px 13px; font-size: 12px; line-height: 14px; font-weight: bold;
+  box-shadow: inset 1px 1px 0 var(--g300), inset -1px -1px 0 #777,
+    inset 2px 2px 0 #fff, inset -2px -2px 0 #aaa;
+}
+/* OS 9 draws the black ring only around a dialog's default button; window
+   content buttons are plain (Extensions Manager's Duplicate Set… has none) */
+.window.modal .btn, #win-newvm .btn, #win-token .btn, #win-upload .btn {
+  outline: 2px solid var(--black); outline-offset: 1px; border-radius: 4px; }
+button.btn:active, button.ghost:active {
+  background: #666; color: #fff;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888,
+    inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+/* Disabled, sampled from OS 9: dead flat — no bevel, 888 border, 777 text */
+button.btn:disabled, button.ghost:disabled { color: #777; border-color: #888;
+  background: var(--g300); box-shadow: none; outline-color: #888; }
+button.ghost.danger { color: #7a1010; }
+button.ghost.armed { background: var(--red); color: #fff;
+  box-shadow: inset 1px 1px 0 #e88, inset -1px -1px 0 #911; }
+button.ghost.sm { padding: 1px 8px; font-size: 10px; border-radius: 3px; }
+button.ghost.sm.dis { opacity: 0.45; pointer-events: none; }
+input, textarea, select {
+  background: #fff; color: var(--black); border: 1px solid var(--black); border-radius: 0;
+  padding: 3px 5px; font: inherit; font-size: 12px;
+  box-shadow: -1px -1px 0 var(--g600), -1px 0 0 var(--g600), 0 -1px 0 var(--g600),
+    1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff;
+}
+input:focus, textarea:focus, select:focus { outline: 2px solid #9999fe; outline-offset: 0; }
+textarea { width: 100%; min-height: 64px; resize: vertical; font-family: var(--mono); font-size: 11px; }
+select { padding: 2px 4px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+
+/* Node Sync dialog: OS 9 etched group boxes with the legend riding the line */
+.join-group { position: relative; border: 1px solid #999; box-shadow: inset 1px 1px 0 #fff;
+  padding: 14px 10px 10px; margin: 14px 0 0; }
+/* the body's own padding already clears the first legend — don't stack */
+.join-group:first-child { margin-top: 2px; }
+.join-group .join-legend { position: absolute; top: -8px; left: 8px; background: var(--g300);
+  padding: 0 5px; font-size: 11px; font-weight: bold; }
+.join-peer { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+/* feedback line only takes space when it has something to say */
+#join-fb { margin-top: 6px; }
+#join-fb:empty { display: none; }
+.join-peer .join-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.join-peer .join-lat { font-size: 11px; color: #555; min-width: 52px; text-align: right; }
+.row:last-child { margin-bottom: 0; }
+/* field + primary-button rows: bottom-align the button with the inputs */
+.row.actions { align-items: flex-end; }
+.row.actions .btn { margin-left: auto; }
+.field label { display: block; font-size: 11px; color: #222; margin-bottom: 3px; }
+.field input { width: 100%; }
+.field .hint { font-size: 10.5px; color: #7a4b00; margin-top: 2px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+
+/* ---------- finder-ish list ---------- */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+/* OS 9 list-view column headers, sampled from Extensions Manager:
+   #666|#fff top bevel, #ccc face, #888|#333 bottom shadow over the black
+   bar line, #888/#333/#fff column separators. The sort column is pressed:
+   #111|#555 over a #888 face with the bevel inverted (#aaa|#444). */
+th { text-align: left; font-size: 11px; font-weight: bold; padding: 3px 9px;
+  background: #ccc; cursor: default; user-select: none;
+  border-top: 1px solid #666; border-bottom: 1px solid var(--black);
+  border-right: 1px solid #333;
+  box-shadow: inset 1px 0 0 #fff, inset 0 1px 0 #fff,
+    inset 0 -1px 0 #333, inset 0 -2px 0 #888; }
+th:last-child { border-right: none; }
+th.sorted { background: #888; border-top-color: #111;
+  box-shadow: inset 1px 0 0 #555, inset 0 1px 0 #555,
+    inset 0 -1px 0 #444, inset 0 -2px 0 #aaa; }
+/* fixed box: ▲ and ▼ render a hair different in width, and the hidden
+   placeholder in unsorted headers must match the live arrow exactly */
+.sortarrow { font-size: 8px; margin-left: 5px; vertical-align: 1px;
+  display: inline-block; width: 9px; text-align: center; }
+.sortarrow.ph { visibility: hidden; }
+/* actions column: shrink to its buttons, never wrap them */
+td.actions { white-space: nowrap; width: 1%; text-align: right; }
+td { padding: 4px 9px; border-bottom: 1px solid #efefef; }
+tr:last-child td { border-bottom: none; }
+/* OS 9 tints the sorted column's body one gray step (ExtMgr: #ddd on #eee) */
+td.sortcol { background: #eee; }
+tr.vm-row:hover td, tr.vm-row.ctx td { background: #dfe3f5; }
+
+/* status chips */
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: bold; }
+.chip::before { content: ""; width: 9px; height: 9px; border-radius: 50%; flex: none;
+  border: 1px solid rgba(0,0,0,.5);
+  background: radial-gradient(circle at 30% 28%, rgba(255,255,255,.85), rgba(255,255,255,0) 55%), var(--c, var(--gray)); }
+.chip.running, .chip.done { --c: var(--green); }
+.chip.stopped { --c: var(--gray); color: #444; }
+.chip.error, .chip.interrupted { --c: var(--red); }
+.chip.starting, .chip.stopping { --c: var(--amber); }
+
+/* misc panels */
+pre.out { background: #10120f; color: #cfe3cf; border: 1px solid var(--black); padding: 10px;
+  margin: 10px 0 0; font-family: var(--mono); font-size: 11px; max-height: 380px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word; user-select: text;
+  box-shadow: -1px -1px 0 var(--g600), 1px 1px 0 #fff; }
+/* Daemon Log and Chat windows: resizable via the shared grow box corner
+   (.grow + .grow-box); the bottom strip is a plain status area like
+   classic IE/Netscape. 15px total (border-box) so the strip's border-top
+   is the same line as the grow box tile's top separator row. */
+#win-log .statusbar, #win-chat .statusbar, #win-news .statusbar, #win-docs .statusbar, .term-window .statusbar { height: 15px; padding: 0 25px 0 8px; }
+/* edge to edge in the frame: the win-frame draws the outline, the pre
+   keeps only its inner text padding, and only a vertical bar renders */
+#log-out { margin: 0; height: 380px; max-height: none; border: 0; box-shadow: none;
+  overflow-y: scroll; overflow-x: hidden; }
+/* Newsfeed: one entry per event on paper, split by single hairlines (only
+   between items — the statusbar draws the bottom frame line); the small
+   gray last line is the byline: which node posted it, and when */
+#news-list { height: 380px; overflow-y: scroll; overflow-x: hidden; }
+/* Documentation (Help menu): the manual on paper, rendered markdown with
+   the chat's typography (the inner div carries .msg.asst) */
+#docs-body { height: 420px; overflow-y: scroll; overflow-x: hidden; user-select: text; }
+.news-item { position: relative; overflow: hidden; touch-action: pan-y; }
+.news-item + .news-item { border-top: 1px solid var(--g500); }
+/* the row content is its own white layer so on mobile it can slide left
+   to reveal the Delete button parked under its right edge */
+.news-swipe { position: relative; padding: 6px 10px 5px; background: #fff;
+  transition: transform .15s ease; }
+.news-del { position: absolute; inset: 0 0 0 auto; width: 72px; border: 0; padding: 0;
+  background: var(--red); color: #fff; font: bold 12px var(--font); }
+.news-title { font-weight: bold; }
+.news-body { margin-top: 1px; white-space: pre-wrap; overflow-wrap: break-word; user-select: text; }
+.news-meta { margin-top: 3px; font-size: 10px; color: #777; }
+/* sunken white list, like a Finder list view */
+.listbox { background: #fff; border: 1px solid var(--black); max-height: 240px; overflow: auto;
+  box-shadow: -1px -1px 0 var(--g600), -1px 0 0 var(--g600), 0 -1px 0 var(--g600),
+    1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
+.listbox td { white-space: nowrap; }
+a.svc { color: #202a87; text-decoration: none; }
+a.svc:hover { text-decoration: underline; }
+.t-item:last-child { margin-bottom: 0; }
+.t-item { padding: 3px 8px; border: 1px solid var(--g600); background: var(--g200); margin-bottom: 5px;
+  display: flex; gap: 10px; align-items: center; min-height: 27px; box-shadow: inset 1px 1px 0 #fff; }
+.t-item.sel { background: var(--hl); }
+.t-item.sel, .t-item.sel .muted, .t-item.sel .mono { color: #fff; }
+.t-prompt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+#tr-overlay .window.modal { max-width: min(92vw, 820px); }
+#tr-modal-log { margin: 0; max-height: min(70vh, 620px); }
+/* overflow:clip — xterm's DOM renderer parks absolutely-positioned helpers
+   (IME textarea at the cursor, spare rows) below the visible screen; unclipped
+   they inflate every ancestor's scrollHeight and typing makes the browser
+   scroll .win-body to chase the focused hidden textarea. clip (not hidden)
+   also forbids programmatic scrolling of the frame itself. */
+#term-box, .hostterm-box, .vmterm-box { height: 380px; background: #000; border: 1px solid var(--black);
+  border-right: 0; /* the always-on viewport scrollbar draws the right frame line */
+  box-shadow: -1px -1px 0 var(--g600), 1px 1px 0 #fff; overflow: clip; }
+/* enabled end arrows share lines too: borderless 14px second arrow rides
+   the box's border-bottom (see the chat lists / CodeWarrior capture) */
+#term-box .xterm-viewport::-webkit-scrollbar-button:vertical:end:increment:enabled {
+  height: 14px; border-top: 0; border-bottom: 0; }
+/* Terminal windows are edge to edge: the win-frame draws the outline and
+   the viewport scrollbar is the .vflush 15px flush variant */
+.term-window .win-frame { display: flex; flex-direction: column; }
+.term-window .win-body { flex: 1 1 auto; min-height: 0; display: flex; }
+.hostterm-box, .vmterm-box { border: 0; box-shadow: none; flex: 1 1 auto; min-height: 160px; }
+/* Text inset lives on .xterm, not the box: FitAddon subtracts element padding
+   when sizing rows, but the absolutely-positioned viewport anchors to the
+   padding box — so the scrollbar runs flush to the frame, OS 9 style. */
+#term-box .xterm, .hostterm-box .xterm, .vmterm-box .xterm { width: 100%; height: 100%; box-sizing: border-box; padding: 5px; }
+/* Always-on scrollbar, like a real OS 9 window: the track is permanent
+   (disabled-flat when there is no scrollback) and, because the bar exists
+   at open time, xterm measures it and sizes cols short of it — with
+   overflow:auto the bar appeared later, over the last column of text. */
+#term-box .xterm-viewport, .hostterm-box .xterm-viewport, .vmterm-box .xterm-viewport { overflow-y: scroll !important; }
+td .mono, td.mono { user-select: text; }
+
+/* ---------- chat window ---------- */
+.chat-wrap { display: flex; gap: 10px; height: 432px; }
+.chat-side { width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.chat-sessions { flex: 1; max-height: none; overflow-y: auto; }
+.cs-item { display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 8px; border-bottom: 1px solid #efefef; }
+.cs-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-time { font-size: 10px; color: #777; }
+.cs-vm { color: #777; }
+.cs-item.sel { background: var(--hl); }
+.cs-item.sel .cs-title, .cs-item.sel .cs-time, .cs-item.sel .cs-vm { color: #fff; }
+/* the VM the session list is scoped to, with an × back to all sessions */
+.chat-scope { display: flex; align-items: center; gap: 4px; padding: 1px 1px 1px 8px; border: 1px solid #999; background: #e6e6e6; }
+.chat-scope .vm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; font-size: 11px; }
+.chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.chat-msgs { flex: 1; overflow-y: auto; background: #fff; border: 1px solid var(--black);
+  padding: 10px; user-select: text;
+  box-shadow: -1px -1px 0 var(--g600), -1px 0 0 var(--g600), 0 -1px 0 var(--g600),
+    1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
+/* auto scrollbars with a single OS 9 frame line: when the bar is present
+   its own black edge is the line (a border would double it to 2px — the
+   Todo-list fix), and when it is absent the border comes back. autoVBar()
+   toggles the class as content and size change. */
+.has-vbar { border-right: 0; }
+/* same shared-line rule at the bar's bottom end: the second arrow of the
+   pair is a 14px borderless cell (real OS 9, CodeWarrior capture) — its
+   top line is the first arrow's border, its bottom line is the frame's
+   border-bottom, and the glyph stays integer-centered in the 14px face */
+.chat-msgs::-webkit-scrollbar-button:vertical:end:increment:enabled,
+.listbox::-webkit-scrollbar-button:vertical:end:increment:enabled {
+  height: 14px; border-top: 0; border-bottom: 0; }
+.msg { margin: 0 0 10px; }
+.msg.user { background: var(--lav); border: 1px solid #99c; padding: 5px 9px; margin-left: 48px;
+  white-space: pre-wrap; overflow-wrap: break-word; box-shadow: 1px 1px 0 #99c; }
+/* assistant messages are rendered markdown (marked + DOMPurify) */
+.msg.asst { overflow-wrap: break-word; margin-right: 24px; }
+.msg.asst > :first-child { margin-top: 0; }
+.msg.asst > :last-child { margin-bottom: 0; }
+.msg.asst p, .msg.asst ul, .msg.asst ol, .msg.asst table, .msg.asst blockquote { margin: 6px 0; }
+.msg.asst h1, .msg.asst h2, .msg.asst h3, .msg.asst h4 { margin: 10px 0 4px; }
+.msg.asst h1 { font-size: 14px; } .msg.asst h2 { font-size: 13px; }
+.msg.asst h3, .msg.asst h4 { font-size: 12px; }
+.msg.asst ul, .msg.asst ol { padding-left: 22px; }
+.msg.asst li { margin: 2px 0; }
+.msg.asst code { font-family: var(--mono); font-size: 11px; background: #efefea;
+  border: 1px solid var(--g400); padding: 0 3px; }
+.msg.asst pre { background: #f4f4ef; border: 1px solid var(--g500); padding: 6px 8px;
+  margin: 6px 0; overflow-x: auto; box-shadow: inset 1px 1px 0 #fff; }
+.msg.asst pre code { background: none; border: none; padding: 0; white-space: pre; }
+.msg.asst blockquote { padding: 2px 10px; border-left: 3px solid var(--g500); color: #555; }
+.msg.asst table { width: auto; min-width: 50%; border: 1px solid var(--g600); }
+.msg.asst hr { border: none; border-top: 1px solid var(--g500); margin: 8px 0; }
+.msg.asst img { max-width: 100%; }
+.msg.tool { font-family: var(--mono); font-size: 11px; color: #555; margin: 0 24px 6px 0;
+  padding: 1px 0 1px 8px; border-left: 3px solid var(--g500); white-space: pre-wrap; overflow-wrap: break-word; }
+.msg.tool-out { font-family: var(--mono); font-size: 11px; color: #444; background: #f4f4ef;
+  border: 1px solid var(--g500); margin: -2px 24px 10px 11px; padding: 5px 8px;
+  max-height: 130px; overflow: auto; white-space: pre-wrap; overflow-wrap: break-word; }
+.msg.err { background: #f6dddd; border: 1px solid #a33; color: #7a1010; padding: 5px 9px; white-space: pre-wrap; }
+.msg.think { color: #777; }
+.msg.think::after { content: "…"; animation: think 1.2s steps(4) infinite; display: inline-block;
+  overflow: hidden; vertical-align: bottom; width: 0; }
+@keyframes think { to { width: 14px; } }
+.chat-hint { color: #777; text-align: center; padding: 40px 30px 0; }
+.chat-inrow { display: flex; gap: 8px; align-items: flex-end; }
+.chat-inrow textarea { flex: 1; min-height: 46px; }
+
+/* wizard feedback */
+.wiz-fb { border: 1px solid; padding: 7px 10px; font-size: 11.5px; white-space: pre-wrap; }
+.wiz-fb.ok { background: #e2f2e0; border-color: #2f7d33; color: #1d5a22; }
+.wiz-fb.err { background: #f6dddd; border-color: #a33; color: #7a1010; }
+.wiz-fb.warn { background: #f7ecd2; border-color: #b07d18; color: #6e4d05; }
+.pub-log { margin: 0 0 10px; padding: 6px 8px; border: 1px solid #999; background: #f4f4ef;
+  font-family: var(--mono); font-size: 11px; max-height: 140px; overflow-y: auto; user-select: text; }
+.pub-log .err { color: #7a1010; }
+.pub-log a { word-break: break-all; }
+.gh-code { font-family: var(--mono); font-size: 20px; letter-spacing: 4px; text-align: center;
+  padding: 6px 0; user-select: text; }
+.wiz-review div { padding: 4px 0; border-bottom: 1px solid var(--g500); display: flex;
+  justify-content: space-between; gap: 12px; }
+.wiz-review div:last-child { border-bottom: none; }
+/* OpenAI tab rate-limit usage */
+.oai-usage { display: flex; align-items: center; gap: 8px; }
+.oai-meter { width: 72px; height: 8px; border: 1px solid var(--black); background: #fff; }
+.oai-meter > span { display: block; height: 100%; background: var(--hl); }
+.oai-meter.hot > span { background: #a33; }
+.modal select, .modal input[type=text], .modal input[type=password] { width: 100%; }
+
+/* toast */
+#status-bar { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: #ffffc9; color: #000; border: 1px solid var(--black); padding: 5px 14px;
+  font-size: 12px; box-shadow: inset 1px 1px 0 #fff, 2px 2px 0 var(--black);
+  opacity: 0; transition: opacity .15s; pointer-events: none; max-width: 90vw; z-index: 4000; }
+#status-bar.show { opacity: 1; }
+
+/* Mac OS 9 scrollbars, pixel-sampled from a real OS 9.0.4 (Infinite Mac
+   canvas readback). 16px = 1px black rail each side + 14px interior.
+   Track: recessed gradient 777,888,aaa*10,bbb,ccc (lit from the far side).
+   Thumb: ccf | 99f*12 | 66c with black caps and 4 embossed ridges (7px
+   333399 lines shadow-offset from eee/ccf highlights) centered.
+   Buttons: ddd face, fff/bbb bevel, solid black 8x4 pixel triangle; both
+   arrows stacked at the end, as OS 9's default Smart Scrolling does. */
+::-webkit-scrollbar { width: 16px; height: 16px; }
+::-webkit-scrollbar-track:vertical { border-left: 1px solid var(--black); border-right: 1px solid var(--black);
+  background: linear-gradient(to right, #777 0, #777 1px, #888 1px, #888 2px, #aaa 2px, #aaa 12px, #bbb 12px, #bbb 13px, #ccc 13px, #ccc 14px); }
+::-webkit-scrollbar-track:horizontal { border-top: 1px solid var(--black); border-bottom: 1px solid var(--black);
+  background: linear-gradient(to bottom, #777 0, #777 1px, #888 1px, #888 2px, #aaa 2px, #aaa 12px, #bbb 12px, #bbb 13px, #ccc 13px, #ccc 14px); }
+::-webkit-scrollbar-thumb:vertical { border: 1px solid var(--black);
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="8" shape-rendering="crispEdges"><rect x="3" y="0" width="1" height="1" fill="%23eeeeee"/><rect x="4" y="0" width="6" height="1" fill="%23ccccff"/><rect x="4" y="1" width="7" height="1" fill="%23333399"/><rect x="3" y="2" width="1" height="1" fill="%23eeeeee"/><rect x="4" y="2" width="6" height="1" fill="%23ccccff"/><rect x="4" y="3" width="7" height="1" fill="%23333399"/><rect x="3" y="4" width="1" height="1" fill="%23eeeeee"/><rect x="4" y="4" width="6" height="1" fill="%23ccccff"/><rect x="4" y="5" width="7" height="1" fill="%23333399"/><rect x="3" y="6" width="1" height="1" fill="%23eeeeee"/><rect x="4" y="6" width="6" height="1" fill="%23ccccff"/><rect x="4" y="7" width="7" height="1" fill="%23333399"/></svg>') center no-repeat,
+    linear-gradient(to right, #ccccff 0 1px, #9999ff 1px 13px, #6666cc 13px 14px);
+  box-shadow: inset 0 1px 0 #ccccff, inset 0 -1px 0 #6666cc; }
+::-webkit-scrollbar-thumb:horizontal { border: 1px solid var(--black);
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="14" shape-rendering="crispEdges"><rect x="0" y="3" width="1" height="1" fill="%23eeeeee"/><rect x="0" y="4" width="1" height="6" fill="%23ccccff"/><rect x="1" y="4" width="1" height="7" fill="%23333399"/><rect x="2" y="3" width="1" height="1" fill="%23eeeeee"/><rect x="2" y="4" width="1" height="6" fill="%23ccccff"/><rect x="3" y="4" width="1" height="7" fill="%23333399"/><rect x="4" y="3" width="1" height="1" fill="%23eeeeee"/><rect x="4" y="4" width="1" height="6" fill="%23ccccff"/><rect x="5" y="4" width="1" height="7" fill="%23333399"/><rect x="6" y="3" width="1" height="1" fill="%23eeeeee"/><rect x="6" y="4" width="1" height="6" fill="%23ccccff"/><rect x="7" y="4" width="1" height="7" fill="%23333399"/></svg>') center no-repeat,
+    linear-gradient(to bottom, #ccccff 0 1px, #9999ff 1px 13px, #6666cc 13px 14px);
+  box-shadow: inset 1px 0 0 #ccccff, inset -1px 0 0 #6666cc; }
+/* Dragged thumb, sampled from OS 9: every color steps one down the Platinum
+   ramp (eee→ccf, ccf→99f, 99f→66c, 66c→339, 339→006). */
+::-webkit-scrollbar-thumb:vertical:active {
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="8" shape-rendering="crispEdges"><rect x="3" y="0" width="1" height="1" fill="%23ccccff"/><rect x="4" y="0" width="6" height="1" fill="%239999ff"/><rect x="4" y="1" width="7" height="1" fill="%23000066"/><rect x="3" y="2" width="1" height="1" fill="%23ccccff"/><rect x="4" y="2" width="6" height="1" fill="%239999ff"/><rect x="4" y="3" width="7" height="1" fill="%23000066"/><rect x="3" y="4" width="1" height="1" fill="%23ccccff"/><rect x="4" y="4" width="6" height="1" fill="%239999ff"/><rect x="4" y="5" width="7" height="1" fill="%23000066"/><rect x="3" y="6" width="1" height="1" fill="%23ccccff"/><rect x="4" y="6" width="6" height="1" fill="%239999ff"/><rect x="4" y="7" width="7" height="1" fill="%23000066"/></svg>') center no-repeat,
+    linear-gradient(to right, #9999ff 0 1px, #6666cc 1px 13px, #333399 13px 14px);
+  box-shadow: inset 0 1px 0 #9999ff, inset 0 -1px 0 #333399; }
+::-webkit-scrollbar-thumb:horizontal:active {
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="14" shape-rendering="crispEdges"><rect x="0" y="3" width="1" height="1" fill="%23ccccff"/><rect x="0" y="4" width="1" height="6" fill="%239999ff"/><rect x="1" y="4" width="1" height="7" fill="%23000066"/><rect x="2" y="3" width="1" height="1" fill="%23ccccff"/><rect x="2" y="4" width="1" height="6" fill="%239999ff"/><rect x="3" y="4" width="1" height="7" fill="%23000066"/><rect x="4" y="3" width="1" height="1" fill="%23ccccff"/><rect x="4" y="4" width="1" height="6" fill="%239999ff"/><rect x="5" y="4" width="1" height="7" fill="%23000066"/><rect x="6" y="3" width="1" height="1" fill="%23ccccff"/><rect x="6" y="4" width="1" height="6" fill="%239999ff"/><rect x="7" y="4" width="1" height="7" fill="%23000066"/></svg>') center no-repeat,
+    linear-gradient(to bottom, #9999ff 0 1px, #6666cc 1px 13px, #333399 13px 14px);
+  box-shadow: inset 1px 0 0 #9999ff, inset -1px 0 0 #333399; }
+/* Thumb at its start end, sampled from OS 9: the thumb's leading black
+   border merges into the frame line above/left of the bar — a single black
+   line, with the cap row directly under it. The cap moves onto the border
+   row and the duplicate inner cap goes away. Elements start unscrolled, so
+   this is the default; a delegated scroll listener adds .scrolled-y/.scrolled-x
+   once scrolled away from the origin, restoring the normal black border. */
+:not(.scrolled-y)::-webkit-scrollbar-thumb:vertical {
+  border-top-color: #ccccff; box-shadow: inset 0 -1px 0 #6666cc; }
+:not(.scrolled-y)::-webkit-scrollbar-thumb:vertical:active {
+  border-top-color: #9999ff; box-shadow: inset 0 -1px 0 #333399; }
+:not(.scrolled-x)::-webkit-scrollbar-thumb:horizontal {
+  border-left-color: #ccccff; box-shadow: inset -1px 0 0 #6666cc; }
+:not(.scrolled-x)::-webkit-scrollbar-thumb:horizontal:active {
+  border-left-color: #9999ff; box-shadow: inset -1px 0 0 #333399; }
+/* Same merge at the far end, where the thumb parks against the arrow
+   buttons: the button's border supplies the single black line. */
+.at-y-end::-webkit-scrollbar-thumb:vertical {
+  border-bottom-color: #6666cc; box-shadow: inset 0 1px 0 #ccccff; }
+.at-y-end::-webkit-scrollbar-thumb:vertical:active {
+  border-bottom-color: #333399; box-shadow: inset 0 1px 0 #9999ff; }
+.at-x-end::-webkit-scrollbar-thumb:horizontal {
+  border-right-color: #6666cc; box-shadow: inset 1px 0 0 #ccccff; }
+.at-x-end::-webkit-scrollbar-thumb:horizontal:active {
+  border-right-color: #333399; box-shadow: inset 1px 0 0 #9999ff; }
+::-webkit-scrollbar-button { display: block; width: 16px; height: 16px;
+  background: #ddd; border: 1px solid var(--black);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #bbb;
+  background-position: center; background-repeat: no-repeat; }
+::-webkit-scrollbar-button:vertical:decrement {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4" shape-rendering="crispEdges"><path fill="black" d="M3 0h2v1h-2z M2 1h4v1h-4z M1 2h6v1h-6z M0 3h8v1h-8z"/></svg>'); }
+::-webkit-scrollbar-button:vertical:increment {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4" shape-rendering="crispEdges"><path fill="black" d="M0 0h8v1h-8z M1 1h6v1h-6z M2 2h4v1h-4z M3 3h2v1h-2z"/></svg>'); }
+::-webkit-scrollbar-button:horizontal:decrement {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="8" shape-rendering="crispEdges"><path fill="black" d="M0 3h1v2h-1z M1 2h1v4h-1z M2 1h1v6h-1z M3 0h1v8h-1z"/></svg>'); }
+::-webkit-scrollbar-button:horizontal:increment {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="8" shape-rendering="crispEdges"><path fill="black" d="M0 0h1v8h-1z M1 1h1v6h-1z M2 2h1v4h-1z M3 3h1v2h-1z"/></svg>'); }
+/* Pressed arrow button, sampled from OS 9: the face sinks to 777 and the
+   bevel inverts a level darker (555 top-left, 999 bottom-right); the
+   glyph stays black. */
+::-webkit-scrollbar-button:active { background-color: #777;
+  box-shadow: inset 1px 1px 0 #555, inset -1px -1px 0 #999; }
+/* OS 9 Smart Scrolling default: both arrows stacked at the end. All four
+   button slots render once sized; hide the two at the start. */
+::-webkit-scrollbar-button:vertical:start:decrement,
+::-webkit-scrollbar-button:vertical:start:increment,
+::-webkit-scrollbar-button:horizontal:start:decrement,
+::-webkit-scrollbar-button:horizontal:start:increment { display: none; }
+/* Disabled (nothing to scroll), sampled from OS 9: the strip goes flat #eee
+   between the rails, arrows ghost to #888 with no button face or bevel,
+   and a 1px #888 line separates the two arrows. */
+::-webkit-scrollbar-track:disabled { background: #eee; }
+::-webkit-scrollbar-button:disabled { background-color: #eee; box-shadow: none; border: 0; }
+::-webkit-scrollbar-button:vertical:disabled { border-left: 1px solid var(--black); border-right: 1px solid var(--black); }
+::-webkit-scrollbar-button:horizontal:disabled { border-top: 1px solid var(--black); border-bottom: 1px solid var(--black); }
+::-webkit-scrollbar-button:vertical:end:increment:disabled { border-top: 1px solid #888; }
+::-webkit-scrollbar-button:horizontal:end:increment:disabled { border-left: 1px solid #888; }
+/* OS 9 draws a darker #555 line where the disabled arrow pair meets the track */
+::-webkit-scrollbar-button:vertical:end:decrement:disabled { border-top: 1px solid #555; }
+::-webkit-scrollbar-button:horizontal:end:decrement:disabled { border-left: 1px solid #555; }
+::-webkit-scrollbar-button:vertical:decrement:disabled {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4" shape-rendering="crispEdges"><path fill="%23888888" d="M3 0h2v1h-2z M2 1h4v1h-4z M1 2h6v1h-6z M0 3h8v1h-8z"/></svg>'); }
+::-webkit-scrollbar-button:vertical:increment:disabled {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4" shape-rendering="crispEdges"><path fill="%23888888" d="M0 0h8v1h-8z M1 1h6v1h-6z M2 2h4v1h-4z M3 3h2v1h-2z"/></svg>'); }
+::-webkit-scrollbar-button:horizontal:decrement:disabled {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="8" shape-rendering="crispEdges"><path fill="%23888888" d="M0 3h1v2h-1z M1 2h1v4h-1z M2 1h1v6h-1z M3 0h1v8h-1z"/></svg>'); }
+::-webkit-scrollbar-button:horizontal:increment:disabled {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="8" shape-rendering="crispEdges"><path fill="%23888888" d="M0 0h1v8h-1z M1 1h1v6h-1z M2 2h1v4h-1z M3 3h1v2h-1z"/></svg>'); }
+::-webkit-scrollbar-corner { background: var(--g300); }
+
+/* ---------- mobile mode (body.mobile, set at boot on phones) ----------
+   One app at a time: the open window fills the viewport below the menu
+   bar, and drag / grow / shade are gone — openWin swaps fullscreen windows
+   the way a phone OS switches apps. Zoom stays available as a mobile
+   restore/fullscreen toggle. Desktop icons become a home-screen grid and
+   objects still open on double-click so selection stays deliberate. */
+body.mobile { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+body.mobile #icons { left: 8px; right: 8px; top: 14px; bottom: 130px;
+  flex-flow: row wrap; align-content: flex-start; justify-content: flex-start; gap: 18px 6px; }
+body.mobile #desktop .window { position: fixed; inset: 20px 0 0 0 !important;
+  width: auto !important; min-width: 0; box-shadow: none;
+  border-top: 0; /* the menu bar's bottom border is the separator — two stacked black lines otherwise */
+  display: flex; flex-direction: column; }
+body.mobile #desktop .window:not(.minimized) { bottom: var(--mobile-minimized-stack, 0px) !important; }
+body.mobile #desktop .window.minimized {
+  display: flex !important;
+  top: auto !important; left: 0 !important; right: 0 !important;
+  bottom: var(--mobile-min-bottom, 0px) !important;
+  height: 20px !important; min-height: 20px; max-height: 20px;
+  border-top: 1px solid var(--black);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--g600);
+}
+body.mobile #desktop .window.minimized > .win-frame { display: none !important; }
+body.mobile #desktop .window.minimized .titlebar { flex: none; }
+body.mobile #desktop .window.minimized .stripe,
+body.mobile #desktop .window.minimized .tbox { visibility: visible; }
+body.mobile #desktop .window.minimized .title { color: inherit; }
+body.mobile #desktop .window > .win-frame { flex: 1; min-height: 0;
+  display: flex; flex-direction: column; }
+body.mobile .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
+body.mobile .grow-box { display: none; }
+body.mobile .tbox.max { display: inline-block; }
+/* the grow tile is hidden, so keep the frame corner intact: drop the 2px
+   chrome-merge strips that erase the border/bevel for the tile, and give
+   the statusbar its tile-clearance right padding back */
+body.mobile .window.grow .win-frame::before, body.mobile .window.grow .win-frame::after { content: none; }
+body.mobile #win-log .statusbar, body.mobile #win-chat .statusbar, body.mobile #win-news .statusbar,
+body.mobile .term-window .statusbar { padding-right: 8px; }
+/* enlarge the 13px close box's touch target without changing its pixels */
+body.mobile .tbox.close::before { content: ""; position: absolute; inset: -9px; }
+/* grow-box-resizable content tracks the viewport instead of a saved height */
+body.mobile .win-frame > .app-frame,
+body.mobile .win-frame > .workspace-tree,
+body.mobile .win-frame > .ed-text,
+body.mobile .win-frame > .iv-box { flex: 1; min-height: 0; height: auto !important; }
+body.mobile #log-out { height: 100% !important; }
+body.mobile #news-list { height: 100% !important; }
+body.mobile #docs-body { height: 100% !important; }
+body.mobile .term-window .hostterm-box, body.mobile .term-window .vmterm-box { height: 100%; }
+body.mobile #term-box { height: calc(100dvh - 260px); min-height: 180px; }
+/* chat: sessions become a strip on top, messages fill the rest */
+body.mobile .chat-wrap { height: 100% !important; flex-direction: column; }
+body.mobile .chat-side { width: auto; }
+body.mobile .chat-sessions { flex: none; max-height: 88px; }
+/* six trapezoid tabs overflow a phone — let them wrap */
+body.mobile .tabbar { flex-wrap: wrap; }
+/* the About window floats like the Cloudflare status modal instead of
+   going fullscreen: centered, content-sized, dimming what's below */
+body.mobile #desktop #win-about { inset: auto !important;
+  left: 50% !important; top: 50% !important; transform: translate(-50%, -50%);
+  width: min(92vw, 410px) !important; display: block;
+  border-top: 1px solid var(--black);
+  box-shadow: 2px 2px 0 var(--black), 0 0 0 100vmax rgba(0,0,0,.15); }
+body.mobile #desktop #win-about .win-frame { display: block; }
+/* same rule for list headers: the #666 top row would stack a second dark
+   line under the frame's black border, the #333/#444 bottom shadow rows
+   would stack one onto the black bar line above the first list row, and
+   the pressed sort column's #555 top bevel would do the same under the
+   frame — each seam keeps a single dark line */
+body.mobile th { border-top: 0;
+  box-shadow: inset 1px 0 0 #fff, inset 0 1px 0 #fff, inset 0 -1px 0 #888; }
+body.mobile th.sorted {
+  box-shadow: inset 1px 0 0 #555, inset 0 -1px 0 #aaa; }
+/* home-screen icon flow — .dicon is position:absolute on the spatial desk */
+body.mobile #icons { display: flex; }
+body.mobile #icons .dicon, body.mobile #sys-icons .dicon {
+  position: relative; left: auto !important; top: auto !important; }
+body.mobile #sys-icons {
+  position: absolute; left: 8px; right: 8px; bottom: 16px; top: auto;
+  flex-direction: row; justify-content: flex-start; gap: 18px 6px; }
+body.mobile #host-res { display: none; }
+body.mobile #cf-dot span:last-child { display: none; }
+body.mobile #menubar { overflow: hidden; }
+body.mobile .menu { padding: 0 7px; }
+body.mobile .menu.drawer, body.mobile .menu.windows-menu { display: flex; }
+body.mobile .menu[data-m="file"], body.mobile .menu[data-m="vm"],
+body.mobile .menu[data-m="special"], body.mobile .menu[data-m="help"] { display: none; }
+body.mobile .res-bar { gap: 8px; }
+body.mobile .window { max-width: 100vw; }
+body.mobile #desktop .window.mob-restored {
+  inset: auto !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 640px) !important;
+  min-width: 0 !important;
+  max-width: min(92vw, 640px) !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: calc(100dvh - 40px) !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+body.mobile #desktop .window.mob-restored .win-frame { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+body.mobile #desktop .window.mob-restored .win-body { overflow: auto; flex: 1 1 auto; min-height: 0; }
+/* Chrome desktop resize / DevTools: same layout from the viewport, not UA */
+@media (max-width: 720px) {
+  #host-res { display: none; }
+  #cf-dot span:last-child { display: none; }
+  #menubar { overflow: hidden; }
+  .menu { padding: 0 7px; }
+  .menu.drawer, .menu.windows-menu { display: flex; }
+  .menu[data-m="file"], .menu[data-m="vm"], .menu[data-m="special"], .menu[data-m="help"] { display: none; }
+  #icons { display: flex; left: 8px; right: 8px; top: 14px; bottom: 130px;
+    flex-flow: row wrap; align-content: flex-start; justify-content: flex-start; gap: 18px 6px; }
+  #icons .dicon, #sys-icons .dicon { position: relative !important; left: auto !important; top: auto !important; }
+  #sys-icons { position: absolute; left: 8px; right: 8px; bottom: 16px; top: auto;
+    flex-direction: row; justify-content: flex-start; gap: 18px 6px; }
+  #desktop .window { position: fixed; inset: 20px 0 0 0 !important;
+    width: auto !important; min-width: 0; max-width: 100vw; box-shadow: none;
+    border-top: 0; display: flex; flex-direction: column; }
+  #desktop .window > .win-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
+  .tbox.shade, .grow-box { display: none; }
+  .tbox.max { display: inline-block; }
+  .window.grow .win-frame::before, .window.grow .win-frame::after { content: none; }
+  .chat-wrap { height: 100% !important; flex-direction: column; }
+  .chat-side { width: auto; }
+  .tabbar { flex-wrap: wrap; }
+  #desktop #win-about { inset: auto !important;
+    left: 50% !important; top: 50% !important; transform: translate(-50%, -50%);
+    width: min(92vw, 410px) !important; display: block;
+    border-top: 1px solid var(--black);
+    box-shadow: 2px 2px 0 var(--black), 0 0 0 100vmax rgba(0,0,0,.15); }
+}
+/* mobile icon grid can overflow — make it scroll if too many apps */
+body.mobile #icons { -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 360px) {
+  #clock { padding: 0 6px; font-size: 11px; }
+  .menu { padding: 0 6px; font-size: 11px; }
+}
