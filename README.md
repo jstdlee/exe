@@ -19,15 +19,14 @@ uses QEMU on the Windows Hypervisor Platform.
     </td>
     <td width="50%">
       <img src="docs/screenshots/agent-tools-catalog.png" alt="Agent and developer tool launchers inside a VM">
-      <br><strong>VM Agent &amp; Tools catalog</strong><br>
-      Launch code-agent CLIs and common developer tools inside the VM terminal without creating host transcripts.
+      <br><strong>VM Tools catalog</strong><br>
+      Launch code-agent CLIs and common developer tools inside the VM terminal.
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/host-agent-chat.png" alt="Host Chat using signed-in Grok, Claude, or Codex agents">
-      <br><strong>Host-agent Chat</strong><br>
-      Pick already-signed-in Grok, Claude, or Codex host agents and use Chat as the VM cloud control plane.
+      <br><strong>Agent-ready CLI + skill</strong><br>
+      Use <code>exe env</code> for repeatable guest jobs, <code>exe skill</code> for the agent guide, and the SSH gate for shell/scp/sftp/ports.
     </td>
     <td width="50%">
       <img src="docs/screenshots/mobile-windows-bars.png" alt="Mobile Windows menu with minimized window bars">
@@ -144,15 +143,12 @@ http://127.0.0.1:7777). It can:
 
 - list VMs with live state, and create / start / stop / delete them
 - open a full SSH terminal in the browser (xterm.js over WebSocket, embedded in the binary)
-- open VM Agent & Tools launchers for Codex, Gemini, OpenCode, Aider, Qwen Code, Pi, Claude, and common Linux dev tools
+- open VM Tools launchers for Codex, Gemini, OpenCode, Aider, Qwen Code, Pi, Claude, and common Linux dev tools
 - browse the host Workspace as a tree, with dotfiles and `.Trash` hidden
 - edit Workspace text files in single-file autosaving editor windows
-- use Host Chat through signed-in Grok, Claude, or Codex credentials on the host
 - run `exe env` jobs and snapshots for portable agent environments
 - see web services listening inside a VM with one-click links
 - vibe code inside a VM with streaming agent output
-- browse built-in Agent transcripts under `~/.exe/vms/<name>/transcripts/`;
-  guest CLI agents keep their own history inside the VM
 - expose a VM port to your domain
 - tune the desktop background and use the same windowed UI from mobile, including a dedicated Windows switcher
 - edit the full configuration (saved to `~/.exe/config.json` and hot-reloaded;
@@ -188,7 +184,8 @@ The daemon also serves `http://<listen>/skill.md`
 over HTTP, running commands over the SSH gate, service discovery, and
 exposing ports. Point an agent at that URL (plus the `api_token` if set) and
 it can drive your VMs; the file also works dropped into a skills directory
-as-is.
+as-is. From a terminal, `exe skill` prints the same guide and `exe docs`
+prints the embedded user manual.
 
 While `exe serve` runs it also puts an icon in the macOS menu bar: **Open Web
 UI**, **Restart Daemon** (running VMs are brought back automatically), and

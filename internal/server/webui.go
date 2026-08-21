@@ -29,6 +29,12 @@ var uiHTML []byte
 //go:embed skill.md
 var skillMD []byte
 
+// SkillMarkdown returns the embedded agent skill guide. The copy keeps callers
+// from mutating the embedded backing slice.
+func SkillMarkdown() []byte {
+	return append([]byte(nil), skillMD...)
+}
+
 // handleSkill serves the agent skill guide: a markdown file any coding agent
 // can fetch to learn how to drive this daemon's API and VMs.
 func handleSkill(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +44,12 @@ func handleSkill(w http.ResponseWriter, r *http.Request) {
 
 //go:embed docs.md
 var docsMD []byte
+
+// DocsMarkdown returns the embedded user manual. The copy keeps callers from
+// mutating the embedded backing slice.
+func DocsMarkdown() []byte {
+	return append([]byte(nil), docsMD...)
+}
 
 // handleDocs serves the user manual — the page the web UI's Help →
 // exe Documentation window renders.

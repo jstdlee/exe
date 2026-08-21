@@ -11,12 +11,12 @@ over HTTP and SSH.
 
 exe has two security contexts:
 
-- Host windows and apps — Workspace, Terminal, Notes, Browser, Chat,
-  Configuration and this desktop — run against the host daemon and host files
-  under `~/.exe`. They are not inside a VM sandbox.
-- VM windows — Terminal, Agent, Services, Expose, Transcripts and VM Notes —
-  act on one named guest. Agents get passwordless sudo inside that guest; the
-  VM boundary is the sandbox.
+- Host windows and apps — Workspace, Terminal, Notes, Configuration, apps and
+  this desktop — run against the host daemon and host files under `~/.exe`.
+  They are not inside a VM sandbox.
+- VM windows — Services, Terminal, Tools, Expose and Notes — act on one named
+  guest. Tools launch CLIs inside that guest; those CLIs get passwordless sudo
+  through the VM user, and the VM boundary is the sandbox.
 
 Treat the UI/API listener as a control-plane port. If `listen` is bound to
 `127.0.0.1`, only local browsers can reach it. If it is bound to a LAN IP,
@@ -46,9 +46,8 @@ The menu bar works like the classic Mac it resembles:
   coding agent.
 
 Desktop icons: **Workspace** (shared files), **Terminal** (a shell on this
-host machine), one icon per VM, one per installed app, plus **Newsfeed**,
-**Chat** (appears when Ollama is reachable) and the **Trash**. Double-click
-opens things.
+host machine), one icon per VM, one per installed app, plus **Newsfeed** and
+the **Trash**. Double-click opens things.
 
 Windows behave like OS 9 windows: drag the title bar to move, drag the
 left/right/bottom edges or the grow corner to resize, click the shade box to
@@ -76,14 +75,10 @@ Double-click a VM in the list to open its window. The tabs:
 - **Services** — TCP ports listening inside the VM, with one-click links,
   plus the routes already published to the web. Servers must bind
   `0.0.0.0` (not `127.0.0.1`) to show up here or be exposable.
-- **Terminal** — a full SSH terminal in the browser.
-- **Agent & Tools** — launch code-agent CLIs and developer tools inside this
-  VM terminal, or use the built-in coding agent.
+- **Terminal** — a full SSH terminal in the browser. Terminal copy/paste uses native browser/OS selection, copy and paste; Ctrl/Cmd+C copies selected terminal text and Ctrl/Cmd+V pastes.
+- **Tools** — launch code-agent CLIs and developer tools inside this VM terminal.
+  Missing CLIs install first, then the TUI or shell owns the terminal. File transfer stays in Workspace, or use `scp -P 2222` / `sftp -P 2222` directly through the SSH gate.
 - **Expose** — publish a VM port to an HTTPS subdomain (see below).
-- **Transcripts** — built-in Agent runs are recorded and replayable,
-  including built-in runs started from the command line. VM CLI agents
-  launched from Agent & Tools keep their own history inside the guest and do
-  not create host transcripts.
 - **Notes** — free-form notes about the VM, saved automatically. Agents are
   told to read these before working in an unfamiliar VM, so write down what
   runs where.
@@ -108,42 +103,22 @@ key in `~/.exe/ssh/`, and keys listed in `~/.exe/ssh/authorized_clients`
 immediately). There is no first-come key adoption, so the gate is safe to
 leave on a LAN.
 
-## The coding agent
+## VM Tools and agent workflow
 
-Point exe at Ollama in **File → Show → Configuration** (`ollama.base_url` and
-`ollama.model`; `ollama.effort` sets the thinking effort on models that
-support it, or `off` to disable thinking). A local signed-in Ollama at `http://127.0.0.1:11434` can
-use cloud models like `glm-5.2:cloud` with no API key; `https://ollama.com`
-needs one. Then:
+The **Tools** tab in a VM window launches guest-side code-agent CLIs and dev
+tools inside that VM. CLI agents keep credentials, settings and history in the
+guest. Code-agent CLI buttons include Codex, Gemini CLI, OpenCode, Aider, Qwen
+Code, Pi and Claude. Developer-tool buttons include git, build-essential,
+Python, Node, Docker, Go, Rust, jq, ripgrep, fd, fzf, tmux, Neovim, htop, gh,
+CMake, SQLite, zip/unzip, tree, rsync, uv, pnpm, Bun, lazygit, hyperfine,
+direnv, just, bat, eza, HTTPie, yq and delta.
 
-- The **Agent & Tools** tab in a VM window launches code-agent CLIs and dev
-  tools inside that VM. CLI agents keep credentials/history in the guest and
-  do not create host transcripts. The built-in Agent can install packages,
-  write code and start services; it has passwordless sudo *inside the VM*,
-  and the VM is the sandbox boundary.
-  Code-agent CLI buttons include Codex, Gemini CLI, OpenCode, Aider, Qwen
-  Code, Pi and Claude. Developer-tool buttons include git, build-essential,
-  Python, Node, Docker, Go, Rust, jq, ripgrep, fd, fzf, tmux, Neovim, htop,
-  gh, CMake, SQLite, zip/unzip, tree, rsync, uv, pnpm, Bun, lazygit,
-  hyperfine, direnv, just, bat, eza, HTTPie, yq and delta.
-- The **Chat** icon and window appear once a chat backend is usable: a
-  conversation that can see and drive your whole VM cloud.
-
-The Chat window can also run on a **ChatGPT subscription** instead of
-Ollama: in **File → Show → Configuration → OpenAI**, click **Sign in with
-ChatGPT…** (the OAuth flow the Codex CLI uses — no API key), set
-`chat_provider` to `openai`, pick a model (`gpt-5.4`, `gpt-5.4-codex`, …)
-plus an optional reasoning effort, and Save. The browser sign-in redirects to `localhost:1455`; the daemon
-listens on all interfaces there, so when it runs on another machine swap
-`localhost` for the daemon's host in that final URL — or paste the URL
-into the tab's paste field. Tokens live in `~/.exe/openai.json` and refresh themselves.
-While signed in the tab also shows the subscription's rate-limit usage —
-the rolling 5-hour and weekly windows, with their reset times — and any
-credit balance. The per-VM Agent tab stays on Ollama.
-
-Prefer your own agent? See **Help → Agent Skill Guide**: exe serves a
-`/skill.md` file that teaches Claude Code, Codex or any other coding agent
-how to drive the API and the VMs.
+For repeatable automation, prefer `exe env`: it can bootstrap a VM from
+manifests, attach files, run commands/scripts, continue sessions and create
+snapshots. For your own coding agent, use **Help → Agent Skill Guide** or
+`exe skill`: exe serves `/skill.md`, a self-contained guide that teaches Claude
+Code, Codex, opencode or another agent how to drive the API, SSH gate, jobs,
+Workspace transfer and Cloudflare publish flow.
 
 ## Publishing to the web
 
@@ -173,10 +148,6 @@ repository (private by default), and Publish. exe installs git in the VM if
 needed, commits any uncommitted work as your GitHub account's noreply
 identity, creates the repository, and pushes. Publishing again later pushes
 the new commits to the same repository.
-
-The Chat agent can do the same: tell it to "push to github" and it uses the
-daemon's github_push tool — a plain `git push` inside a VM always fails,
-because that is the point.
 
 The point of the design: **no GitHub credentials ever enter the VM.** The
 sign-in token lives only on this machine (`~/.exe/github.json`), and the
@@ -234,8 +205,6 @@ restart. Highlights:
 - `ssh_user` — the user created in every VM (default `dev`).
 - `idle_stop_minutes` — stop a running VM after N minutes with no
   terminal, job or SSH (`0` = never).
-- Chat has no LLM tab: it uses host agents already signed in
-  (`~/.grok`, `~/.claude`, `~/.codex`). Pick agent + model in the Chat window.
 - `cloudflare.*` — publishing / Expose.
 
 **File → Show → Daemon Log** streams the daemon's own log when something needs
