@@ -70,6 +70,7 @@ body.mobile #host-res { display: none; }
 }
 .dd-item { padding: 3px 22px 3px 18px; white-space: nowrap; }
 .dd-item:hover { background: var(--hl); color: #fff; }
+.dd-item.sel { background: var(--hl); color: #fff; }
 .dd-item.dis { color: #888; }
 .dd-item.dis:hover { background: none; color: #888; }
 .dd-item.win-active::before { content: "✓ "; margin-left: -10px; }
