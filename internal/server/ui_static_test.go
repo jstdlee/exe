@@ -215,17 +215,24 @@ func TestMobileDesktopIconsScrollableAndAllAppsVisible(t *testing.T) {
 	}
 }
 
-func TestTerminalCopyPasteMenu(t *testing.T) {
+func TestTerminalUsesNativeCopyPaste(t *testing.T) {
 	ui := readUITemplate(t)
 	for _, want := range []string{
-		`showTermMenu`,
-		`"Copy"`,
-		`"Paste"`,
-		`"Select All"`,
-		`box.addEventListener("touchstart"`,
+		`box.addEventListener("paste", e => {`,
+		`box.addEventListener("copy", e => {`,
+		`term.attachCustomKeyEventHandler(ev => {`,
 	} {
 		if !strings.Contains(ui, want) {
-			t.Fatalf("terminal copy/paste menu missing %q", want)
+			t.Fatalf("terminal native copy/paste path missing %q", want)
+		}
+	}
+	for _, bad := range []string{
+		`showTermMenu`,
+		`"Select All"`,
+		`box.addEventListener("touchstart", e => {`,
+	} {
+		if strings.Contains(ui, bad) {
+			t.Fatalf("terminal should not wrap native copy/paste with a custom menu; found %q", bad)
 		}
 	}
 }
@@ -288,17 +295,45 @@ func TestLongPressOpensContextMenu(t *testing.T) {
 	}
 }
 
-func TestTranscriptsExplanationClear(t *testing.T) {
+func TestVMToolsPanelIsGuestSideOnly(t *testing.T) {
 	ui := readUITemplate(t)
 	for _, want := range []string{
-		`stored on the host next to the VM
-              disk`,
-		`survive stop/start`,
-		`Double-click a row to open the transcript`,
-		`Terminal-launched CLIs keep their own history`,
+		`<div class="tab" data-tab="tools">Tools</div>`,
+		`id="pane-tools"`,
+		`Code-agent CLIs`,
+		`File transfer stays in Workspace`,
 	} {
 		if !strings.Contains(ui, want) {
-			t.Fatalf("transcripts explanation missing %q", want)
+			t.Fatalf("guest-side VM tools panel missing %q", want)
+		}
+	}
+	for _, bad := range []string{
+		`data-tab="vibe"`,
+		`id="pane-vibe"`,
+		`id="vibe-run"`,
+		`data-tab="tr"`,
+		`id="pane-tr"`,
+		`id="tr-overlay"`,
+		`loadTranscripts()`,
+	} {
+		if strings.Contains(ui, bad) {
+			t.Fatalf("VM detail should not expose host Agent/Transcript UI; found %q", bad)
+		}
+	}
+}
+
+func TestChatAppRemovedFromUI(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, bad := range []string{
+		`data-act="winchat"`,
+		`id="chat-icon"`,
+		`id="win-chat"`,
+		`openChatWin`,
+		`/v1/chat/sessions`,
+		`/v1/chat/send`,
+	} {
+		if strings.Contains(ui, bad) {
+			t.Fatalf("Chat app should be removed from the UI bundle; found %q", bad)
 		}
 	}
 }
@@ -335,6 +370,9 @@ func TestObjectsOpenOnDoubleClick(t *testing.T) {
 	for _, want := range []string{
 		`function objectOpen(n, fn) {`,
 		`n.addEventListener("click", e => {`,
+		`if (e.detail > 2)`,
+		`if (now < suppressClickUntil) return;`,
+		`suppressClickUntil = now + 700;`,
 		`if (now - lastClickAt <= 650 && Math.abs(x - lastClickX) <= 10 && Math.abs(y - lastClickY) <= 10)`,
 		`n.addEventListener("dblclick", run);`,
 		`objectOpen(ic, () => openFinderWin(""))`,
@@ -370,23 +408,5 @@ func TestIconDragDoesNotSuppressDoubleClick(t *testing.T) {
 	}
 	if !strings.Contains(ui, `if (!moved) { moved = true; ic.classList.add("dragging"); ev.preventDefault(); }`) {
 		t.Fatal("icon drag should prevent default only once an actual drag starts")
-	}
-}
-
-func TestTranscriptDetailsUseModal(t *testing.T) {
-	ui := readUITemplate(t)
-	for _, want := range []string{
-		`id="tr-overlay"`,
-		`id="tr-modal-log"`,
-		`function openTranscriptModal(d)`,
-		`objectOpen(item, async () => {`,
-		`openTranscriptModal(d)`,
-	} {
-		if !strings.Contains(ui, want) {
-			t.Fatalf("transcript modal missing %q", want)
-		}
-	}
-	if strings.Contains(ui, `id="t-log" hidden`) {
-		t.Fatal("transcript pane should not reserve inline detail log space")
 	}
 }
