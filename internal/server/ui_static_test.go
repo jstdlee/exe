@@ -337,10 +337,21 @@ func TestObjectsOpenOnDoubleClick(t *testing.T) {
 		`objectOpen(ic, () => openFinderWin(""))`,
 		`objectOpen(row, () => openVM(vm.name))`,
 		`objectOpen(trashIcon, () => openWin("#win-trash"))`,
+		`objectOpen(d, () => { menuClose(); openAppWin(app.name); });`,
+		`const MENU_DOUBLE_OPEN_ACTIONS = new Set(["winconfig"]);`,
+		`objectOpen(it, () => { menuClose(); const a = ACTIONS[it.dataset.act]; if (a) a(); });`,
 	} {
 		if !strings.Contains(ui, want) {
 			t.Fatalf("objects should open on double-click; missing %q", want)
 		}
+	}
+	if strings.Contains(ui, `d.addEventListener("click", () => { menuClose(); openAppWin(app.name); });`) {
+		t.Fatal("app menu entries should not open on single click")
+	}
+	if strings.Contains(ui, `document.querySelectorAll(".dd-item").forEach(it => {
+  it.addEventListener("click", () => { menuClose(); const a = ACTIONS[it.dataset.act]; if (a) a(); });
+});`) {
+		t.Fatal("Configuration menu entries should not use the generic single-click opener")
 	}
 	if strings.Contains(ui, `const tapOpen = (n, fn) => n.addEventListener(IS_MOBILE ? "click" : "dblclick", fn);`) {
 		t.Fatal("object opening should no longer switch mobile to single-click")

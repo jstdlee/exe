@@ -764,8 +764,18 @@ const ACTIONS = {
   docs: () => openDocsWin(),
   skillguide: () => openSkillWin(),
 };
+const MENU_DOUBLE_OPEN_ACTIONS = new Set(["winconfig"]);
+function selectMenuItem(it) {
+  it.parentElement?.querySelectorAll(".dd-item.sel").forEach(x => x.classList.remove("sel"));
+  it.classList.add("sel");
+}
 document.querySelectorAll(".dd-item").forEach(it => {
-  it.addEventListener("click", () => { menuClose(); const a = ACTIONS[it.dataset.act]; if (a) a(); });
+  if (MENU_DOUBLE_OPEN_ACTIONS.has(it.dataset.act)) {
+    it.addEventListener("click", e => { e.stopPropagation(); selectMenuItem(it); });
+    objectOpen(it, () => { menuClose(); const a = ACTIONS[it.dataset.act]; if (a) a(); });
+  } else {
+    it.addEventListener("click", () => { menuClose(); const a = ACTIONS[it.dataset.act]; if (a) a(); });
+  }
 });
 
 // ---- Apple → About: show this host's name and IPs, click an IP to copy ----
@@ -1115,7 +1125,8 @@ function renderIcons(vms) {
     // Apps cascaded menu items
     const menuItem = (target) => {
       const d = el("div", { class: "dd-item" }, app.title || app.name);
-      d.addEventListener("click", () => { menuClose(); openAppWin(app.name); });
+      d.addEventListener("click", e => { e.stopPropagation(); selectMenuItem(d); });
+      objectOpen(d, () => { menuClose(); openAppWin(app.name); });
       target.append(d);
     };
     if (appsMenuList) menuItem(appsMenuList);
