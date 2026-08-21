@@ -399,6 +399,26 @@ func TestObjectsOpenOnDoubleClick(t *testing.T) {
 	}
 }
 
+func TestMobileObjectsOpenOnPointerDoubleTap(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`let lastTapAt = 0, lastTapX = 0, lastTapY = 0;`,
+		`n.addEventListener("pointerup", e => {`,
+		`if (!IS_MOBILE || e.pointerType === "mouse") return;`,
+		`if (now - lastTapAt <= 650 && Math.abs(x - lastTapX) <= 18 && Math.abs(y - lastTapY) <= 18)`,
+		`e.preventDefault();`,
+		`run(e);`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("mobile objects should open on pointer double-tap; missing %q", want)
+		}
+	}
+	if strings.Contains(ui, `function objectOpen(n, fn) {
+  if (IS_MOBILE) return;`) {
+		t.Fatal("objectOpen should not disable mobile double-tap handling")
+	}
+}
+
 func TestIconDragDoesNotSuppressDoubleClick(t *testing.T) {
 	ui := readUITemplate(t)
 	if strings.Contains(ui, `ic.addEventListener("pointerdown", e => {

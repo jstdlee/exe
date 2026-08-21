@@ -28,14 +28,30 @@ if (IS_MOBILE && /iPhone|iPod|iPad/i.test(navigator.userAgent))
 // clearly double-taps/clicks.
 function objectOpen(n, fn) {
   let lastClickAt = 0, lastClickX = 0, lastClickY = 0, openedAt = 0, suppressClickUntil = 0;
+  let lastTapAt = 0, lastTapX = 0, lastTapY = 0;
   const run = e => {
     const now = performance.now();
     if (now - openedAt < 250) return;
     openedAt = now;
     suppressClickUntil = now + 700;
     lastClickAt = 0;
+    lastTapAt = 0;
     fn(e);
   };
+  n.addEventListener("pointerup", e => {
+    if (!IS_MOBILE || e.pointerType === "mouse") return;
+    const now = performance.now();
+    if (now < suppressClickUntil) return;
+    const x = e.clientX || 0, y = e.clientY || 0;
+    if (now - lastTapAt <= 650 && Math.abs(x - lastTapX) <= 18 && Math.abs(y - lastTapY) <= 18) {
+      e.preventDefault();
+      run(e);
+      return;
+    }
+    lastTapAt = now;
+    lastTapX = x;
+    lastTapY = y;
+  });
   n.addEventListener("click", e => {
     const now = performance.now();
     if (now < suppressClickUntil) return;
