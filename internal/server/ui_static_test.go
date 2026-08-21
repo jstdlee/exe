@@ -188,8 +188,8 @@ func TestMobileFinderToolbarReplacesContextMenu(t *testing.T) {
 		`.finder-toolbar`,
 		`renderFinderToolbar`,
 		`selectedFinderEntry`,
-		`nfOpen(w, true, base)`,
-		`nfPickUpload(base)`,
+		`nfOpen(w, true, selDir)`,
+		`nfPickUpload(selDir)`,
 		`showGetInfo(sel.en, sel.rel)`,
 		`wsTrash(sel.rel, w)`,
 		`wsDownload(sel.en, sel.rel)`,
@@ -416,6 +416,34 @@ func TestMobileObjectsOpenOnPointerDoubleTap(t *testing.T) {
 	if strings.Contains(ui, `function objectOpen(n, fn) {
   if (IS_MOBILE) return;`) {
 		t.Fatal("objectOpen should not disable mobile double-tap handling")
+	}
+}
+
+func TestWorkspaceCreateUsesSelectedNestedTargetAndFocusesCreatedRow(t *testing.T) {
+	ui := readUITemplate(t)
+	for _, want := range []string{
+		`row._entry = en;`,
+		`const en = row._entry || { name: path.split("/").pop(), dir: row.dataset.dir === "1" };`,
+		`btn("New Folder", false, () => nfOpen(w, true, selDir)),`,
+		`btn("New Text", false, () => nfOpen(w, false, selDir)),`,
+		`btn("Upload", false, () => nfPickUpload(selDir)),`,
+		`await refreshFinderToPath(nfWin, rel, targetDir);`,
+		`async function expandFinderPath(w, rel) {`,
+		`function focusFinderPath(w, rel) {`,
+		`row.scrollIntoView({ block: "nearest" });`,
+	} {
+		if !strings.Contains(ui, want) {
+			t.Fatalf("workspace create should target selected nested row and focus the created row; missing %q", want)
+		}
+	}
+	if strings.Contains(ui, `btn("New Folder", false, () => nfOpen(w, true, base)),`) {
+		t.Fatal("mobile toolbar New Folder should not ignore the selected tree row")
+	}
+	if strings.Contains(ui, `btn("New Text", false, () => nfOpen(w, false, base)),`) {
+		t.Fatal("mobile toolbar New Text should not ignore the selected tree row")
+	}
+	if strings.Contains(ui, `btn("Upload", false, () => nfPickUpload(base)),`) {
+		t.Fatal("mobile toolbar Upload should not ignore the selected tree row")
 	}
 }
 
