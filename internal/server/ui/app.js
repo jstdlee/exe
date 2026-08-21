@@ -1386,8 +1386,18 @@ function selectTreeRow(tree, row) {
   tree.querySelectorAll(".tree-row.sel").forEach(d => d.classList.remove("sel"));
   row.classList.add("sel");
 }
+function expandedFinderPaths(w) {
+  return [...w.querySelectorAll(".tree-node.expanded")].map(n => n.dataset.path).filter(Boolean);
+}
+function finderNodeForPath(w, rel) {
+  return [...w.querySelectorAll(".tree-node")].find(n => n.dataset.path === rel) || null;
+}
+function finderRowForPath(w, rel) {
+  return [...w.querySelectorAll(".tree-row")].find(r => r.dataset.path === rel) || null;
+}
 async function loadFinder(w) {
   const path = w.dataset.path, items = w.querySelector(".ws-items");
+  const keepExpanded = expandedFinderPaths(w);
   let data;
   try { data = await j("/v1/workspace?dir=" + encodeURIComponent(path)); }
   catch (e) { items.textContent = e.message; return; }
@@ -1401,16 +1411,19 @@ async function loadFinder(w) {
     return;
   }
   for (const en of data.entries) box.append(renderTreeNode(w, path, en, 0));
+  for (const rel of keepExpanded) await expandFinderPath(w, rel);
 }
 function renderTreeNode(w, base, en, depth) {
   const rel = wsJoin(base, en.name);
   const node = el("div", { class: "tree-node " + (en.dir ? "dir" : "file"), title: en.name });
   node.dataset.path = rel;
   node.dataset.dir = en.dir ? "1" : "0";
+  node.dataset.depth = String(depth);
   const row = el("div", { class: "tree-row", role: "treeitem", tabindex: "0" });
   row.dataset.path = rel;
   row.dataset.dir = en.dir ? "1" : "0";
   row.dataset.dropDir = en.dir ? rel : wsParent(rel);
+  row._entry = en;
   row.style.paddingLeft = (8 + depth * 16) + "px";
   const twist = el("span", { class: "tree-twist" }, en.dir ? "▸" : "");
   const ico = el("span", { class: "tree-ico" });
@@ -1458,6 +1471,12 @@ async function toggleTreeNode(w, node, rel, depth) {
     if (twist) twist.textContent = "▸";
     return;
   }
+  await expandTreeNode(w, node, rel, depth);
+}
+async function expandTreeNode(w, node, rel, depth) {
+  if (!node || node.dataset.dir !== "1") return;
+  const kids = node.querySelector(":scope > .tree-children");
+  const twist = node.querySelector(":scope > .tree-row > .tree-twist");
   if (!node.dataset.loaded) {
     kids.replaceChildren(el("div", { class: "tree-empty muted" }, "Loading…"));
     let data;
@@ -1471,6 +1490,34 @@ async function toggleTreeNode(w, node, rel, depth) {
   node.classList.add("expanded");
   kids.hidden = false;
   if (twist) twist.textContent = "▾";
+}
+async function expandFinderPath(w, rel) {
+  const base = w.dataset.path || "";
+  if (!rel || rel === base) return;
+  const prefix = base ? base + "/" : "";
+  if (base && !rel.startsWith(prefix)) return;
+  let cur = base;
+  for (const part of rel.slice(prefix.length).split("/").filter(Boolean)) {
+    cur = wsJoin(cur, part);
+    const node = finderNodeForPath(w, cur);
+    if (!node) return;
+    await expandTreeNode(w, node, cur, Number(node.dataset.depth || "0") + 1);
+  }
+}
+function focusFinderPath(w, rel) {
+  const row = finderRowForPath(w, rel);
+  if (!row) return false;
+  selectTreeRow(w.querySelector(".workspace-tree"), row);
+  row.focus({ preventScroll: true });
+  row.scrollIntoView({ block: "nearest" });
+  if (IS_MOBILE) renderFinderToolbar(w);
+  return true;
+}
+async function refreshFinderToPath(w, rel, expandRel) {
+  if (!w || w.hidden) return;
+  await loadFinder(w);
+  await expandFinderPath(w, expandRel || wsParent(rel));
+  focusFinderPath(w, rel);
 }
 function showTreeCtxMenu(x, y, w, en, rel, node, depth) {
   const targetDir = en.dir ? rel : wsParent(rel);
@@ -1492,7 +1539,7 @@ function selectedFinderEntry(w) {
   const row = w.querySelector(".workspace-tree .tree-row.sel");
   if (!row) return null;
   const path = row.dataset.path;
-  const en = (w._entries || []).find(e => wsJoin(w.dataset.path, e.name) === path);
+  const en = row._entry || { name: path.split("/").pop(), dir: row.dataset.dir === "1" };
   return en ? { row, en, rel: path } : null;
 }
 function renderFinderToolbar(w) {
@@ -1504,9 +1551,9 @@ function renderFinderToolbar(w) {
   const dirOnly = !sel || sel.en.dir;
   const btn = (label, dis, act) => el("button", { class: "ghost sm" + (dis ? " dis" : ""), onclick: dis ? null : act }, label);
   bar.replaceChildren(
-    btn("New Folder", false, () => nfOpen(w, true, base)),
-    btn("New Text", false, () => nfOpen(w, false, base)),
-    btn("Upload", false, () => nfPickUpload(base)),
+    btn("New Folder", false, () => nfOpen(w, true, selDir)),
+    btn("New Text", false, () => nfOpen(w, false, selDir)),
+    btn("Upload", false, () => nfPickUpload(selDir)),
     btn("Info", !sel, () => showGetInfo(sel.en, sel.rel)),
     btn("Delete", !sel, () => wsTrash(sel.rel, w)),
     btn("Duplicate", !sel || dirOnly, () => wsDuplicate(sel.en, sel.rel, w)),
@@ -1625,7 +1672,8 @@ $("#nf-go").onclick = async () => {
     if (nfFolder) await api(wsUrl(rel) + "?mkdir=1", { method: "POST" });
     else await api(wsUrl(rel), { method: "PUT", body: "" });
     nfClose();
-    refreshFinderWindows();
+    await refreshFinderToPath(nfWin, rel, targetDir);
+    document.querySelectorAll('[id^="win-ws-"]').forEach(f => { if (!f.hidden && f !== nfWin) loadFinder(f); });
   } catch (e) { toast(e.message); }
   $("#nf-go").disabled = false;
 };
