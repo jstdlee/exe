@@ -22,8 +22,32 @@ if (IS_MOBILE) document.body.classList.add("mobile");
 // clamp would take away Android's pinch zoom entirely.
 if (IS_MOBILE && /iPhone|iPod|iPad/i.test(navigator.userAgent))
   document.querySelector('meta[name="viewport"]').content = "width=device-width, initial-scale=1, maximum-scale=1";
-// objects open on double-click everywhere; single-click only selects.
-const objectOpen = (n, fn) => n.addEventListener("dblclick", fn);
+// objects open on double-click everywhere; single-click only selects. Use a
+// click-pair detector instead of trusting native dblclick only: mobile Safari
+// and pointer-capture drag setup can skip native dblclick even when the user
+// clearly double-taps/clicks.
+function objectOpen(n, fn) {
+  let lastClickAt = 0, lastClickX = 0, lastClickY = 0, openedAt = 0;
+  const run = e => {
+    const now = performance.now();
+    if (now - openedAt < 250) return;
+    openedAt = now;
+    fn(e);
+  };
+  n.addEventListener("click", e => {
+    const now = performance.now();
+    const x = e.clientX || 0, y = e.clientY || 0;
+    if (now - lastClickAt <= 650 && Math.abs(x - lastClickX) <= 10 && Math.abs(y - lastClickY) <= 10) {
+      lastClickAt = 0;
+      run(e);
+      return;
+    }
+    lastClickAt = now;
+    lastClickX = x;
+    lastClickY = y;
+  });
+  n.addEventListener("dblclick", run);
+}
 function addLongPressMenu(n, menuFn) {
   if (!IS_MOBILE) return;
   let touchStart = null, longTimer = null;

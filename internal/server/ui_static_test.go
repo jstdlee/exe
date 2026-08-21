@@ -333,7 +333,10 @@ func TestBrowserAppIsHiddenFromDesktopAndDrawer(t *testing.T) {
 func TestObjectsOpenOnDoubleClick(t *testing.T) {
 	ui := readUITemplate(t)
 	for _, want := range []string{
-		`const objectOpen = (n, fn) => n.addEventListener("dblclick", fn);`,
+		`function objectOpen(n, fn) {`,
+		`n.addEventListener("click", e => {`,
+		`if (now - lastClickAt <= 650 && Math.abs(x - lastClickX) <= 10 && Math.abs(y - lastClickY) <= 10)`,
+		`n.addEventListener("dblclick", run);`,
 		`objectOpen(ic, () => openFinderWin(""))`,
 		`objectOpen(row, () => openVM(vm.name))`,
 		`objectOpen(trashIcon, () => openWin("#win-trash"))`,
