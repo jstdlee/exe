@@ -118,9 +118,8 @@ body.mobile #a-launchers { grid-template-columns: repeat(auto-fit, minmax(104px,
 .dicon img { width: 32px; height: 32px; image-rendering: pixelated;
   filter: drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
 .dicon.sel img { filter: brightness(.55) saturate(1.3) drop-shadow(1px 1px 0 rgba(0,0,0,.4)); }
-/* system icons (Chat, Trash) live in their own bottom-anchored column on
-   the same 8px rail and 16px rhythm as #icons, so both groups share one
-   center axis and pitch; hiding Chat keeps Trash pinned at the bottom */
+/* system icons live in their own bottom-anchored column on the same 8px rail
+   and 16px rhythm as #icons, so both groups share one center axis and pitch */
 #sys-icons { position: absolute; bottom: 16px; right: 8px; z-index: 1;
   display: flex; flex-direction: column; gap: 16px; }
 
@@ -176,7 +175,7 @@ body.mobile #a-launchers { grid-template-columns: repeat(auto-fit, minmax(104px,
 .window.maximized > .win-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .window.maximized .win-frame > .win-body { flex: 1; min-height: 0; max-height: none; }
 .window.maximized #log-out, .window.maximized #news-list, .window.maximized #docs-body,
-.window.maximized .chat-wrap, .window.maximized .app-frame, .window.maximized .workspace-tree,
+.window.maximized .app-frame, .window.maximized .workspace-tree,
 .window.maximized .ed-text, .window.maximized .iv-box { flex: 1 1 auto; height: auto !important; min-height: 0; max-height: none; }
 .window.maximized .grow-box, .window.maximized .win-edge { display: none; }
 body.mobile .tbox.shade { display: none; }
@@ -333,13 +332,6 @@ body.mobile #sys-icons { z-index: 2; }
 .statusbar button + button { margin-left: -4px; }
 td.actions button + button { margin-left: 8px; }
 
-/* the Chat status line opens the backend switcher */
-#chat-status { cursor: pointer; }
-#chat-status:hover { text-decoration: underline; }
-/* ChatGPT token usage sits at the status line's far right */
-#chat-usage { margin-left: auto; white-space: nowrap; }
-#chat-usage .hot { color: #a33; }
-
 /* modal dialogs */
 .overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,.15);
   display: flex; align-items: center; justify-content: center; }
@@ -376,13 +368,12 @@ td.actions button + button { margin-left: 8px; }
 /* VM detail: an edge-resized body hands surplus height to the tab panel
    (grow-only — a short window keeps the panel's natural size and scrolls
    the body, as before), and inside each pane the main content stretches
-   with it: the terminal, the agent/transcript logs, the notes textarea */
+   with it: the terminal and the notes textarea */
 #win-detail .win-body { display: flex; flex-direction: column; }
 #win-detail .tabpanel { flex: 1 0 auto; display: flex; flex-direction: column; }
 #win-detail .pane:not([hidden]) { flex: 1; display: flex; flex-direction: column; }
 #pane-term #term-box { flex: 1 1 auto; min-height: 160px; }
 #pane-notes #n-text { flex: 1 1 auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-#pane-tr #t-list { flex: 1 1 auto; min-height: 0; overflow: auto; }
 /* the terminal is the one pane that can adapt its height (xterm refits
    its rows), so when the body runs short — the 100vh cap on a small
    screen, or a short edge-resize — the squeeze flows into the terminal
@@ -505,11 +496,11 @@ pre.out { background: #10120f; color: #cfe3cf; border: 1px solid var(--black); p
   margin: 10px 0 0; font-family: var(--mono); font-size: 11px; max-height: 380px; overflow: auto;
   white-space: pre-wrap; word-break: break-word; user-select: text;
   box-shadow: -1px -1px 0 var(--g600), 1px 1px 0 #fff; }
-/* Daemon Log and Chat windows: resizable via the shared grow box corner
+/* Daemon Log, Newsfeed and Documentation windows: resizable via the shared grow box corner
    (.grow + .grow-box); the bottom strip is a plain status area like
    classic IE/Netscape. 15px total (border-box) so the strip's border-top
    is the same line as the grow box tile's top separator row. */
-#win-log .statusbar, #win-chat .statusbar, #win-news .statusbar, #win-docs .statusbar, .term-window .statusbar { height: 15px; padding: 0 25px 0 8px; }
+#win-log .statusbar, #win-news .statusbar, #win-docs .statusbar, .term-window .statusbar { height: 15px; padding: 0 25px 0 8px; }
 /* edge to edge in the frame: the win-frame draws the outline, the pre
    keeps only its inner text padding, and only a vertical bar renders */
 #log-out { margin: 0; height: 380px; max-height: none; border: 0; box-shadow: none;
@@ -519,7 +510,7 @@ pre.out { background: #10120f; color: #cfe3cf; border: 1px solid var(--black); p
    gray last line is the byline: which node posted it, and when */
 #news-list { height: 380px; overflow-y: scroll; overflow-x: hidden; }
 /* Documentation (Help menu): the manual on paper, rendered markdown with
-   the chat's typography (the inner div carries .msg.asst) */
+   the shared message typography (the inner div carries .msg.asst) */
 #docs-body { height: 420px; overflow-y: scroll; overflow-x: hidden; user-select: text; }
 .news-item { position: relative; overflow: hidden; touch-action: pan-y; }
 .news-item + .news-item { border-top: 1px solid var(--g500); }
@@ -539,14 +530,6 @@ pre.out { background: #10120f; color: #cfe3cf; border: 1px solid var(--black); p
 .listbox td { white-space: nowrap; }
 a.svc { color: #202a87; text-decoration: none; }
 a.svc:hover { text-decoration: underline; }
-.t-item:last-child { margin-bottom: 0; }
-.t-item { padding: 3px 8px; border: 1px solid var(--g600); background: var(--g200); margin-bottom: 5px;
-  display: flex; gap: 10px; align-items: center; min-height: 27px; box-shadow: inset 1px 1px 0 #fff; }
-.t-item.sel { background: var(--hl); }
-.t-item.sel, .t-item.sel .muted, .t-item.sel .mono { color: #fff; }
-.t-prompt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-#tr-overlay .window.modal { max-width: min(92vw, 820px); }
-#tr-modal-log { margin: 0; max-height: min(70vh, 620px); }
 /* overflow:clip — xterm's DOM renderer parks absolutely-positioned helpers
    (IME textarea at the cursor, spare rows) below the visible screen; unclipped
    they inflate every ancestor's scrollHeight and typing makes the browser
@@ -556,7 +539,7 @@ a.svc:hover { text-decoration: underline; }
   border-right: 0; /* the always-on viewport scrollbar draws the right frame line */
   box-shadow: -1px -1px 0 var(--g600), 1px 1px 0 #fff; overflow: clip; }
 /* enabled end arrows share lines too: borderless 14px second arrow rides
-   the box's border-bottom (see the chat lists / CodeWarrior capture) */
+   the box's border-bottom (see the CodeWarrior capture) */
 #term-box .xterm-viewport::-webkit-scrollbar-button:vertical:end:increment:enabled {
   height: 14px; border-top: 0; border-bottom: 0; }
 /* Terminal windows are edge to edge: the win-frame draws the outline and
@@ -575,24 +558,6 @@ a.svc:hover { text-decoration: underline; }
 #term-box .xterm-viewport, .hostterm-box .xterm-viewport, .vmterm-box .xterm-viewport { overflow-y: scroll !important; }
 td .mono, td.mono { user-select: text; }
 
-/* ---------- chat window ---------- */
-.chat-wrap { display: flex; gap: 10px; height: 432px; }
-.chat-side { width: 190px; flex: none; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-.chat-sessions { flex: 1; max-height: none; overflow-y: auto; }
-.cs-item { display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 8px; border-bottom: 1px solid #efefef; }
-.cs-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-time { font-size: 10px; color: #777; }
-.cs-vm { color: #777; }
-.cs-item.sel { background: var(--hl); }
-.cs-item.sel .cs-title, .cs-item.sel .cs-time, .cs-item.sel .cs-vm { color: #fff; }
-/* the VM the session list is scoped to, with an × back to all sessions */
-.chat-scope { display: flex; align-items: center; gap: 4px; padding: 1px 1px 1px 8px; border: 1px solid #999; background: #e6e6e6; }
-.chat-scope .vm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; font-size: 11px; }
-.chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.chat-msgs { flex: 1; overflow-y: auto; background: #fff; border: 1px solid var(--black);
-  padding: 10px; user-select: text;
-  box-shadow: -1px -1px 0 var(--g600), -1px 0 0 var(--g600), 0 -1px 0 var(--g600),
-    1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
 /* auto scrollbars with a single OS 9 frame line: when the bar is present
    its own black edge is the line (a border would double it to 2px — the
    Todo-list fix), and when it is absent the border comes back. autoVBar()
@@ -602,7 +567,6 @@ td .mono, td.mono { user-select: text; }
    pair is a 14px borderless cell (real OS 9, CodeWarrior capture) — its
    top line is the first arrow's border, its bottom line is the frame's
    border-bottom, and the glyph stays integer-centered in the 14px face */
-.chat-msgs::-webkit-scrollbar-button:vertical:end:increment:enabled,
 .listbox::-webkit-scrollbar-button:vertical:end:increment:enabled {
   height: 14px; border-top: 0; border-bottom: 0; }
 .msg { margin: 0 0 10px; }
@@ -637,10 +601,6 @@ td .mono, td.mono { user-select: text; }
 .msg.think::after { content: "…"; animation: think 1.2s steps(4) infinite; display: inline-block;
   overflow: hidden; vertical-align: bottom; width: 0; }
 @keyframes think { to { width: 14px; } }
-.chat-hint { color: #777; text-align: center; padding: 40px 30px 0; }
-.chat-inrow { display: flex; gap: 8px; align-items: flex-end; }
-.chat-inrow textarea { flex: 1; min-height: 46px; }
-
 /* wizard feedback */
 .wiz-fb { border: 1px solid; padding: 7px 10px; font-size: 11.5px; white-space: pre-wrap; }
 .wiz-fb.ok { background: #e2f2e0; border-color: #2f7d33; color: #1d5a22; }
@@ -804,7 +764,7 @@ body.mobile .tbox.max { display: inline-block; }
    chrome-merge strips that erase the border/bevel for the tile, and give
    the statusbar its tile-clearance right padding back */
 body.mobile .window.grow .win-frame::before, body.mobile .window.grow .win-frame::after { content: none; }
-body.mobile #win-log .statusbar, body.mobile #win-chat .statusbar, body.mobile #win-news .statusbar,
+body.mobile #win-log .statusbar, body.mobile #win-news .statusbar,
 body.mobile .term-window .statusbar { padding-right: 8px; }
 /* enlarge the 13px close box's touch target without changing its pixels */
 body.mobile .tbox.close::before { content: ""; position: absolute; inset: -9px; }
@@ -818,11 +778,7 @@ body.mobile #news-list { height: 100% !important; }
 body.mobile #docs-body { height: 100% !important; }
 body.mobile .term-window .hostterm-box, body.mobile .term-window .vmterm-box { height: 100%; }
 body.mobile #term-box { height: calc(100dvh - 260px); min-height: 180px; }
-/* chat: sessions become a strip on top, messages fill the rest */
-body.mobile .chat-wrap { height: 100% !important; flex-direction: column; }
-body.mobile .chat-side { width: auto; }
-body.mobile .chat-sessions { flex: none; max-height: 88px; }
-/* six trapezoid tabs overflow a phone — let them wrap */
+/* tabs can overflow a phone — let them wrap */
 body.mobile .tabbar { flex-wrap: wrap; }
 /* the About window floats like the Cloudflare status modal instead of
    going fullscreen: centered, content-sized, dimming what's below */
@@ -895,8 +851,6 @@ body.mobile #desktop .window.mob-restored .win-body { overflow: auto; flex: 1 1 
   .tbox.shade, .grow-box { display: none; }
   .tbox.max { display: inline-block; }
   .window.grow .win-frame::before, .window.grow .win-frame::after { content: none; }
-  .chat-wrap { height: 100% !important; flex-direction: column; }
-  .chat-side { width: auto; }
   .tabbar { flex-wrap: wrap; }
   #desktop #win-about { inset: auto !important;
     left: 50% !important; top: 50% !important; transform: translate(-50%, -50%);

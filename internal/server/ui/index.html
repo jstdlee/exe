@@ -46,7 +46,6 @@
   <div class="win-list-inline" id="file-windowlist"></div>
   <div class="dd-sep"></div>
   <div class="dd-head">Show</div>
-  <div class="dd-item" data-act="winchat" hidden>Chat</div>
   <div class="dd-item" data-act="winnews">Newsfeed</div>
   <div class="dd-item" data-act="winconfig">Configuration</div>
   <div class="dd-item" data-act="winlog">Daemon Log</div>
@@ -90,7 +89,6 @@
   <div class="dd-item" data-act="winvms">Virtual Machines</div>
   <div class="dd-sep"></div>
   <div class="dd-head">Show</div>
-  <div class="dd-item" data-act="winchat" id="dd-drawer-chat-item" hidden>Chat</div>
   <div class="dd-item" data-act="winnews">Newsfeed</div>
   <div class="dd-item" data-act="winconfig">Configuration</div>
   <div class="dd-item" data-act="winlog">Daemon Log</div>
@@ -124,18 +122,6 @@
         <path d="M16 13h10M16 15h10M16 17h10M6 21h20M6 23h20M6 25h14" stroke="#55524B"/>
       </svg>
       <span class="lbl">Newsfeed</span>
-    </div>
-    <!-- speech balloon in the same pixel style as the Mac icons; hidden until
-         Ollama is detected, like the Windows → Chat menu item -->
-    <div class="dicon" id="chat-icon" title="Chat — control plane LLM, not a VM agent" hidden>
-      <svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
-        <rect x="3.5" y="5.5" width="25" height="15" fill="#DAD5CA" stroke="#000"/>
-        <rect x="4.5" y="6.5" width="23" height="2" fill="#EDEAE2"/>
-        <path d="M9.5 20.5 v6 l6 -6 z" fill="#DAD5CA" stroke="#000"/>
-        <rect x="8" y="10" width="17" height="2" fill="#55524B"/>
-        <rect x="8" y="14" width="11" height="2" fill="#55524B"/>
-      </svg>
-      <span class="lbl">Chat</span>
     </div>
     <div class="dicon" id="trash-icon">
       <svg width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges"><rect x="13.5" y="2.5" width="5" height="2" fill="#C8C3B8" stroke="#000"/><rect x="8.5" y="4.5" width="15" height="3" fill="#D5D0C5" stroke="#000"/><rect x="9.5" y="7.5" width="13" height="21" fill="#CDC8BD" stroke="#000"/><path d="M12.5 10v16M15.5 10v16M18.5 10v16M21.5 10v16" stroke="#8B867B"/></svg>
@@ -183,9 +169,8 @@
         <div class="tabbar">
           <div class="tab active" data-tab="svc">Services</div>
           <div class="tab" data-tab="term">Terminal</div>
-          <div class="tab" data-tab="vibe">Agent &amp; Tools</div>
+          <div class="tab" data-tab="tools">Tools</div>
           <div class="tab" data-tab="expose">Expose</div>
-          <div class="tab" data-tab="tr">Transcripts</div>
           <div class="tab" data-tab="notes">Notes</div>
         </div>
         <div class="tabpanel">
@@ -199,7 +184,7 @@
 
           <div class="pane" id="pane-term" hidden>
             <div class="row">
-              <span class="muted" id="term-hint">Not connected. Copy/paste: right-click (or long-press) for the menu; Ctrl+C/V also work.</span>
+              <span class="muted" id="term-hint">Not connected. Copy/paste uses the browser/OS native selection, copy and paste paths; Ctrl/Cmd+C/V also work.</span>
               <button class="ghost sm" id="term-pop" style="margin-left:auto">Open window</button>
               <button class="ghost sm" id="term-open">Connect here</button>
               <button class="ghost sm" id="term-close" hidden>Disconnect</button>
@@ -207,31 +192,13 @@
             <div id="term-box" hidden></div>
           </div>
 
-          <div class="pane agent-tools-panel" id="pane-vibe" hidden>
-            <div class="pane-head">Built-in Agent</div>
-            <div class="muted" style="margin-bottom:6px">Runs on the host using a host LLM (Grok/Claude/Codex) and SSHs into this VM. Creates a host transcript. Pick a provider/model, type a task, and Run.</div>
-            <div class="row actions" style="gap:8px; align-items:flex-end; flex-wrap:wrap">
-              <div class="field">
-                <label>Provider</label>
-                <select id="vibe-provider"></select>
-              </div>
-              <div class="field" style="min-width:160px">
-                <label>Model</label>
-                <select id="vibe-model" style="width:100%"></select>
-              </div>
-            </div>
-            <textarea id="vibe-prompt" style="min-height:90px; margin-top:8px" placeholder="e.g. install nginx and serve a static hello page on port 8080"></textarea>
-            <div class="row" style="margin-top:8px">
-              <button class="btn" id="vibe-run" type="button">Run Agent</button>
-              <span class="muted" id="vibe-status" style="margin-left:auto"></span>
-            </div>
-            <div class="pane-head" style="margin-top:14px">Code-agent CLIs</div>
-            <div class="muted" style="margin-bottom:6px">These launch inside this VM terminal. Missing CLIs install first, then the TUI owns the terminal. Keys, history and sessions stay in the guest; these runs do <b>not</b> create host transcripts.</div>
+          <div class="pane agent-tools-panel" id="pane-tools" hidden>
+            <div class="pane-head">Code-agent CLIs</div>
+            <div class="muted" style="margin-bottom:6px">These launch inside this VM terminal. Missing CLIs install first, then the TUI owns the terminal. Keys, history and sessions stay in the guest. File transfer stays in Workspace: drag files onto the desktop or use File → Upload to Workspace.</div>
             <div class="row actions" id="a-launchers"></div>
             <div class="pane-head">Developer tools</div>
             <div class="muted" style="margin-bottom:6px">Click to open a VM shell; install if missing, then you get a prompt.</div>
             <div class="tool-grid" id="a-tools"></div>
-            <pre class="out" id="vibe-log" hidden style="margin-top:10px; max-height:260px"></pre>
           </div>
 
           <div class="pane" id="pane-expose" hidden>
@@ -255,21 +222,6 @@
               <button class="btn" id="e-go">Expose</button>
             </div>
             <div id="e-result" class="mono muted" style="margin-top:6px"></div>
-          </div>
-
-          <div class="pane" id="pane-tr" hidden>
-            <div class="muted" style="margin-bottom:8px">
-              Transcripts are saved by the daemon whenever it runs the
-              built-in Agent inside this VM. Each row shows the prompt, model,
-              and streamed output. They are stored on the host next to the VM
-              disk, so they survive stop/start. Double-click a row to open the transcript.
-              Runs started manually from a VM terminal using
-              <span class="mono">claude</span>,
-              <span class="mono">codex</span>,
-              <span class="mono">gemini</span>, etc. keep their own
-              history inside the guest and are not listed here.
-            </div>
-            <div id="t-list"><span class="muted">No built-in Agent runs yet — VM CLI agent launches are not logged here.</span></div>
           </div>
 
           <div class="pane" id="pane-notes" hidden>
@@ -366,48 +318,6 @@
       </div>
       <div class="statusbar"><span id="news-count">…</span></div>
       <svg id="news-grow" class="grow-box" width="15" height="15" viewBox="0 0 15 15" shape-rendering="crispEdges">
-        <rect width="15" height="15" fill="#ccc"/>
-        <path fill="#000" d="M0 0h15v1H0zM0 1h1v14H0z"/>
-        <path fill="#fff" d="M1 1h14v1H1zM1 2h1v13H1z"/>
-        <path fill="#fff" d="M9 4h2v1H9zM8 5h1v1H8zM7 6h1v1H7zM6 7h1v1H6zM5 8h1v1H5zM4 9h1v1H4zM11 6h2v1h-2zM10 7h1v1h-1zM9 8h1v1H9zM8 9h1v1H8zM7 10h1v1H7zM6 11h1v1H6zM13 8h2v1h-2zM12 9h1v1h-1zM11 10h1v1h-1zM10 11h1v1h-1zM9 12h1v1H9zM8 13h1v1H8z"/>
-        <path fill="#777" d="M10 5h1v1h-1zM9 6h1v1H9zM8 7h1v1H8zM7 8h1v1H7zM6 9h1v1H6zM5 10h1v1H5zM12 7h1v1h-1zM11 8h1v1h-1zM10 9h1v1h-1zM9 10h1v1H9zM8 11h1v1H8zM7 12h1v1H7zM14 9h1v1h-1zM13 10h1v1h-1zM12 11h1v1h-1zM11 12h1v1h-1zM10 13h1v1h-1zM9 14h1v1H9z"/>
-        <path fill="#aaa" d="M4 10h1v1H4zM6 12h1v1H6zM8 14h1v1H8z"/>
-      </svg>
-    </div>
-  </div>
-
-  <!-- Chat -->
-  <div class="window grow" id="win-chat" style="left:90px; top:44px; width:820px;" hidden>
-    <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
-      <div class="title">Chat</div>
-      <div class="stripe"></div><button class="tbox min" title="Minimize"></button><button class="tbox shade" title="Collapse"></button><button class="tbox max" title="Maximize"></button></div>
-    <div class="win-frame">
-      <div class="win-body" style="padding:10px">
-        <div class="chat-wrap">
-          <div class="chat-side">
-            <button class="ghost" id="chat-new">New Chat</button>
-            <div class="chat-scope" id="chat-scope" hidden>
-              <span class="vm mono" id="chat-scope-vm"></span>
-              <button class="ghost sm" id="chat-scope-x" title="Show chats for all VMs">×</button>
-            </div>
-            <div class="listbox chat-sessions" id="chat-sessions"></div>
-          </div>
-          <div class="chat-main">
-            <div class="row" style="margin-bottom:6px; gap:8px">
-              <select id="chat-agent" title="Host agent (uses ~/.grok ~/.claude ~/.codex)"></select>
-              <select id="chat-model" title="Model from that host agent"></select>
-              <input id="chat-title-edit" placeholder="Chat title" style="flex:1" title="Rename this chat">
-            </div>
-            <div class="chat-msgs" id="chat-msgs"></div>
-            <div class="chat-inrow">
-              <textarea id="chat-input" rows="2" placeholder="Host Chat operates the VM cloud (create/start/stop). Work inside a VM with Agent or exe env."></textarea>
-              <button class="btn" id="chat-send">Send</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="statusbar"><span id="chat-status">…</span><span id="chat-usage" hidden></span></div>
-      <svg id="chat-grow" class="grow-box" width="15" height="15" viewBox="0 0 15 15" shape-rendering="crispEdges">
         <rect width="15" height="15" fill="#ccc"/>
         <path fill="#000" d="M0 0h15v1H0zM0 1h1v14H0z"/>
         <path fill="#fff" d="M1 1h14v1H1zM1 2h1v13H1z"/>
@@ -557,7 +467,7 @@
   </div>
 
   <!-- exe Documentation (Help menu): the manual, embedded in the binary as
-       docs.md, served at /docs.md, rendered with the chat's markdown
+       docs.md, served at /docs.md, rendered with the shared markdown
        pipeline. No desktop icon — the Help menu is its only entry. -->
   <div class="window grow" id="win-docs" style="left:200px; top:56px; width:560px;" hidden>
     <div class="titlebar"><button class="tbox close"></button><div class="stripe"></div>
@@ -678,47 +588,6 @@
           <button class="ghost" id="ask-cancel">Cancel</button>
           <button class="btn" id="ask-ok">OK</button>
         </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Chat backend switcher (modal, opened from the Chat window's status line) -->
-<div id="cb-overlay" class="overlay" hidden>
-  <div class="window modal front" style="max-width:360px">
-    <div class="titlebar"><button class="tbox close" id="cb-x"></button><div class="stripe"></div>
-      <div class="title">Host agent</div>
-      <div class="stripe"></div></div>
-    <div class="win-frame">
-      <div class="win-body">
-        <div class="muted" style="margin-bottom:10px">Uses the host CLI you already signed in with. No API keys in exe.</div>
-        <div class="field" style="margin-bottom:10px">
-          <label for="cb-provider">agent</label>
-          <select id="cb-provider"></select>
-        </div>
-        <div class="field" style="margin-bottom:10px">
-          <label for="cb-model">model</label>
-          <select id="cb-model"></select>
-        </div>
-        <div class="row" style="margin-top:14px">
-          <span class="muted" id="cb-status" style="flex:1"></span>
-          <button class="btn" id="cb-save">Switch</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Transcript detail (modal): the VM tab keeps the run list compact, and
-     full logs open here so long output does not steal the pane's layout. -->
-<div id="tr-overlay" class="overlay" hidden>
-  <div class="window modal front">
-    <div class="titlebar"><button class="tbox close" id="tr-x"></button><div class="stripe"></div>
-      <div class="title" id="tr-modal-title">Transcript</div>
-      <div class="stripe"></div></div>
-    <div class="win-frame">
-      <div class="win-body">
-        <pre class="out" id="tr-modal-log"></pre>
       </div>
     </div>
   </div>
