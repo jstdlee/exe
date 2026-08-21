@@ -52,6 +52,8 @@ Usage:
   exe unexpose <host>                      remove a proxy route
   exe routes                               show proxy routes
   exe env …                                portable agent Environment (init/stop/rm/run/snap)
+  exe docs                                 print the embedded user manual
+  exe skill                                print the embedded agent skill guide
 
 The daemon also speaks SSH on :2222 (config ssh_listen):
   ssh -p 2222 exe@<mac>     lobby: ls / new / rm / code / expose ... (--json for scripts)
@@ -95,6 +97,10 @@ func main() {
 		err = cmdRoutes()
 	case "env":
 		err = cmdEnv(args)
+	case "docs":
+		err = cmdDocs()
+	case "skill":
+		err = cmdSkill()
 	case "help", "-h", "--help":
 		fmt.Print(usage)
 	default:
@@ -105,6 +111,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+func cmdDocs() error {
+	_, err := os.Stdout.Write(server.DocsMarkdown())
+	return err
+}
+
+func cmdSkill() error {
+	_, err := os.Stdout.Write(server.SkillMarkdown())
+	return err
 }
 
 // ---- daemon ----------------------------------------------------------------

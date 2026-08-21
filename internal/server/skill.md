@@ -9,10 +9,10 @@ description: >
 
 # exe — portable agent Environment
 
-exe boots persistent **Debian** Firecracker VMs on this Linux host. The
-Platinum UI at `$BASE/` is a **minimal host desktop** for a human: VM list,
-Host Terminal, host Workspace / Notes / Editor / Chat / Browser. **Bots
-should use this skill and the HTTP/SSH/CLI APIs — not the desktop.**
+exe boots persistent **Debian** VMs on this host. The Platinum UI at `$BASE/`
+is a **minimal host desktop** for a human: VM list, Host Terminal, host
+Workspace, Notes, Editor, apps, Configuration and Newsfeed. **Bots should use
+this skill and the HTTP/SSH/CLI APIs — not the desktop.** Use `exe skill` or `GET /skill.md` to retrieve this guide from a terminal or over HTTP.
 
 **Host vs VM**
 
@@ -20,7 +20,7 @@ should use this skill and the HTTP/SSH/CLI APIs — not the desktop.**
 |---|---|
 | VM list / create / start / stop / delete | Agent CLIs (claude, opencode, pi, codex) |
 | Host Terminal (`GET /v1/host/terminal`) | VM shell (`GET /v1/vms/{name}/terminal` or `ssh -p 2222`) |
-| Host Workspace, Notes, Editor, Chat, Browser apps | `exe env run` jobs, files you attach |
+| Host Workspace, Notes, Editor, apps | `exe env run` jobs, files you attach |
 | Cloudflare tunnel / expose | Services bound to `0.0.0.0` in the guest |
 
 Do **not** use Host Terminal for project work.
@@ -118,6 +118,9 @@ Create/start are synchronous (wait for SSH). First create may download ~3 GB.
 Keys: daemon user's `~/.ssh/*.pub`, `~/.exe/ssh/id_ed25519`, or
 `~/.exe/ssh/authorized_clients`.
 
+File transfer: use `scp -P 2222`, `sftp -P 2222`, or `/v1/workspace`.
+Workspace is host-side shared storage; SSH/scp/sftp targets the guest.
+
 ## Services and publish
 
 - `GET /v1/vms/{name}/ports` — guest listeners on non-loopback (bind `0.0.0.0`).
@@ -132,44 +135,23 @@ Keys: daemon user's `~/.ssh/*.pub`, `~/.exe/ssh/id_ed25519`, or
 
 ## Named agents
 
-Install and sign in **inside the VM**. The Platinum **Agent & Tools** tab has
-Code-agent CLI buttons (Codex, Gemini CLI, OpenCode, Aider, Qwen Code, Pi,
+Install and sign in **inside the VM**. The Platinum VM Tools tab has Code-agent CLI buttons (Codex, Gemini CLI, OpenCode, Aider, Qwen Code, Pi,
 Claude) plus a grid of Linux developer tools (git, build-essential, Python,
 Node, Docker, Go, Rust, jq, ripgrep, fd, fzf, tmux, Neovim, htop, gh, cmake,
 sqlite, zip, tree, rsync, uv, pnpm, Bun, lazygit, hyperfine, direnv, just,
 bat, eza, HTTPie, yq, delta). Clicking a button opens a VM PTY that
 **installs if missing** (`?run=`), then execs the agent TUI or drops to a
-shell. CLI-agent sign-in and history stay in the guest; these VM CLI launches
-do not create host transcripts.
-
-Host Chat (desktop File menu / mobile Menu drawer) is a **host** operator for
-VM lifecycle, not a guest agent. It does **not** have its own LLM tab or API
-keys. Pick an **agent + model** that is already signed in on this host:
-
-| Agent | Host files | How to sign in |
-|---|---|---|
-| Grok | `~/.grok/auth.json`, `~/.grok/config.toml` | `grok` CLI (OAuth) |
-| Claude | `~/.claude/.credentials.json` or `~/.claude.json` | `claude` CLI / `/login` |
-| Codex | `~/.codex/auth.json`, `~/.codex/config.toml` | `codex login` |
-
-`GET /v1/host/agents` lists ready agents and models. Chat send accepts
-`{"agent","model"}`. Configuration only has **idle_stop_minutes** (stop a
-VM after N minutes with no terminal/job/SSH; `0` = never).
+shell. CLI-agent sign-in and history stay in the guest.
 
 ## Other
 
-`GET /v1/config`, `GET /v1/logs`, `GET /v1/host/agents`.
+`GET /v1/config`, `GET /v1/logs`.
 `GET /v1/host/stats` — host CPU %, disk I/O B/s, net B/s, disk free/total
 (shown on the Virtual Machines window and the menu bar).
-`GET /v1/browse/https/host/path` (or `?url=`) — same-origin proxy for the
-desk Browser. Forwards HTML/CSS/JS/images, strips frame-busting headers,
-rewrites asset URLs so styles and scripts load.
 `POST /v1/vms/{name}/publish` — GitHub, **only if the user asks**.
 `POST /v1/newsfeed` — host Newsfeed.
 
-**Terminal copy/paste** (host + VM xterm): hold **Ctrl**, select text,
-right-click to copy; Ctrl + right-click with no selection pastes. Do not
-use the browser’s native file-drag on desktop icons.
+**Terminal copy/paste** (host + VM xterm): copy/paste uses native browser/OS selection, copy and paste. Ctrl/Cmd+C copies selected terminal text; Ctrl/Cmd+V pastes.
 
 Desktop background: File → Desktop Background… or right-click the desktop.
 `GET/PUT /v1/desktop` `{mode,color}` — mode is `center`, `stretch`, or `cover`
