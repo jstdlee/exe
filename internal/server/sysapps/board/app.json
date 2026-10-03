@@ -1,0 +1,5 @@
+{
+  "title": "Board",
+  "icon": "icon.svg",
+  "window": { "width": 720, "height": 560, "grow": true }
+}

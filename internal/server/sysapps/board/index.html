@@ -1,0 +1,1779 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Board</title>
+<link rel="stylesheet" href="/platinum/popup.css">
+<script src="/ui/vendor/marked.min.js"></script>
+<script src="/ui/vendor/purify.min.js"></script>
+<style>
+/* The Board: task threads for the agent CLIs (Claude Code, Codex) on a VM
+   or the host, their schedules, and the machines they run on. Platinum
+   values match the exe desktop (the same blocks as Blue Pencil and Hub). */
+:root {
+  --black: #262626;
+  --g200: #eee; --g300: #ddd; --g400: #ccc; --g500: #bbb; --g600: #999;
+  --hl: #333399; --lav: #ccf; --red: #cc3333; --green: #1f9e33;
+  --font: "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Geneva, Verdana, sans-serif;
+  --mono: "Berkeley Mono", "Monaco", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* --vvh is the visual viewport (a phone's keyboard shrinks it): the page
+   is never taller, so the composer stays above the keys */
+html, body { height: var(--vvh, 100%); }
+body { margin: 0; font: 12px/1.45 var(--font); color: var(--black); background: var(--g300);
+  user-select: none; cursor: default; overflow: hidden; display: flex; flex-direction: column; }
+[hidden] { display: none !important; }
+
+button { font: inherit; cursor: default; }
+button.ghost { position: relative; background: var(--g300); color: var(--black);
+  border: 1px solid var(--black); border-radius: 3px;
+  padding: 2px 13px; font-size: 12px; line-height: 14px; font-weight: bold; height: 20px; white-space: nowrap;
+  box-shadow: inset 1px 1px 0 var(--g300), inset -1px -1px 0 #777,
+    inset 2px 2px 0 #fff, inset -2px -2px 0 #aaa; }
+button.ghost:active { background: #666; color: #fff;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888,
+    inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+button.ghost:disabled { color: #777; border-color: #888; background: var(--g300); box-shadow: none; }
+button.ghost.danger { color: #7a1010; }
+button.ghost.danger:disabled { color: #777; }
+button.ghost.armed { background: var(--red); color: #fff; }
+button.ghost.open { background: #666; color: #fff;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+button.ghost.default { outline: 2px solid var(--black); outline-offset: 1px; border-radius: 4px; }
+button:focus:not(.default) { outline: none; }
+/* a phone's finger is wider than the 20px button: the hit area grows past
+   the pixels, never the pixels themselves (the desktop's close box does
+   the same); rows keep 12px between buttons, so neighbours never overlap */
+body.mobile button.ghost::before { content: ""; position: absolute; inset: -6px -3px; box-sizing: border-box; }
+
+input[type=text], input[type=password], input[type=number], textarea { font: inherit; color: var(--black); background: #fff;
+  border: 1px solid var(--black); padding: 2px 5px; border-radius: 0; height: 20px;
+  box-shadow: -1px -1px 0 var(--g600), -1px 0 0 var(--g600), 0 -1px 0 var(--g600),
+    1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff;
+  user-select: text; cursor: text; }
+input:focus, textarea:focus { outline: 2px solid #9999fe; outline-offset: 0; }
+input[type=number] { -moz-appearance: textfield; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+textarea { height: auto; resize: none; padding: 4px 6px; line-height: 17px; }
+/* iOS zooms into a focused field under 16px; the desktop pins the page
+   scale on iOS for that, and so does this app when it is opened bare */
+/* a Platinum check box: sunken white square, a black check when on */
+input[type=checkbox] { appearance: none; -webkit-appearance: none; margin: 0; width: 12px; height: 12px; flex: none;
+  background: #fff; border: 1px solid var(--black);
+  box-shadow: inset 1px 1px 0 #999, 1px 1px 0 #fff; }
+input[type=checkbox]:checked { background: #fff url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" shape-rendering="crispEdges"><path fill="black" d="M1 4h1v1H1zM2 5h1v1H2zM3 6h1v1H3zM4 7h1v1H4zM5 6h1v1H5zM6 5h1v1H6zM7 4h1v1H7zM8 3h1v1H8zM8 2h1v1H8zM2 4h1v1H2zM3 5h1v1H3zM4 6h1v1H4zM5 5h1v1H5zM6 4h1v1H6zM7 3h1v1H7z"/></svg>') center no-repeat; }
+input[type=checkbox]:disabled { background-color: var(--g200); border-color: #888; box-shadow: none; }
+input[type=checkbox]:focus { outline: none; }
+label.check { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+label.check.dis { color: #888; }
+.popup { width: 140px; flex: none; }
+
+/* ---- the tab control (the desktop's Configuration and VM windows) ---- */
+#tabs { flex: none; padding: 10px 12px 0; }
+.tabbar { display: flex; align-items: flex-start; padding: 0 4px; position: relative; z-index: 2; }
+.tab {
+  height: 22px; color: #000; font-size: 11px; font-weight: bold; line-height: 14px;
+  text-align: center; padding: 0 2px; position: relative; white-space: nowrap;
+  border-style: solid; border-width: 8px 14px 0 14px;
+  border-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='22'><path d='M4.5 23 L11 5.5 Q11.8 1.5 14 1.5 L30 1.5 Q32.2 1.5 33 5.5 L39.5 23' fill='%23ccc' stroke='%23000'/><path d='M6.2 23 L12 5.8 Q12.6 2.5 14 2.5 L29.5 2.5' fill='none' stroke='%23ddd'/><path d='M30 2.5 Q31.6 2.5 32.2 5.8 L37.8 23' fill='none' stroke='%23aaa'/></svg>") 8 14 0 14 fill stretch;
+}
+.tab + .tab { margin-left: -7px; }
+.tab.active {
+  height: 25px; margin-bottom: -3px; z-index: 3;
+  border-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='25'><path d='M3.8 25 L11 5.5 Q11.8 1.5 14 1.5 L30 1.5 Q32.2 1.5 33 5.5 L40.2 25 Z' fill='%23eee'/><path d='M4.9 22 L11 5.5 Q11.8 1.5 14 1.5 L30 1.5 Q32.2 1.5 33 5.5 L39.1 22' fill='none' stroke='%23000'/><path d='M6.6 22 L12 5.8 Q12.6 2.5 14 2.5 L29.5 2.5' fill='none' stroke='%23fff'/><path d='M30 2.5 Q31.6 2.5 32.2 5.8 L37.4 22' fill='none' stroke='%23bbb'/></svg>") 8 14 0 14 fill stretch;
+}
+body.mobile .tab { padding: 0 8px; }
+.tabpanel { position: relative; border: 1px solid var(--black); background: var(--g200);
+  padding: 12px; margin: 0 12px 12px; flex: 1; min-height: 0; display: flex; flex-direction: column;
+  box-shadow: inset 1px 1px 0 var(--g400), inset 2px 2px 0 #fff, inset -1px -1px 0 var(--g500); }
+body.mobile #tabs { padding: 8px 8px 0; }
+body.mobile .tabpanel { margin: 0 8px 8px; padding: 10px; }
+.view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* a sunken white list or field; the always-on bar keeps widths still */
+.sunk { background: #fff; border: 1px solid var(--black); overflow-y: scroll; overflow-x: hidden;
+  box-shadow: -1px -1px 0 var(--g600), -1px 0 0 var(--g600), 0 -1px 0 var(--g600),
+    1px 1px 0 #fff, 1px 0 0 #fff, 0 1px 0 #fff; }
+.ph { color: #888; padding: 10px; }
+.ph.err { color: var(--red); }
+/* the backend is not in this build (404/410): the view says so in place */
+.missing { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
+  color: #555; padding: 20px; line-height: 1.6; }
+.missing b { color: var(--black); }
+.btnrow { flex: none; display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.btnrow .grow { flex: 1; min-width: 0; }
+.btnrow button.ghost { min-width: 72px; }
+.muted { color: #555; font-size: 11px; }
+.mono { font-family: var(--mono); font-size: 11px; }
+
+/* ---- dots: green is live everywhere (the desktop's session column) ---- */
+.dot-live { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .dot-live { animation: none; } }
+.dot-err { flex: none; width: 7px; height: 7px; display: block; color: var(--red); }
+.dot-err svg, .dot-q svg { display: block; }
+.dot-q { flex: none; width: 7px; height: 7px; display: block; color: var(--green); }
+.trow.sel .dot-err { color: #fcc; }
+
+/* ---- Threads ---- */
+#th { flex: 1; min-height: 0; display: flex; gap: 12px; }
+#th-col { width: 220px; flex: none; display: flex; flex-direction: column; min-height: 0; gap: 8px; }
+#th-col .popup { width: 100%; }
+#th-list { flex: 1; min-height: 0; }
+#th-col .btnrow { margin-top: 4px; justify-content: flex-end; }
+.trow { padding: 4px 6px 5px 8px; border-bottom: 1px solid #efefef; }
+.trow .l1 { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.trow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: bold; }
+.trow .when { flex: none; font-size: 10px; color: #666; }
+.trow .l2 { font-size: 11px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trow.sel { background: var(--hl); color: #fff; }
+.trow.sel .when, .trow.sel .l2 { color: #ddd; }
+.trow.archived .t { color: #777; }
+.trow.sel.archived .t { color: #ddd; }
+
+#tv { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+#tv-head { flex: none; display: flex; align-items: center; gap: 8px; height: 20px; margin-bottom: 8px; }
+#tv-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tv-title b { font-weight: bold; }
+#tv-title .meta { color: #555; font-size: 11px; margin-left: 6px; }
+.badge { flex: none; display: inline-block; font-size: 10px; line-height: 12px; padding: 1px 5px;
+  border: 1px solid var(--black); background: #ffffc9; color: #000; white-space: nowrap; }
+#tv-back { display: none; }
+#tv-msgs { flex: 1; min-height: 0; padding: 8px 10px; user-select: text; cursor: text; }
+#tv-msgs .ph { padding: 4px 0; user-select: none; }
+.turn { margin: 0 0 14px; }
+.turn:last-child { margin-bottom: 4px; }
+.prompt { margin-left: auto; width: fit-content; max-width: 85%; background: var(--lav);
+  border: 1px solid var(--black); padding: 4px 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.prompt-meta { text-align: right; font-size: 10px; color: #666; margin-top: 2px; min-height: 14px; }
+.prompt-meta .badge { margin-left: 4px; }
+.ev-status { font-size: 11px; color: #666; margin: 4px 0; }
+.md { margin: 6px 0; overflow-wrap: anywhere; line-height: 1.5; }
+.md.plain { white-space: pre-wrap; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol { margin: 0 0 6px; }
+.md ul, .md ol { padding-left: 20px; }
+.md h1, .md h2, .md h3, .md h4 { font-size: 12px; margin: 10px 0 4px; }
+.md code { font: 11px var(--mono); background: #f4f4ef; padding: 0 2px; }
+.md pre { font: 11px/1.45 var(--mono); background: #f4f4ef; border: 1px solid var(--g500);
+  padding: 5px 7px; overflow-x: auto; white-space: pre; margin: 0 0 6px; }
+.md pre code { background: none; padding: 0; }
+.md blockquote { margin: 0 0 6px; padding-left: 8px; border-left: 2px solid var(--g500); color: #444; }
+.md table { border-collapse: collapse; margin: 0 0 6px; }
+.md th, .md td { border: 1px solid var(--g500); padding: 2px 6px; }
+.md a { color: #202a87; }
+/* a tool call is one folded line; its output opens under it */
+.tool { margin: 2px 0; font: 11px/1.45 var(--mono); }
+.tool > summary { list-style: none; position: relative; padding-left: 14px; color: #333;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
+.tool > summary::-webkit-details-marker { display: none; }
+.tool > summary::before { content: ""; position: absolute; left: 3px; top: 3px; width: 5px; height: 9px; box-sizing: content-box;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="5" height="9" shape-rendering="crispEdges"><path fill="black" d="M0 0h1v9H0zM1 1h1v7H1zM2 2h1v5H2zM3 3h1v3H3zM4 4h1v1H4z"/></svg>') no-repeat; }
+.tool[open] > summary::before { left: 1px; top: 5px; width: 9px; height: 5px;
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="9" height="5" shape-rendering="crispEdges"><path fill="black" d="M0 0h9v1H0zM1 1h7v1H1zM2 2h5v1H2zM3 3h3v1H3zM4 4h1v1H4z"/></svg>'); }
+.tool.err > summary { color: #7a1010; }
+.tool.pending > summary { color: #777; }
+.tool pre { margin: 2px 0 4px 14px; padding: 4px 6px; background: #f4f4ef; border: 1px solid var(--g500);
+  max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.tool.err pre { border-color: #c99; }
+.turn-end { font-size: 10px; color: #666; margin-top: 4px; }
+.turn-end.err { color: var(--red); }
+
+#composer { flex: none; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+#cp-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+#cp-opts .fld { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+#cp-opts .fld .popup { width: 120px; }
+#cp-opts .fld.sess { flex: 1; min-width: 160px; }
+#cp-opts .fld.sess .popup { flex: 1; width: auto; min-width: 0; }
+#cp-fixed { color: #555; font-size: 11px; }
+#cp-text { width: 100%; min-height: 44px; overflow-y: hidden; }
+#cp-row { display: flex; align-items: center; gap: 12px; }
+#cp-hint { flex: 1; min-width: 0; font-size: 10px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#cp-send { min-width: 72px; }
+
+/* ---- Schedules ---- */
+.grid-head, .jrow { display: grid; grid-template-columns: 18px minmax(80px, 1fr) 110px minmax(90px, 1.2fr) 92px 64px; gap: 0 8px; align-items: center; }
+.grid-head { flex: none; padding: 0 8px 3px; font-size: 10px; font-weight: bold; color: #555; }
+.jrow { padding: 4px 8px; border-bottom: 1px solid #efefef; white-space: nowrap; }
+.jrow > span { overflow: hidden; text-overflow: ellipsis; }
+.jrow .nm { font-weight: bold; }
+.jrow.sel { background: var(--hl); color: #fff; }
+.jrow.sel .muted { color: #ddd; }
+.jrow.off .nm, .jrow.off .mono { color: #888; }
+.jrow.sel.off .nm, .jrow.sel.off .mono { color: #bbb; }
+#sc-list { flex: 1 1 55%; min-height: 80px; }
+#sc-runs-head { flex: none; margin: 14px 0 6px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sc-runs { flex: 1 1 45%; min-height: 70px; }
+.rrow { padding: 3px 8px; border-bottom: 1px solid #efefef; }
+.rrow .l1 { display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+.rrow .l1 .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rrow a { color: #202a87; text-decoration: underline; }
+.rrow pre { font: 11px/1.45 var(--mono); background: #f4f4ef; border: 1px solid var(--g500); margin: 3px 0 2px;
+  padding: 4px 6px; max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.chip { display: inline-block; font-size: 10px; line-height: 12px; padding: 1px 5px; border: 1px solid var(--black);
+  background: var(--g300); color: #000; }
+.chip.ok { background: #cfc; }
+.chip.error { background: #fcc; }
+.chip.running { background: #ffffc9; }
+.chip.skipped { background: var(--g200); color: #555; }
+
+/* ---- Machines ---- */
+#mc { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
+/* a group box: the etched OS 9 frame with its title on the line */
+.grp { position: relative; border: 1px solid var(--g600); box-shadow: inset 1px 1px 0 #fff, 1px 1px 0 #fff;
+  padding: 14px 12px 12px; margin: 8px 0 18px; }
+.grp > .gt { position: absolute; top: -9px; left: 8px; padding: 0 4px; background: var(--g200); font-weight: bold; }
+.grp .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.grp .row:last-child { margin-bottom: 0; }
+.grp .row .lbl { width: 150px; text-align: right; flex: none; }
+.grp .row .hint { font-size: 10px; color: #666; }
+.mem-line { margin-bottom: 6px; }
+.mem-line.hot { color: var(--red); }
+/* the memory bar: a sunken track, the used share in --hl (red past the
+   cap), the cap a 1px black mark of its own */
+.mbar { position: relative; height: 12px; background: #fff; border: 1px solid var(--black);
+  box-shadow: -1px -1px 0 var(--g600), 1px 1px 0 #fff; }
+.mbar .used { position: absolute; left: 0; top: 0; bottom: 0; background: var(--hl); }
+.mbar .used.hot { background: var(--red); }
+.mbar .cap { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 1px solid var(--black); }
+.vgrid-head, .vrow { display: grid; grid-template-columns: minmax(70px, 1fr) 62px 96px 34px 64px minmax(70px, 1fr) 82px 58px; gap: 0 8px; align-items: center; }
+.vgrid-head { font-size: 10px; font-weight: bold; color: #555; padding: 0 0 3px; }
+.vrow { padding: 4px 0; border-top: 1px solid var(--g500); box-shadow: inset 0 1px 0 #fff; }
+.vrow > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vrow .nm { font-weight: bold; }
+.vrow .popup { width: 96px; }
+.vrow input[type=text] { width: 64px; }
+.vrow button.ghost { width: 58px; padding: 0; }
+.vrow .stop.soon { color: var(--red); font-weight: bold; }
+.vrow .lab { display: none; }
+.st-running { color: #0f6b20; }
+.st-stopped { color: #666; }
+.agent-line { display: flex; align-items: center; gap: 8px; min-height: 20px; margin-bottom: 6px; }
+.agent-line .nm { width: 96px; flex: none; font-weight: bold; }
+.agent-line .what { flex: 1; min-width: 0; }
+.agent-line button.ghost { width: 72px; padding: 0; }
+#ag-progress { font-size: 11px; color: #555; min-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.secret-row input[type=password] { flex: 1; min-width: 140px; max-width: 320px; }
+.secret-row .set { font-size: 11px; width: 52px; flex: none; }
+.secret-row .set.on { color: #0f6b20; }
+
+/* ---- phones: one column, the thread view in place of the list ---- */
+body.mobile #th-col { width: auto; flex: 1; min-width: 0; }
+body.mobile #th #tv { display: none; }
+body.mobile.th-open #th #th-col { display: none; }
+body.mobile.th-open #th #tv { display: flex; }
+body.mobile #tv-back { display: block; }
+body.mobile .trow { padding: 8px 8px 9px 10px; }
+body.mobile .jrow { grid-template-columns: 18px 1fr auto; padding: 8px; row-gap: 2px; }
+body.mobile .jrow .c-what { grid-column: 2 / 4; }
+body.mobile .jrow .c-sched { grid-column: 3; grid-row: 1; text-align: right; }
+body.mobile .jrow .c-next { grid-column: 2; }
+body.mobile .jrow .c-last { grid-column: 3; justify-self: end; }
+body.mobile .grid-head, body.mobile .vgrid-head { display: none; }
+body.mobile .vrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 0; }
+body.mobile .vrow > span { display: inline-flex; align-items: center; gap: 5px; overflow: visible; }
+body.mobile .vrow .nm { flex: 1 1 60%; }
+body.mobile .vrow .held { flex-basis: 100%; overflow: hidden; }
+body.mobile .vrow .lab { display: inline; font-size: 11px; color: #555; }
+body.mobile .grp .row .lbl { width: auto; text-align: left; flex-basis: 100%; }
+body.mobile .rrow { padding: 6px 8px; }
+
+/* the options dialog and the confirms: a Platinum panel on a veil (Blue
+   Pencil's and the Hub's) */
+#veil { position: fixed; inset: 0; background: rgba(0,0,0,.12); display: none; z-index: 40;
+  align-items: center; justify-content: center; padding: 12px; }
+#veil.on { display: flex; }
+#dlg { width: 440px; max-width: 100%; max-height: 100%; overflow-y: auto; background: var(--g300); border: 1px solid var(--black); padding: 14px;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #999, 2px 2px 0 rgba(0,0,0,.25); }
+#dlg h2 { font-size: 12px; margin: 0 0 12px; }
+#dlg .row { margin: 0 0 8px; display: grid; grid-template-columns: 92px 1fr; column-gap: 6px; align-items: center; }
+#dlg .row > label:first-child { text-align: right; }
+#dlg .row .popup { width: 100%; }
+#dlg .row input[type=text] { width: 100%; }
+#dlg .row textarea { width: 100%; min-height: 80px; }
+#dlg .row .hint { grid-column: 2; margin-top: 3px; font-size: 10px; color: #666; }
+#dlg .row.top { align-items: start; }
+#dlg .row.top > label:first-child { padding-top: 3px; }
+#dlg .msg { font-weight: bold; margin-bottom: 6px; user-select: text; }
+#dlg .detail { font-size: 11px; margin-bottom: 4px; user-select: text; }
+#dlg .btns { display: flex; gap: 12px; justify-content: flex-end; margin-top: 14px; }
+#dlg .btns button { min-width: 58px; }
+body.mobile #dlg .row { grid-template-columns: 1fr; row-gap: 3px; }
+body.mobile #dlg .row > label:first-child { text-align: left; }
+body.mobile #dlg .row .hint { grid-column: 1; }
+
+/* a contextual menu, the desktop's (Blue Pencil's .dropdown block) */
+.dropdown { position: fixed; z-index: 30; min-width: 170px; background: var(--g300);
+  border: 1px solid var(--black); padding: 2px 1px;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--g500), 2px 2px 0 rgba(38,38,38,.85); }
+.dd-item { padding: 3px 22px 3px 18px; line-height: 18px; white-space: nowrap; }
+.dd-item:hover { background: var(--hl); color: #fff; }
+.dd-item.dis { color: #888; }
+.dd-item.dis:hover { background: none; color: #888; }
+.dd-sep { height: 2px; margin: 3px 2px; border-top: 1px solid var(--g600); border-bottom: 1px solid #fff; }
+body.mobile .dd-item { padding: 8px 22px 8px 18px; }
+
+#toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #ffffc9; color: #000; border: 1px solid var(--black); padding: 5px 14px;
+  font-size: 12px; box-shadow: inset 1px 1px 0 #fff, 2px 2px 0 var(--black);
+  opacity: 0; transition: opacity .15s; pointer-events: none; max-width: 90vw; z-index: 50; }
+#toast.show { opacity: 1; }
+
+/* the status bar (docs/platinum.md): overflow clip keeps the 11px line box
+   from hanging a pixel past the face */
+#status { flex: none; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--black);
+  background: var(--g300); font-size: 11px; color: #333; padding: 0 20px 0 8px; height: 15px;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.6), inset -1px -1px 0 #aaa; overflow: clip; }
+#st-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#st-text.err { color: var(--red); }
+#st-link { flex: none; white-space: nowrap; }
+#grow { position: fixed; right: 0; bottom: 0; width: 15px; height: 15px; touch-action: none; z-index: 6; }
+body.mobile #grow { display: none; }
+body.mobile #status { padding-right: 8px; padding-bottom: 0; }
+
+/* Mac OS 9 scrollbars — the desktop's pixel-sampled block (Notes, Blue Pencil) */
+::-webkit-scrollbar { width: 15px; height: 15px; }
+::-webkit-scrollbar-track:vertical { border-left: 1px solid var(--black);
+  background: linear-gradient(to right, #777 0, #777 1px, #888 1px, #888 2px, #aaa 2px, #aaa 12px, #bbb 12px, #bbb 13px, #ccc 13px, #ccc 14px); }
+::-webkit-scrollbar-thumb:vertical { border: 1px solid var(--black); border-right: 0;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="8" shape-rendering="crispEdges"><rect x="3" y="0" width="1" height="1" fill="%23eeeeee"/><rect x="4" y="0" width="6" height="1" fill="%23ccccff"/><rect x="4" y="1" width="7" height="1" fill="%23333399"/><rect x="3" y="2" width="1" height="1" fill="%23eeeeee"/><rect x="4" y="2" width="6" height="1" fill="%23ccccff"/><rect x="4" y="3" width="7" height="1" fill="%23333399"/><rect x="3" y="4" width="1" height="1" fill="%23eeeeee"/><rect x="4" y="4" width="6" height="1" fill="%23ccccff"/><rect x="4" y="5" width="7" height="1" fill="%23333399"/><rect x="3" y="6" width="1" height="1" fill="%23eeeeee"/><rect x="4" y="6" width="6" height="1" fill="%23ccccff"/><rect x="4" y="7" width="7" height="1" fill="%23333399"/></svg>') center no-repeat,
+    linear-gradient(to right, #ccccff 0 1px, #9999ff 1px 13px, #6666cc 13px 14px);
+  box-shadow: inset 0 1px 0 #ccccff, inset 0 -1px 0 #6666cc; }
+::-webkit-scrollbar-thumb:vertical:active {
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="8" shape-rendering="crispEdges"><rect x="3" y="0" width="1" height="1" fill="%23ccccff"/><rect x="4" y="0" width="6" height="1" fill="%239999ff"/><rect x="4" y="1" width="7" height="1" fill="%23000066"/><rect x="3" y="2" width="1" height="1" fill="%23ccccff"/><rect x="4" y="2" width="6" height="1" fill="%239999ff"/><rect x="4" y="3" width="7" height="1" fill="%23000066"/><rect x="3" y="4" width="1" height="1" fill="%23ccccff"/><rect x="4" y="4" width="6" height="1" fill="%239999ff"/><rect x="4" y="5" width="7" height="1" fill="%23000066"/><rect x="3" y="6" width="1" height="1" fill="%23ccccff"/><rect x="4" y="6" width="6" height="1" fill="%239999ff"/><rect x="4" y="7" width="7" height="1" fill="%23000066"/></svg>') center no-repeat,
+    linear-gradient(to right, #9999ff 0 1px, #6666cc 1px 13px, #333399 13px 14px);
+  box-shadow: inset 0 1px 0 #9999ff, inset 0 -1px 0 #333399; }
+:not(.scrolled-y)::-webkit-scrollbar-thumb:vertical {
+  border-top-color: #ccccff; box-shadow: inset 0 -1px 0 #6666cc; }
+:not(.scrolled-y)::-webkit-scrollbar-thumb:vertical:active {
+  border-top-color: #9999ff; box-shadow: inset 0 -1px 0 #333399; }
+.at-y-end::-webkit-scrollbar-thumb:vertical {
+  border-bottom-color: #6666cc; box-shadow: inset 0 1px 0 #ccccff; }
+.at-y-end::-webkit-scrollbar-thumb:vertical:active {
+  border-bottom-color: #333399; box-shadow: inset 0 1px 0 #9999ff; }
+::-webkit-scrollbar-button { display: block; width: 16px; height: 16px;
+  background: #ddd; border: 1px solid var(--black);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #bbb;
+  background-position: center; background-repeat: no-repeat; }
+::-webkit-scrollbar-button:vertical { border-right: 0; }
+::-webkit-scrollbar-button:vertical:end:increment:enabled { height: 14px; border-top: 0; border-bottom: 0; }
+::-webkit-scrollbar-button:vertical:decrement {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4" shape-rendering="crispEdges"><path fill="black" d="M3 0h2v1h-2z M2 1h4v1h-4z M1 2h6v1h-6z M0 3h8v1h-8z"/></svg>'); }
+::-webkit-scrollbar-button:vertical:increment {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4" shape-rendering="crispEdges"><path fill="black" d="M0 0h8v1h-8z M1 1h6v1h-6z M2 2h4v1h-4z M3 3h2v1h-2z"/></svg>'); }
+::-webkit-scrollbar-button:active { background-color: #777;
+  box-shadow: inset 1px 1px 0 #555, inset -1px -1px 0 #999; }
+::-webkit-scrollbar-button:vertical:start:decrement,
+::-webkit-scrollbar-button:vertical:start:increment,
+::-webkit-scrollbar-button:horizontal:start:decrement,
+::-webkit-scrollbar-button:horizontal:start:increment { display: none; }
+::-webkit-scrollbar-track:disabled { background: #eee; }
+::-webkit-scrollbar-button:disabled { background-color: #eee; box-shadow: none; border: 0;
+  border-left: 1px solid var(--black); }
+::-webkit-scrollbar-button:vertical:end:increment:disabled { border-top: 1px solid #888; }
+::-webkit-scrollbar-button:vertical:end:decrement:disabled { border-top: 1px solid #555; }
+::-webkit-scrollbar-button:vertical:decrement:disabled {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4" shape-rendering="crispEdges"><path fill="%23888888" d="M3 0h2v1h-2z M2 1h4v1h-4z M1 2h6v1h-6z M0 3h8v1h-8z"/></svg>'); }
+::-webkit-scrollbar-button:vertical:increment:disabled {
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4" shape-rendering="crispEdges"><path fill="%23888888" d="M0 0h8v1h-8z M1 1h6v1h-6z M2 2h4v1h-4z M3 3h2v1h-2z"/></svg>'); }
+::-webkit-scrollbar-corner { background: var(--g300); }
+</style>
+</head>
+<body>
+
+<div id="tabs"><div class="tabbar">
+  <div class="tab active" data-tab="threads">Threads</div>
+  <div class="tab" data-tab="sched">Schedules</div>
+  <div class="tab" data-tab="mach">Machines</div>
+</div></div>
+
+<div class="tabpanel">
+  <!-- Threads: the list down the left, the open thread and the composer -->
+  <section class="view" id="v-threads">
+    <div id="th">
+      <div id="th-col">
+        <span class="popup"><select id="th-filter" aria-label="Show"></select><span class="well"><i><b></b></i></span></span>
+        <div class="sunk" id="th-list"><div class="ph">Loading…</div></div>
+        <div class="btnrow"><button class="ghost" id="th-new">New</button></div>
+      </div>
+      <div id="tv">
+        <div id="tv-head">
+          <button class="ghost" id="tv-back">Back</button>
+          <div id="tv-title"><b>New Task</b><span class="meta"></span></div>
+          <span class="badge" id="tv-queued" hidden></span>
+          <button class="ghost" id="tv-stop" hidden>Stop</button>
+          <button class="ghost" id="tv-more" hidden>Thread</button>
+        </div>
+        <div class="sunk" id="tv-msgs"></div>
+        <div id="composer">
+          <div id="cp-opts">
+            <span class="fld" id="cp-f-target"><label for="cp-target">Target:</label><span class="popup"><select id="cp-target"></select><span class="well"><i><b></b></i></span></span></span>
+            <span class="fld" id="cp-f-agent"><label for="cp-agent">Agent:</label><span class="popup"><select id="cp-agent"><option value="claude">Claude Code</option><option value="codex">Codex</option></select><span class="well"><i><b></b></i></span></span></span>
+            <span class="fld sess" id="cp-f-sess"><label for="cp-session">Session:</label><span class="popup"><select id="cp-session"><option value="">New session</option></select><span class="well"><i><b></b></i></span></span></span>
+            <span id="cp-fixed" hidden></span>
+            <label class="check" id="cp-f-fork"><input type="checkbox" id="cp-fork"> <span id="cp-fork-label">Fork</span></label>
+          </div>
+          <textarea id="cp-text" rows="2" spellcheck="true" placeholder="What should the agent do?"></textarea>
+          <div id="cp-row"><span id="cp-hint"></span><button class="ghost" id="cp-send">Send</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="missing" id="th-missing" hidden></div>
+  </section>
+
+  <!-- Schedules: cron jobs that post to the Board or run a shell command -->
+  <section class="view" id="v-sched" hidden>
+    <div class="grid-head"><span></span><span>Name</span><span>Schedule</span><span>Does</span><span>Next run</span><span>Last</span></div>
+    <div class="sunk" id="sc-list"><div class="ph">Loading…</div></div>
+    <div class="btnrow">
+      <button class="ghost danger" id="sc-del" disabled>Delete</button>
+      <span class="grow"></span>
+      <button class="ghost" id="sc-new">New…</button>
+      <button class="ghost" id="sc-edit" disabled>Edit…</button>
+      <button class="ghost" id="sc-run" disabled>Run Now</button>
+    </div>
+    <div id="sc-runs-head">Last runs</div>
+    <div class="sunk" id="sc-runs"><div class="ph">Select a schedule to see its runs.</div></div>
+    <div class="missing" id="sc-missing" hidden></div>
+  </section>
+
+  <!-- Machines: idle policy per VM, memory, agents and their secrets -->
+  <section class="view" id="v-mach" hidden>
+    <div id="mc">
+      <div class="grp"><span class="gt">Memory</span>
+        <div class="mem-line" id="mem-line">…</div>
+        <div class="mbar" id="mem-bar"><div class="used" style="width:0"></div><div class="cap" hidden></div></div>
+      </div>
+      <div class="grp"><span class="gt">Virtual Machines</span>
+        <div class="vgrid-head"><span>VM</span><span>State</span><span>Kind</span><span>Pin</span><span>Idle min</span><span>Held by</span><span>Stops</span><span></span></div>
+        <div id="vm-rows"><div class="ph">Loading…</div></div>
+      </div>
+      <div class="grp"><span class="gt">Idle Stop</span>
+        <div id="set-rows"><div class="ph">Loading…</div></div>
+      </div>
+      <div class="grp"><span class="gt">Agents</span>
+        <div class="row"><label class="lbl" for="ag-target">Target:</label><span class="popup"><select id="ag-target"></select><span class="well"><i><b></b></i></span></span></div>
+        <div id="ag-rows"><div class="ph">Loading…</div></div>
+        <div id="ag-progress"></div>
+      </div>
+      <div class="grp"><span class="gt">Agent Secrets</span>
+        <div id="sec-rows"><div class="ph">Loading…</div></div>
+      </div>
+    </div>
+    <div class="missing" id="mc-missing" hidden></div>
+  </section>
+</div>
+
+<div id="status"><span id="st-text">Loading…</span><span id="st-link"></span></div>
+
+<div id="toast"></div>
+<div id="menu" class="dropdown" hidden></div>
+<div id="veil"><div id="dlg"></div></div>
+
+<!-- grow box sampled pixel-for-pixel from Mac OS 9 (Infinite Mac) -->
+<svg id="grow" width="15" height="15" viewBox="0 0 15 15" shape-rendering="crispEdges">
+  <rect width="15" height="15" fill="#ccc"/>
+  <path fill="#000" d="M0 0h15v1H0zM0 1h1v14H0z"/>
+  <path fill="#fff" d="M1 1h14v1H1zM1 2h1v13H1z"/>
+  <path fill="#fff" d="M9 4h2v1H9zM8 5h1v1H8zM7 6h1v1H7zM6 7h1v1H6zM5 8h1v1H5zM4 9h1v1H4zM11 6h2v1h-2zM10 7h1v1h-1zM9 8h1v1H9zM8 9h1v1H8zM7 10h1v1H7zM6 11h1v1H6zM13 8h2v1h-2zM12 9h1v1h-1zM11 10h1v1h-1zM10 11h1v1h-1zM9 12h1v1H9zM8 13h1v1H8z"/>
+  <path fill="#777" d="M10 5h1v1h-1zM9 6h1v1H9zM8 7h1v1H8zM7 8h1v1H7zM6 9h1v1H6zM5 10h1v1H5zM12 7h1v1h-1zM11 8h1v1h-1zM10 9h1v1h-1zM9 10h1v1H9zM8 11h1v1H8zM7 12h1v1H7zM14 9h1v1h-1zM13 10h1v1h-1zM12 11h1v1h-1zM11 12h1v1h-1zM10 13h1v1h-1zM9 14h1v1H9z"/>
+  <path fill="#aaa" d="M4 10h1v1H4zM6 12h1v1H6zM8 14h1v1H8z"/>
+</svg>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const QS = new URLSearchParams(location.search);
+const TOKEN = QS.get("token") || "";
+// A phone gets one column. The desktop passes its verdict as ?mobile=1;
+// opened bare, the app runs the desktop's own test.
+const IS_MOBILE = QS.has("mobile")
+  ? QS.get("mobile") !== "0"
+  : /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(navigator.userAgent)
+    || (matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) < 700);
+if (IS_MOBILE) document.body.classList.add("mobile");
+const IS_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || "");
+const PREF = "exe-board:"; // this browser's own choices (tab, target, agent)
+const pref = (k, d) => { try { return localStorage.getItem(PREF + k) ?? d; } catch (e) { return d; } };
+const setPref = (k, v) => { try { localStorage.setItem(PREF + k, v); } catch (e) {} };
+const AGENTS = { claude: "Claude Code", codex: "Codex" };
+const agentName = a => AGENTS[a] || a || "agent";
+const targetName = t => t === "host" ? "this host" : t;
+
+// A phone's keyboard shrinks the visual viewport; the page takes its height
+// so the composer sits right above the keys (the desktop does the same for
+// its windows, so inside the desk this only follows the frame)
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const fitVV = () => {
+    document.documentElement.style.setProperty("--vvh", Math.round(vv.height) + "px");
+    if (vv.offsetTop > 0 || window.scrollY > 0) window.scrollTo(0, 0);
+  };
+  vv.addEventListener("resize", fitVV);
+  vv.addEventListener("scroll", fitVV);
+  fitVV();
+}
+if (IS_MOBILE && /iPhone|iPod|iPad/i.test(navigator.userAgent) && window.parent === window)
+  document.querySelector('meta[name="viewport"]').content = "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover";
+
+// ---- helpers ----
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === "class") n.className = v;
+    else if (k.startsWith("on") && typeof v === "function") n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids) if (k !== null && k !== undefined && k !== false) n.append(k);
+  return n;
+}
+const popup = (sel, width) => {
+  const p = el("span", { class: "popup" }, sel, el("span", { class: "well" }, el("i", {}, el("b"))));
+  if (width) p.style.width = width;
+  return p;
+};
+const option = (value, label, selected) => { const o = el("option", { value }, label); if (selected) o.selected = true; return o; };
+function toast(msg, ms = 3500) {
+  const b = $("#toast");
+  b.textContent = msg;
+  b.classList.add("show");
+  clearTimeout(b._t);
+  b._t = setTimeout(() => b.classList.remove("show"), ms);
+}
+// an error stays on the status line a few seconds before the counts return
+let lastErrAt = 0;
+function status(text, err) {
+  if (err) lastErrAt = Date.now();
+  const s = $("#st-text");
+  s.textContent = text;
+  s.classList.toggle("err", !!err);
+}
+async function copyText(text, label) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.top = "-1000px";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e2) {}
+    ta.remove();
+  }
+  toast(ok ? "Copied " + label : "Copy failed — select the text and copy it by hand");
+}
+const kfmt = n => !n ? "0" : n >= 1e6 ? (Math.round(n / 1e5) / 10) + "M" : n >= 1e3 ? (Math.round(n / 100) / 10) + "k" : String(n);
+const trunc = (s, n) => (s || "").length > n ? s.slice(0, n - 1) + "…" : (s || "");
+const firstLine = s => ((s || "").split("\n").find(l => l.trim()) || "").trim();
+function ago(iso) {
+  const t = Date.parse(iso || "");
+  if (!t) return "";
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return "now";
+  if (s < 3600) return Math.floor(s / 60) + " min";
+  const d = new Date(t), now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  return d.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+}
+const fullTime = iso => { const t = Date.parse(iso || ""); return t ? new Date(t).toLocaleString() : ""; };
+function fmtDur(ms) {
+  if (!(ms >= 0)) return "";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + " s";
+  if (s < 3600) return Math.floor(s / 60) + " min " + (s % 60) + " s";
+  return Math.floor(s / 3600) + " h " + Math.floor(s % 3600 / 60) + " min";
+}
+const fmtMB = mb => !(mb > 0) ? "—" : mb >= 1024 ? (Math.round(mb / 102.4) / 10) + " GB" : Math.round(mb) + " MB";
+const DOT_ERR = '<svg width="7" height="7" viewBox="0 0 7 7" shape-rendering="crispEdges"><path d="M2 0h3v1h1v1h1v3h-1v1h-1v1h-3v-1h-1v-1h-1v-3h1v-1h1z" fill="currentColor"/></svg>';
+const DOT_Q = '<svg width="7" height="7" viewBox="0 0 7 7" shape-rendering="crispEdges"><path fill-rule="evenodd" d="M2 0h3v1h1v1h1v3h-1v1h-1v1h-3v-1h-1v-1h-1v-3h1v-1h1zM2 2h3v3h-3z" fill="currentColor"/></svg>';
+function stateDot(state) {
+  if (state === "running") return el("span", { class: "dot-live", title: "running" });
+  const d = el("span", { class: state === "error" ? "dot-err" : "dot-q", title: state });
+  if (state === "error") { d.innerHTML = DOT_ERR; return d; }
+  if (state === "queued") { d.innerHTML = DOT_Q; return d; }
+  return null;
+}
+
+// daemon API (same origin, token-guarded). A failed call throws with the
+// HTTP status on the error, so a view can tell "not in this build" (404,
+// 405 or 410: the route is missing or was removed) from a real failure.
+async function api(path, opts = {}) {
+  opts.cache = "no-store";
+  opts.headers = Object.assign({}, opts.headers);
+  if (TOKEN) opts.headers["Authorization"] = "Bearer " + TOKEN;
+  if (opts.json !== undefined) {
+    opts.body = JSON.stringify(opts.json);
+    opts.headers["Content-Type"] = "application/json";
+    delete opts.json;
+  }
+  let r;
+  try { r = await fetch(path, opts); }
+  catch (e) { const err = new Error("the daemon is not answering"); err.status = 0; throw err; }
+  if (!r.ok) {
+    let m = "HTTP " + r.status;
+    try {
+      const t = await r.text();
+      try { const o = JSON.parse(t); if (o && o.error) m = o.error; }
+      catch (e) { if (t.trim() && t.length < 300) m = t.trim(); }
+    } catch (e) {}
+    if (r.status === 401) m = "unauthorized — set the API token on the desktop (Special → Set API Token…)";
+    const err = new Error(m); err.status = r.status; throw err;
+  }
+  return r;
+}
+async function j(path, opts) {
+  const r = await api(path, opts);
+  if (r.status === 204) return null;
+  const t = await r.text();
+  return t ? JSON.parse(t) : null;
+}
+const missing = e => !!e && [404, 405, 410, 501].includes(e.status);
+const withToken = (path, params) => {
+  const q = new URLSearchParams(params || {});
+  if (TOKEN) q.set("token", TOKEN);
+  const s = q.toString();
+  return path + (s ? "?" + s : "");
+};
+function missingNote(box, what) {
+  box.replaceChildren(el("div", {},
+    el("b", {}, what + " is not available."), el("br"),
+    "This build of exe has no backend for it yet, or it was turned off."));
+}
+
+// ---- dialogs: one Platinum panel on a veil, promise-shaped ----
+let dlgDone = null;
+function dialog({ title, msg, detail, body, ok = "OK", cancel = "Cancel", danger = false, onOpen } = {}) {
+  const d = $("#dlg");
+  d.replaceChildren();
+  if (title) d.append(el("h2", {}, title));
+  if (msg) d.append(el("div", { class: "msg" }, msg));
+  if (detail) d.append(el("div", { class: "detail" }, detail));
+  if (body) d.append(...body);
+  const okB = el("button", { class: "ghost default" + (danger ? " danger" : "") }, ok);
+  const btns = el("div", { class: "btns" });
+  if (cancel) btns.append(el("button", { class: "ghost", onclick: () => close(false) }, cancel));
+  btns.append(okB);
+  d.append(btns);
+  $("#veil").classList.add("on");
+  const close = v => {
+    $("#veil").classList.remove("on");
+    document.removeEventListener("keydown", key, true);
+    const r = dlgDone; dlgDone = null;
+    if (r) r(v);
+  };
+  okB.onclick = () => close(true);
+  const key = e => {
+    if (e.key === "Escape") { e.preventDefault(); close(false); }
+    else if (e.key === "Enter" && !(e.target && e.target.tagName === "TEXTAREA") && !e.isComposing) { e.preventDefault(); close(true); }
+  };
+  document.addEventListener("keydown", key, true);
+  return new Promise(res => {
+    dlgDone = res;
+    const first = d.querySelector("input:not([type=checkbox]), textarea, select");
+    (first || okB).focus();
+    if (onOpen) onOpen(d);
+  });
+}
+
+// ---- a dropdown menu under a button, or at the pointer ----
+const menu = $("#menu");
+let menuOwner = null;
+function showMenu(x, y, items, owner) {
+  hideMenu();
+  menu.replaceChildren(...items.map(it => it === "-" ? el("div", { class: "dd-sep" })
+    : el("div", { class: "dd-item" + (it.dis ? " dis" : ""), onclick: () => { if (it.dis) return; hideMenu(); it.act(); } }, it.label)));
+  menu.hidden = false;
+  const r = menu.getBoundingClientRect();
+  menu.style.left = Math.max(2, Math.min(x, window.innerWidth - r.width - 4)) + "px";
+  menu.style.top = Math.max(2, Math.min(y, window.innerHeight - r.height - 4)) + "px";
+  menuOwner = owner || null;
+  if (menuOwner) menuOwner.classList.add("open");
+}
+function hideMenu() {
+  menu.hidden = true;
+  if (menuOwner) menuOwner.classList.remove("open");
+  menuOwner = null;
+}
+document.addEventListener("pointerdown", e => { if (!menu.hidden && !e.target.closest("#menu") && e.target !== menuOwner) hideMenu(); }, true);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !menu.hidden) hideMenu(); });
+
+// ---- targets: this host and every VM ----
+let vms = []; // [{name, state, ...}] from /v1/vms
+async function loadVMs() {
+  try { vms = (await j("/v1/vms")) || []; } catch (e) { if (e.status === 401) status(e.message, true); }
+  vms.sort((a, b) => a.name.localeCompare(b.name));
+  fillTargets();
+}
+const targetList = () => ["host", ...vms.map(v => v.name)];
+function fillTargetSelect(sel, keep, withHost = true) {
+  const cur = keep !== undefined ? keep : sel.value;
+  const list = withHost ? targetList() : vms.map(v => v.name);
+  sel.replaceChildren(...list.map(t => {
+    const vm = vms.find(v => v.name === t);
+    return option(t, t === "host" ? "This host" : t + (vm && vm.state !== "running" ? " (" + vm.state + ")" : ""));
+  }));
+  if (cur && !list.includes(cur)) sel.append(option(cur, cur + " (gone)"));
+  if (cur) sel.value = cur;
+}
+function fillTargets() {
+  fillTargetSelect($("#cp-target"), $("#cp-target").value || pref("target", "host"));
+  fillTargetSelect($("#ag-target"), $("#ag-target").value || pref("target", "host"));
+  renderFilter();
+}
+
+// ======================================================================
+// Threads
+// ======================================================================
+let threads = [], boardOK = null, filter = pref("filter", "");
+const view = { mode: "new", id: null, thread: null, turns: new Map(), queued: new Set(),
+  lastSeq: 0, es: null, retry: 0, timer: 0, link: "" };
+const msgs = $("#tv-msgs");
+
+async function loadThreads() {
+  try {
+    threads = (await j("/v1/jx/board/threads")) || [];
+    if (boardOK === false) { $("#th").hidden = false; $("#th-missing").hidden = true; }
+    boardOK = true;
+  } catch (e) {
+    if (missing(e)) {
+      boardOK = false;
+      $("#th").hidden = true;
+      $("#th-missing").hidden = false;
+      missingNote($("#th-missing"), "The Board");
+      renderStatus();
+      return;
+    }
+    status(e.message, true);
+    return;
+  }
+  renderFilter();
+  renderList();
+  if (view.id) {
+    const t = threads.find(x => x.id === view.id);
+    if (t) { view.thread = Object.assign({}, view.thread, t); renderHead(); }
+  }
+  renderStatus();
+}
+let threadsTimer = 0;
+const scheduleThreads = () => { clearTimeout(threadsTimer); threadsTimer = setTimeout(loadThreads, 300); };
+
+function renderFilter() {
+  const sel = $("#th-filter");
+  const used = [...new Set(threads.map(t => t.target))];
+  const all = [...new Set([...targetList(), ...used])].filter(t => used.includes(t));
+  const opts = [option("", "All targets")];
+  for (const t of all) opts.push(option("t:" + t, t === "host" ? "This host" : t));
+  opts.push(option("archived", "Archived"));
+  sel.replaceChildren(...opts);
+  sel.value = opts.some(o => o.value === filter) ? filter : "";
+}
+$("#th-filter").onchange = () => { filter = $("#th-filter").value; setPref("filter", filter); renderList(); };
+
+function renderList() {
+  const box = $("#th-list");
+  const shown = threads.filter(t => filter === "archived" ? t.archived
+    : !t.archived && (!filter || t.target === filter.slice(2)));
+  if (!shown.length) {
+    box.replaceChildren(el("div", { class: "ph" }, filter === "archived" ? "No archived threads."
+      : threads.length ? "No threads on this target." : "No threads yet. Write a task below to start one."));
+    return;
+  }
+  box.replaceChildren(...shown.map(t => {
+    const row = el("div", { class: "trow" + (t.id === view.id ? " sel" : "") + (t.archived ? " archived" : ""),
+      title: (t.title || "") + "\n" + targetName(t.target) + " · " + agentName(t.agent) + " · " + t.state
+        + (t.updated_at ? "\nupdated " + fullTime(t.updated_at) : "") });
+    const l1 = el("div", { class: "l1" });
+    const dot = stateDot(t.state);
+    if (dot) l1.append(dot);
+    l1.append(el("span", { class: "t" }, t.title || firstLine(t.last_text) || "Untitled"),
+      el("span", { class: "when" }, ago(t.updated_at || t.created_at)));
+    row.append(l1, el("div", { class: "l2" }, (t.target === "host" ? "host" : t.target) + " · " + agentName(t.agent)
+      + (t.last_text ? " — " + firstLine(t.last_text) : "")));
+    row.onclick = () => openThread(t.id);
+    row.addEventListener("contextmenu", e => { e.preventDefault(); threadMenu(t, e.clientX, e.clientY); });
+    return row;
+  }));
+  const sel = box.querySelector(".trow.sel");
+  if (sel) revealRow(box, sel);
+}
+function revealRow(list, row) {
+  const l = list.getBoundingClientRect(), r = row.getBoundingClientRect();
+  if (r.top < l.top) list.scrollTop += r.top - l.top;
+  else if (r.bottom > l.bottom) list.scrollTop += r.bottom - l.bottom;
+}
+
+// ---- the open thread ----
+function renderHead() {
+  const t = view.thread;
+  const title = $("#tv-title");
+  if (view.mode !== "thread" || !t) {
+    title.replaceChildren(el("b", {}, "New Task"), el("span", { class: "meta" }, "a new thread for an agent CLI"));
+    $("#tv-stop").hidden = $("#tv-more").hidden = $("#tv-queued").hidden = true;
+    return;
+  }
+  const running = [...view.turns.values()].some(x => x.state === "running") || t.state === "running";
+  title.replaceChildren(el("b", {}, t.title || "Untitled"),
+    el("span", { class: "meta" }, targetName(t.target) + " · " + agentName(t.agent) + (t.archived ? " · archived" : "")));
+  title.title = (t.title || "") + "\n" + targetName(t.target) + " · " + agentName(t.agent)
+    + (t.session_id ? "\nsession " + t.session_id : "");
+  const q = view.queued.size;
+  $("#tv-queued").hidden = !q;
+  $("#tv-queued").textContent = q + " queued";
+  $("#tv-stop").hidden = !(running || q || t.state === "queued");
+  $("#tv-more").hidden = false;
+}
+const atBottom = () => msgs.scrollTop + msgs.clientHeight >= msgs.scrollHeight - 40;
+const scrollEnd = () => { msgs.scrollTop = msgs.scrollHeight; };
+
+function addTurn(id, prompt, state, origin) {
+  let t = view.turns.get(id);
+  if (t) return t;
+  const box = el("div", { class: "turn" });
+  const pr = el("div", { class: "prompt" }, prompt || "");
+  const meta = el("div", { class: "prompt-meta" });
+  const body = el("div", { class: "turn-body" });
+  const foot = el("div", { class: "turn-end", hidden: true });
+  box.append(pr, meta, body, foot);
+  const ph = msgs.querySelector(":scope > .ph");
+  if (ph) ph.remove();
+  msgs.append(box);
+  t = { id, box, pr, meta, body, foot, tools: new Map(), state, origin: origin || "" };
+  view.turns.set(id, t);
+  setTurnState(t, state || "running");
+  return t;
+}
+function setTurnState(t, state) {
+  t.state = state;
+  t.meta.replaceChildren();
+  if (t.origin && t.origin.startsWith("cron:")) t.meta.append("from a schedule");
+  if (state === "queued") t.meta.append(el("span", { class: "badge" }, "queued"));
+  else if (state === "running") t.meta.append(el("span", { class: "badge" }, "running"));
+}
+function mdBlock(text) {
+  const d = el("div", { class: "md" });
+  if (window.marked && window.DOMPurify) {
+    try {
+      d.innerHTML = DOMPurify.sanitize(marked.parse(text, { gfm: true, breaks: false }));
+      d.querySelectorAll("a[href]").forEach(a => { a.target = "_blank"; a.rel = "noopener noreferrer"; });
+      return d;
+    } catch (e) {}
+  }
+  d.classList.add("plain");
+  d.textContent = text;
+  return d;
+}
+function toolEl(ev) {
+  const d = el("details", { class: "tool pending" });
+  const label = ev.summary || ev.name || "tool";
+  d.append(el("summary", { title: label }, label));
+  return d;
+}
+function fillTool(d, ev) {
+  d.classList.remove("pending");
+  d.classList.toggle("err", !!ev.is_error);
+  let pre = d.querySelector("pre");
+  if (!pre) { pre = el("pre"); d.append(pre); }
+  pre.textContent = ev.output || "(no output)";
+}
+function endTurn(t, ev) {
+  const state = ev.state || "done";
+  setTurnState(t, state);
+  t.body.querySelectorAll(".tool.pending").forEach(d => d.classList.remove("pending"));
+  const parts = [state === "done" ? "done" : state];
+  const u = ev.usage;
+  if (u && (u.input_tokens || u.output_tokens)) parts.push(kfmt(u.input_tokens) + " in / " + kfmt(u.output_tokens) + " out");
+  if (u && u.cost_usd) parts.push("$" + (+u.cost_usd).toFixed(u.cost_usd < 1 ? 3 : 2));
+  if (ev.error) parts.push(ev.error);
+  t.foot.textContent = parts.join(" · ");
+  t.foot.classList.toggle("err", state === "error");
+  t.foot.hidden = false;
+}
+function applyEvent(ev, live) {
+  if (!ev || typeof ev !== "object") return;
+  if (typeof ev.seq === "number") {
+    if (ev.seq <= view.lastSeq) return;
+    view.lastSeq = ev.seq;
+  }
+  const stick = live && atBottom();
+  const t = ev.turn_id ? addTurn(ev.turn_id, ev.type === "turn_start" ? ev.prompt : "", "running") : null;
+  const into = t ? t.body : msgs;
+  switch (ev.type) {
+    case "turn_start":
+      if (ev.prompt && !t.pr.textContent) t.pr.textContent = ev.prompt;
+      view.queued.delete(t.id);
+      setTurnState(t, "running");
+      break;
+    case "status":
+      into.append(el("div", { class: "ev-status" }, ev.text || ""));
+      break;
+    case "text":
+      if (ev.text) into.append(mdBlock(ev.text));
+      break;
+    case "tool": {
+      const d = toolEl(ev);
+      if (t && ev.id) t.tools.set(ev.id, d);
+      into.append(d);
+      break;
+    }
+    case "tool_result": {
+      let d = t && ev.id ? t.tools.get(ev.id) : null;
+      if (!d) { d = toolEl({ summary: "tool output" }); into.append(d); if (t && ev.id) t.tools.set(ev.id, d); }
+      fillTool(d, ev);
+      break;
+    }
+    case "turn_end":
+      if (t) endTurn(t, ev);
+      break;
+  }
+  if (live) {
+    if (stick) scrollEnd();
+    if (ev.type === "turn_start" || ev.type === "turn_end") { renderHead(); scheduleThreads(); }
+  }
+}
+
+async function openThread(id) {
+  closeStream();
+  hideMenu();
+  view.mode = "thread"; view.id = id; view.turns.clear(); view.queued.clear(); view.lastSeq = 0;
+  view.thread = threads.find(t => t.id === id) || { id, title: "", target: "", agent: "", state: "" };
+  document.body.classList.add("th-open");
+  renderList();
+  renderHead();
+  renderComposer();
+  msgs.replaceChildren(el("div", { class: "ph" }, "Loading…"));
+  let d;
+  try { d = await j("/v1/jx/board/threads/" + encodeURIComponent(id)); }
+  catch (e) {
+    if (view.id !== id) return;
+    msgs.replaceChildren(el("div", { class: "ph err" }, e.status === 404 ? "This thread is gone." : e.message));
+    return;
+  }
+  if (view.id !== id) return;
+  view.thread = d.thread || view.thread;
+  msgs.replaceChildren();
+  for (const tr of d.turns || []) {
+    const t = addTurn(tr.id, tr.prompt, tr.state, tr.origin);
+    if (tr.state === "queued") view.queued.add(tr.id);
+    for (const ev of tr.events || []) applyEvent(ev, false);
+    if (!["queued", "running"].includes(tr.state) && t.foot.hidden)
+      endTurn(t, { state: tr.state, error: tr.error, usage: tr.usage });
+    else setTurnState(t, tr.state);
+  }
+  if (!view.turns.size) msgs.append(el("div", { class: "ph" }, "No messages yet."));
+  renderHead();
+  renderComposer();
+  scrollEnd();
+  openStream();
+}
+function newTask() {
+  closeStream();
+  hideMenu();
+  view.mode = "new"; view.id = null; view.thread = null; view.turns.clear(); view.queued.clear(); view.lastSeq = 0;
+  document.body.classList.add("th-open");
+  renderList();
+  renderHead();
+  renderComposer();
+  msgs.replaceChildren(el("div", { class: "ph" },
+    "Start a task: pick where it runs and which agent, then write what you want done. "
+    + "Each message is one turn of the agent's CLI; the daemon runs it, so it keeps going when this window closes. "
+    + "Continue picks up a session the CLI already has there; Fork starts a copy of it."));
+  loadSessions();
+  if (!IS_MOBILE) $("#cp-text").focus();
+}
+function backToList() {
+  closeStream();
+  document.body.classList.remove("th-open");
+  view.mode = "new"; view.id = null; view.thread = null;
+  renderList();
+}
+$("#th-new").onclick = newTask;
+$("#tv-back").onclick = backToList;
+
+// ---- the live stream: SSE with ?after=, reconnected with the last seq ----
+function closeStream() {
+  clearTimeout(view.timer); view.timer = 0;
+  if (view.es) { view.es.onerror = view.es.onmessage = null; view.es.close(); view.es = null; }
+  setLink("");
+}
+function setLink(s) { view.link = s; renderStatus(); }
+function openStream() {
+  closeStream();
+  const id = view.id;
+  if (!id || hidden) return;
+  const es = new EventSource(withToken("/v1/jx/board/threads/" + encodeURIComponent(id) + "/events", { after: String(view.lastSeq) }));
+  view.es = es;
+  es.onopen = () => { view.retry = 0; setLink("live"); };
+  es.onmessage = e => {
+    if (view.id !== id) return;
+    let ev;
+    try { ev = JSON.parse(e.data); } catch (err) { return; }
+    applyEvent(ev, true);
+  };
+  es.onerror = () => {
+    if (view.es !== es) return;
+    es.close();
+    view.es = null;
+    const delay = Math.min(15000, 1000 * 2 ** view.retry++);
+    setLink("reconnecting…");
+    view.timer = setTimeout(() => { if (view.id === id) openStream(); }, delay);
+  };
+}
+
+// ---- thread actions ----
+function threadMenu(t, x, y, owner) {
+  showMenu(x, y, [
+    { label: "Rename…", act: () => renameThread(t) },
+    { label: t.archived ? "Unarchive" : "Archive", act: () => patchThread(t, { archived: !t.archived }) },
+    "-",
+    { label: "Copy Session ID", dis: !t.session_id, act: () => copyText(t.session_id, "session id") },
+    "-",
+    { label: "Delete…", act: () => deleteThread(t) },
+  ], owner);
+}
+$("#tv-more").onclick = e => {
+  if (!view.thread) return;
+  if (menuOwner === e.currentTarget) { hideMenu(); return; }
+  const r = e.currentTarget.getBoundingClientRect();
+  threadMenu(view.thread, r.left, r.bottom + 2, e.currentTarget);
+};
+$("#tv-stop").onclick = async () => {
+  if (!view.id) return;
+  try { await api("/v1/jx/board/threads/" + encodeURIComponent(view.id) + "/stop", { method: "POST" }); toast("Stopping…"); }
+  catch (e) { toast(e.message); }
+  scheduleThreads();
+};
+async function renameThread(t) {
+  const inp = el("input", { type: "text", value: t.title || "" });
+  const ok = await dialog({ title: "Rename Thread", body: [el("div", { class: "row" }, el("label", {}, "Title:"), inp)], ok: "Rename" });
+  if (ok) patchThread(t, { title: inp.value.trim() });
+}
+async function patchThread(t, body) {
+  try {
+    const nt = await j("/v1/jx/board/threads/" + encodeURIComponent(t.id), { method: "PATCH", json: body });
+    if (nt && view.id === t.id) { view.thread = Object.assign({}, view.thread, nt); renderHead(); }
+  } catch (e) { toast(e.message); }
+  loadThreads();
+}
+async function deleteThread(t) {
+  const ok = await dialog({ msg: "Delete “" + (t.title || "Untitled") + "”?",
+    detail: "The thread and its messages leave the Board. The agent's own session stays on " + targetName(t.target)
+      + ", where Continue can still pick it up.", ok: "Delete", danger: true });
+  if (!ok) return;
+  try { await api("/v1/jx/board/threads/" + encodeURIComponent(t.id), { method: "DELETE" }); }
+  catch (e) { toast(e.message); return; }
+  if (view.id === t.id) { if (IS_MOBILE) backToList(); else newTask(); }
+  loadThreads();
+}
+
+// ---- the composer ----
+const cpText = $("#cp-text");
+function renderComposer() {
+  const isNew = view.mode !== "thread";
+  $("#cp-f-target").hidden = $("#cp-f-agent").hidden = $("#cp-f-sess").hidden = !isNew;
+  $("#cp-fixed").hidden = isNew;
+  if (!isNew && view.thread) $("#cp-fixed").textContent = "To this thread on " + targetName(view.thread.target) + ", " + agentName(view.thread.agent) + ".";
+  $("#cp-fork-label").textContent = isNew ? "Fork" : "Fork into a new thread";
+  $("#cp-fork").checked = false;
+  updateFork();
+  $("#cp-hint").textContent = IS_MOBILE ? "" : (IS_MAC ? "⌘↩" : "Ctrl+Enter") + " sends";
+  cpText.placeholder = isNew ? "What should the agent do?" : "Reply, or give the next task (queued while a turn runs)";
+}
+function updateFork() {
+  const isNew = view.mode !== "thread";
+  const can = isNew ? !!$("#cp-session").value : !!(view.thread && view.thread.session_id);
+  const f = $("#cp-fork");
+  f.disabled = !can;
+  if (!can) f.checked = false;
+  $("#cp-f-fork").classList.toggle("dis", !can);
+  $("#cp-f-fork").title = can ? "Start a new thread from a copy of the session; the original stays as it is"
+    : isNew ? "Pick a session to continue first" : "The thread has no agent session yet";
+}
+let sessSeq = 0;
+async function loadSessions() {
+  const sel = $("#cp-session"), target = $("#cp-target").value, agent = $("#cp-agent").value;
+  const my = ++sessSeq;
+  sel.replaceChildren(option("", "New session"));
+  updateFork();
+  if (!target || !agent || boardOK === false) return;
+  let list = [];
+  try { list = (await j("/v1/jx/board/sessions?" + new URLSearchParams({ target, agent }))) || []; }
+  catch (e) { if (my === sessSeq) sel.append(el("option", { disabled: true }, missing(e) ? "(no sessions list in this build)" : "(sessions: " + trunc(e.message, 40) + ")")); return; }
+  if (my !== sessSeq) return;
+  if (!list.length) return;
+  const g = el("optgroup", { label: "Continue ▸" });
+  for (const s of list) {
+    const o = option(s.id, trunc(s.title || s.id.slice(0, 8), 52) + " — " + ago(s.updated_at) + (s.thread_id ? " (on the Board)" : ""));
+    o.dataset.thread = s.thread_id || "";
+    o.title = (s.title || s.id) + (s.cwd ? "\n" + s.cwd : "");
+    g.append(o);
+  }
+  sel.append(g);
+}
+$("#cp-target").onchange = () => { setPref("target", $("#cp-target").value); loadSessions(); };
+$("#cp-agent").onchange = () => { setPref("agent", $("#cp-agent").value); loadSessions(); };
+$("#cp-agent").value = pref("agent", "claude");
+$("#cp-session").onchange = updateFork;
+// the field grows a line at a time with its text, up to a third of the
+// window, then scrolls as any field does
+function fitText() {
+  const lh = 17, max = Math.max(3, Math.floor(window.innerHeight * 0.33 / lh));
+  cpText.style.overflowY = "hidden";
+  cpText.style.height = "auto";
+  const need = cpText.scrollHeight + 2, cap = max * lh + 10;
+  cpText.style.height = Math.max(44, Math.min(need, cap)) + "px";
+  cpText.style.overflowY = need > cap ? "auto" : "hidden";
+}
+cpText.addEventListener("input", fitText);
+window.addEventListener("resize", fitText);
+cpText.addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.preventDefault(); send(); }
+});
+$("#cp-send").onclick = send;
+let sending = false;
+async function send() {
+  const text = cpText.value;
+  if (!text.trim() || sending) return;
+  sending = true;
+  $("#cp-send").disabled = true;
+  const done = () => { cpText.value = ""; fitText(); };
+  try {
+    if (view.mode === "thread" && view.thread) {
+      const th = view.thread;
+      if ($("#cp-fork").checked && th.session_id) {
+        const r = await j("/v1/jx/board/threads", { method: "POST",
+          json: { target: th.target, agent: th.agent, session: th.session_id, fork: true, prompt: text, origin: "user" } });
+        done();
+        await loadThreads();
+        if (r && r.thread) openThread(r.thread.id);
+      } else {
+        const id = th.id;
+        const r = await j("/v1/jx/board/threads/" + encodeURIComponent(id) + "/turns", { method: "POST", json: { prompt: text } });
+        done();
+        if (view.id === id && r && r.turn_id) {
+          const t = addTurn(r.turn_id, text, r.queued ? "queued" : "running", "user");
+          if (!t.pr.textContent) t.pr.textContent = text;
+          if (r.queued && t.state === "queued") view.queued.add(r.turn_id);
+          renderHead();
+          scrollEnd();
+        }
+        scheduleThreads();
+      }
+    } else {
+      const target = $("#cp-target").value, agent = $("#cp-agent").value;
+      const sel = $("#cp-session"), sid = sel.value, fork = !!sid && $("#cp-fork").checked;
+      const onBoard = sid && sel.selectedOptions[0] ? sel.selectedOptions[0].dataset.thread : "";
+      if (onBoard && !fork) {
+        await j("/v1/jx/board/threads/" + encodeURIComponent(onBoard) + "/turns", { method: "POST", json: { prompt: text } });
+        done();
+        await loadThreads();
+        openThread(onBoard);
+      } else {
+        const body = { target, agent, prompt: text, origin: "user" };
+        if (sid) { body.session = sid; body.fork = fork; }
+        const r = await j("/v1/jx/board/threads", { method: "POST", json: body });
+        done();
+        await loadThreads();
+        if (r && r.thread) openThread(r.thread.id);
+      }
+    }
+  } catch (e) {
+    toast(missing(e) ? "The Board backend is not available in this build" : e.message, 5000);
+  }
+  sending = false;
+  $("#cp-send").disabled = false;
+}
+
+// ---- the Board's change stream: any thread's state, install progress ----
+let boardES = null, boardRetry = 0, boardTimer = 0;
+function openBoardStream() {
+  closeBoardStream();
+  if (hidden || boardOK === false) return;
+  const es = new EventSource(withToken("/v1/jx/board/events"));
+  boardES = es;
+  es.onopen = () => { boardRetry = 0; };
+  es.onmessage = e => {
+    let m;
+    try { m = JSON.parse(e.data); } catch (err) { return; }
+    if (!m || typeof m !== "object") return;
+    if (m.thread_id) {
+      scheduleThreads();
+      if (m.thread_id === view.id && view.thread && m.state) { view.thread.state = m.state; renderHead(); }
+    } else if (m.type === "status" || m.text) {
+      agentProgress(m);
+    }
+  };
+  es.onerror = () => {
+    if (boardES !== es) return;
+    es.close();
+    boardES = null;
+    boardTimer = setTimeout(openBoardStream, Math.min(30000, 2000 * 2 ** boardRetry++));
+  };
+}
+function closeBoardStream() {
+  clearTimeout(boardTimer); boardTimer = 0;
+  if (boardES) { boardES.onerror = boardES.onmessage = null; boardES.close(); boardES = null; }
+}
+
+// ======================================================================
+// Schedules
+// ======================================================================
+let jobs = [], jobSel = null, cronOK = null;
+async function loadJobs() {
+  try {
+    jobs = (await j("/v1/jx/cron")) || [];
+    cronOK = true;
+    $("#sc-missing").hidden = true;
+    for (const n of document.querySelectorAll("#v-sched > :not(#sc-missing)")) n.hidden = false;
+  } catch (e) {
+    if (missing(e)) {
+      cronOK = false;
+      for (const n of document.querySelectorAll("#v-sched > :not(#sc-missing)")) n.hidden = true;
+      $("#sc-missing").hidden = false;
+      missingNote($("#sc-missing"), "Schedules");
+      return;
+    }
+    status(e.message, true);
+    return;
+  }
+  renderJobs();
+  renderStatus();
+  if (jobSel && jobs.some(x => x.id === jobSel)) loadRuns(jobSel); else { jobSel = null; renderRuns(null, []); }
+}
+function jobWhat(jb) {
+  if (jb.kind === "shell") return "shell on " + jb.target + ": " + firstLine(jb.command);
+  return agentName(jb.agent) + " on " + targetName(jb.target) + (jb.thread_id ? " (one thread)" : "") + ": " + firstLine(jb.prompt);
+}
+function renderJobs() {
+  const box = $("#sc-list");
+  if (!jobs.length) { box.replaceChildren(el("div", { class: "ph" }, "No schedules. New… adds one: a prompt for an agent, or a shell command in a VM, on a cron schedule.")); }
+  else box.replaceChildren(...jobs.map(jb => {
+    const cb = el("input", { type: "checkbox", title: jb.enabled ? "enabled — click to pause" : "paused — click to enable" });
+    cb.checked = !!jb.enabled;
+    cb.onclick = e => { e.stopPropagation(); saveJob(Object.assign({}, jb, { enabled: cb.checked }), true); };
+    const last = jb.last_status ? el("span", { class: "chip " + jb.last_status, title: jb.last_run ? fullTime(jb.last_run) : "" }, jb.last_status) : el("span", { class: "muted" }, "—");
+    const row = el("div", { class: "jrow" + (jb.id === jobSel ? " sel" : "") + (jb.enabled ? "" : " off") },
+      cb,
+      el("span", { class: "nm", title: jb.name }, jb.name || "(unnamed)"),
+      el("span", { class: "mono c-sched", title: jb.schedule + (jb.tz ? " " + jb.tz : "") }, jb.schedule),
+      el("span", { class: "c-what", title: jobWhat(jb) }, jobWhat(jb)),
+      el("span", { class: "muted c-next", title: fullTime(jb.next_run) }, jb.enabled ? (IS_MOBILE ? "next " : "") + (nextIn(jb.next_run) || "—") : "paused"),
+      el("span", { class: "c-last" }, last));
+    row.onclick = () => { jobSel = jb.id; renderJobs(); loadRuns(jb.id); };
+    row.ondblclick = () => editJob(jb);
+    return row;
+  }));
+  const has = !!jobs.find(x => x.id === jobSel);
+  $("#sc-edit").disabled = $("#sc-run").disabled = $("#sc-del").disabled = !has;
+}
+function nextIn(iso) {
+  const t = Date.parse(iso || "");
+  if (!t) return "";
+  const s = (t - Date.now()) / 1000;
+  if (s < 0) return "due";
+  if (s < 3600) return "in " + Math.max(1, Math.round(s / 60)) + " min";
+  if (s < 86400) return new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return new Date(t).toLocaleDateString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+}
+let runsSeq = 0;
+async function loadRuns(id) {
+  const my = ++runsSeq;
+  let runs = [];
+  try { runs = (await j("/v1/jx/cron/" + encodeURIComponent(id) + "/runs")) || []; }
+  catch (e) { if (my === runsSeq) $("#sc-runs").replaceChildren(el("div", { class: "ph err" }, e.message)); return; }
+  if (my !== runsSeq) return;
+  renderRuns(jobs.find(x => x.id === id), runs);
+}
+function renderRuns(jb, runs) {
+  $("#sc-runs-head").textContent = jb ? "Last runs of “" + (jb.name || jb.id) + "”" : "Last runs";
+  const box = $("#sc-runs");
+  if (!jb) { box.replaceChildren(el("div", { class: "ph" }, "Select a schedule to see its runs.")); return; }
+  if (!runs.length) { box.replaceChildren(el("div", { class: "ph" }, "It has not run yet.")); return; }
+  const open = new Set([...box.querySelectorAll("details[open]")].map(d => d.dataset.id));
+  box.replaceChildren(...runs.slice().sort((a, b) => Date.parse(b.started_at || 0) - Date.parse(a.started_at || 0)).map(r => {
+    const dur = r.ended_at ? fmtDur(Date.parse(r.ended_at) - Date.parse(r.started_at)) : r.status === "running" ? "running" : "";
+    const l1 = el("div", { class: "l1" }, el("span", { class: "chip " + r.status }, r.status),
+      el("span", { class: "grow", title: fullTime(r.started_at) }, fullTime(r.started_at) + (dur ? " · " + dur : "")));
+    if (r.thread_id) l1.append(el("a", { href: "#", onclick: e => { e.preventDefault(); showTab("threads"); openThread(r.thread_id); } }, "Open thread"));
+    const row = el("div", { class: "rrow" }, l1);
+    if (r.output) {
+      const d = el("details", { class: "tool" }, el("summary", {}, "output (" + r.output.length + " bytes)"), el("pre", {}, r.output));
+      d.dataset.id = r.id;
+      if (open.has(r.id)) d.open = true;
+      row.append(d);
+    }
+    return row;
+  }));
+}
+async function saveJob(jb, quiet) {
+  jb = Object.assign({}, jb);
+  for (const k of ["next_run", "last_run", "last_status"]) delete jb[k]; // the daemon's figures, not the job
+  try {
+    const r = jb.id
+      ? await j("/v1/jx/cron/" + encodeURIComponent(jb.id), { method: "PUT", json: jb })
+      : await j("/v1/jx/cron", { method: "POST", json: jb });
+    if (r && r.id) jobSel = r.id;
+    if (!quiet) toast("Saved");
+  } catch (e) { toast(e.message, 5000); }
+  loadJobs();
+}
+async function editJob(jb) {
+  const isNew = !jb;
+  jb = Object.assign({ name: "", schedule: "@daily", tz: "", enabled: true, kind: "board", target: pref("target", "host"),
+    agent: pref("agent", "claude"), thread_id: "", prompt: "", command: "", timeout_minutes: null }, jb || {});
+  const f = {
+    name: el("input", { type: "text", value: jb.name, placeholder: "Nightly tests" }),
+    schedule: el("input", { type: "text", value: jb.schedule, spellcheck: "false" }),
+    tz: el("input", { type: "text", value: jb.tz || "", placeholder: "local time", spellcheck: "false" }),
+    enabled: el("input", { type: "checkbox" }),
+    kind: el("select", {}, option("board", "Board: a prompt for an agent"), option("shell", "Shell: a command in a VM")),
+    target: el("select"),
+    agent: el("select", {}, option("claude", "Claude Code"), option("codex", "Codex")),
+    thread: el("select"),
+    prompt: el("textarea", { rows: "4", placeholder: "Run the test suite and summarise any failures." }),
+    command: el("textarea", { rows: "3", spellcheck: "false", placeholder: "cd ~/work && make test" }),
+    timeout: el("input", { type: "text", value: jb.timeout_minutes ? String(jb.timeout_minutes) : "", placeholder: "60", inputmode: "numeric" }),
+  };
+  f.enabled.checked = jb.enabled !== false;
+  f.kind.value = jb.kind === "shell" ? "shell" : "board";
+  f.agent.value = jb.agent === "codex" ? "codex" : "claude";
+  f.prompt.value = jb.prompt || "";
+  f.command.value = jb.command || "";
+  f.timeout.style.width = "80px";
+  const row = (label, input, hint, top) => el("div", { class: "row" + (top ? " top" : "") }, el("label", {}, label), input,
+    hint ? el("div", { class: "hint" }, hint) : null);
+  const rows = {
+    name: row("Name:", f.name),
+    schedule: row("Schedule:", f.schedule, "5-field cron (“30 2 * * *”), or @every 30m, @hourly, @daily"),
+    tz: row("Time zone:", f.tz, "an IANA zone like Europe/Berlin; blank is this host's local time"),
+    enabled: row("", el("label", { class: "check" }, f.enabled, " Enabled")),
+    kind: row("Kind:", popup(f.kind)),
+    target: row("Target:", popup(f.target)),
+    agent: row("Agent:", popup(f.agent)),
+    thread: row("Thread:", popup(f.thread), "a new thread each run, or every run in one thread"),
+    prompt: row("Prompt:", f.prompt, null, true),
+    command: row("Command:", f.command, "runs in ~/work in the VM over SSH; output is kept (64 KB)", true),
+    timeout: row("Timeout:", el("span", {}, f.timeout, " min")),
+  };
+  const fillThreads = () => {
+    const cur = f.thread.value || jb.thread_id || "";
+    f.thread.replaceChildren(option("", "New thread each run"),
+      ...threads.filter(t => t.target === f.target.value && t.agent === f.agent.value && !t.archived)
+        .map(t => option(t.id, trunc(t.title || "Untitled", 48))));
+    if (cur && ![...f.thread.options].some(o => o.value === cur)) f.thread.append(option(cur, "thread " + cur.slice(0, 8)));
+    f.thread.value = cur;
+  };
+  const sync = () => {
+    const shell = f.kind.value === "shell";
+    fillTargetSelect(f.target, f.target.value || jb.target, !shell);
+    if (shell && !f.target.value && f.target.options.length) f.target.selectedIndex = 0;
+    rows.agent.hidden = rows.thread.hidden = rows.prompt.hidden = shell;
+    rows.command.hidden = !shell;
+    if (!shell) fillThreads();
+  };
+  f.kind.onchange = sync;
+  f.target.onchange = () => { if (f.kind.value !== "shell") fillThreads(); };
+  f.agent.onchange = fillThreads;
+  fillTargetSelect(f.target, jb.target, f.kind.value !== "shell");
+  sync();
+  for (;;) {
+    const ok = await dialog({ title: isNew ? "New Schedule" : "Edit Schedule", body: Object.values(rows), ok: isNew ? "Add" : "Save" });
+    if (!ok) return;
+    const out = Object.assign({}, jb, {
+      name: f.name.value.trim(), schedule: f.schedule.value.trim(), tz: f.tz.value.trim(),
+      enabled: f.enabled.checked, kind: f.kind.value, target: f.target.value,
+    });
+    const tm = parseInt(f.timeout.value, 10);
+    out.timeout_minutes = tm > 0 ? tm : null;
+    if (out.kind === "board") { out.agent = f.agent.value; out.thread_id = f.thread.value; out.prompt = f.prompt.value; delete out.command; }
+    else { out.command = f.command.value; delete out.agent; delete out.thread_id; delete out.prompt; }
+    if (!out.tz) delete out.tz;
+    const why = !out.schedule ? "a schedule is needed"
+      : !out.target ? "pick a target"
+      : out.kind === "board" && !out.prompt.trim() ? "a prompt is needed"
+      : out.kind === "shell" && !out.command.trim() ? "a command is needed" : "";
+    if (why) { toast(why); continue; }
+    if (!out.name) out.name = out.kind === "shell" ? trunc(firstLine(out.command), 30) : trunc(firstLine(out.prompt), 30);
+    await saveJob(out);
+    return;
+  }
+}
+$("#sc-new").onclick = () => editJob(null);
+$("#sc-edit").onclick = () => { const jb = jobs.find(x => x.id === jobSel); if (jb) editJob(jb); };
+$("#sc-run").onclick = async () => {
+  const jb = jobs.find(x => x.id === jobSel);
+  if (!jb) return;
+  try { await api("/v1/jx/cron/" + encodeURIComponent(jb.id) + "/run", { method: "POST" }); toast("Started “" + (jb.name || jb.id) + "”"); }
+  catch (e) { toast(e.message); }
+  setTimeout(() => loadRuns(jb.id), 800);
+};
+// Delete arms on the first click and deletes on the second, within 3 s
+// (the desktop's two-click delete)
+$("#sc-del").onclick = async () => {
+  const b = $("#sc-del"), jb = jobs.find(x => x.id === jobSel);
+  if (!jb) return;
+  if (!b.classList.contains("armed")) {
+    b.classList.add("armed");
+    clearTimeout(b._t);
+    b._t = setTimeout(() => b.classList.remove("armed"), 3000);
+    return;
+  }
+  b.classList.remove("armed");
+  try { await api("/v1/jx/cron/" + encodeURIComponent(jb.id), { method: "DELETE" }); jobSel = null; }
+  catch (e) { toast(e.message); }
+  loadJobs();
+};
+
+// ======================================================================
+// Machines
+// ======================================================================
+const KINDS = [["dev", "Dev"], ["agent", "Agent"], ["service", "Service"], ["job", "Job"]];
+let jvms = [], settings = null, mem = null;
+async function loadMachines() {
+  const res = await Promise.allSettled([
+    j("/v1/jx/vms"), j("/v1/jx/memory"), j("/v1/jx/settings"), j("/v1/jx/agents/secrets"),
+  ]);
+  const [rv, rm, rs, rsec] = res;
+  const allMissing = res.every(r => r.status === "rejected" && missing(r.reason));
+  $("#mc").hidden = allMissing;
+  $("#mc-missing").hidden = !allMissing;
+  if (allMissing) { missingNote($("#mc-missing"), "Machine settings"); return; }
+  if (rv.status === "fulfilled") { jvms = rv.value || []; renderVMRows(); }
+  else $("#vm-rows").replaceChildren(el("div", { class: "ph" + (missing(rv.reason) ? "" : " err") }, missing(rv.reason) ? "Idle stop is not available in this build." : rv.reason.message));
+  if (rm.status === "fulfilled") { mem = rm.value; renderMem(); }
+  else { $("#mem-line").textContent = missing(rm.reason) ? "Memory figures are not available in this build." : rm.reason.message; }
+  if (rs.status === "fulfilled") { if (!settingsDirty) { settings = rs.value; renderSettings(); } }
+  else $("#set-rows").replaceChildren(el("div", { class: "ph" }, missing(rs.reason) ? "Not available in this build." : rs.reason.message));
+  if (rsec.status === "fulfilled") renderSecrets(rsec.value || {});
+  else $("#sec-rows").replaceChildren(el("div", { class: "ph" }, missing(rsec.reason) ? "Not available in this build." : rsec.reason.message));
+  loadAgents();
+  renderStatus();
+}
+function renderMem() {
+  const m = mem || {};
+  const used = m.used_mb || (m.total_mb && m.available_mb != null ? m.total_mb - m.available_mb : 0);
+  const pct = m.total_mb ? used / m.total_mb * 100 : 0;
+  const hot = m.cap_percent > 0 && pct >= m.cap_percent;
+  const line = $("#mem-line");
+  line.textContent = fmtMB(used) + " used of " + fmtMB(m.total_mb) + " (" + Math.round(pct) + "%)"
+    + (m.available_mb != null ? " · " + fmtMB(m.available_mb) + " available" : "")
+    + (m.cap_percent > 0 ? " · cap " + m.cap_percent + "%" + (m.cap_mb ? " (" + fmtMB(m.cap_mb) + ")" : "") : " · no cap");
+  line.classList.toggle("hot", hot);
+  const bar = $("#mem-bar");
+  const u = bar.querySelector(".used"), c = bar.querySelector(".cap");
+  u.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  u.classList.toggle("hot", hot);
+  c.hidden = !(m.cap_percent > 0);
+  c.style.left = Math.min(100, m.cap_percent || 0) + "%";
+  c.title = "cap " + m.cap_percent + "%";
+}
+function holdersText(hs) {
+  if (!hs || !hs.length) return "";
+  const n = {};
+  for (const h of hs) n[h.reason] = (n[h.reason] || 0) + 1;
+  return Object.entries(n).map(([r, c]) => c > 1 ? r + " ×" + c : r).join(", ");
+}
+function stopsText(v) {
+  if (v.state !== "running") return { text: "", soon: false };
+  if (v.pinned) return { text: "pinned", soon: false };
+  if (v.holders && v.holders.length) return { text: "in use", soon: false };
+  if (!v.effective_minutes) return { text: "never", soon: false };
+  const t = Date.parse(v.stop_at || "");
+  if (!t) {
+    if (v.idle_seconds != null) {
+      const left = v.effective_minutes * 60 - v.idle_seconds;
+      return { text: left > 0 ? "in ~" + Math.ceil(left / 60) + " min" : "soon", soon: left < 180 };
+    }
+    return { text: "", soon: false };
+  }
+  const s = (t - Date.now()) / 1000;
+  if (s <= 0) return { text: "now", soon: true };
+  if (s < 60) return { text: "in " + Math.ceil(s) + " s", soon: true };
+  return { text: "in " + Math.ceil(s / 60) + " min", soon: s < 180 };
+}
+function renderVMRows(force) {
+  const box = $("#vm-rows");
+  // a refresh never takes a half-typed idle figure out from under the hand
+  const a = document.activeElement;
+  if (!force && a && box.contains(a) && a.tagName === "INPUT" && a.type === "text") return;
+  if (!jvms.length) { box.replaceChildren(el("div", { class: "ph" }, "No VMs.")); return; }
+  const focused = a && box.contains(a) ? a.dataset.key : "";
+  box.replaceChildren(...jvms.map(v => {
+    const kind = el("select", {}, ...KINDS.map(([k, l]) => option(k, l)));
+    kind.value = v.kind || "dev";
+    kind.onchange = () => putVM(v.vm, { kind: kind.value });
+    const pin = el("input", { type: "checkbox", title: "Pinned: never stopped for being idle" });
+    pin.checked = !!v.pinned;
+    pin.onchange = () => putVM(v.vm, { pinned: pin.checked });
+    const idle = el("input", { type: "text", inputmode: "numeric", value: v.idle_minutes == null ? "" : String(v.idle_minutes),
+      placeholder: v.effective_minutes == null ? "" : String(v.effective_minutes), title: "Minutes idle before it stops; blank uses the kind's default, 0 never" });
+    idle.dataset.key = "idle:" + v.vm;
+    const commit = () => {
+      const s = idle.value.trim();
+      const n = s === "" ? null : parseInt(s, 10);
+      if (s !== "" && !(n >= 0)) { toast("idle minutes: a number, or blank for the default"); return; }
+      if (n === (v.idle_minutes == null ? null : v.idle_minutes)) return;
+      putVM(v.vm, { idle_minutes: n });
+    };
+    idle.addEventListener("change", commit);
+    idle.addEventListener("keydown", e => { if (e.key === "Enter") idle.blur(); });
+    const st = stopsText(v);
+    const stop = el("span", { class: "stop" + (st.soon ? " soon" : ""), title: v.stop_at ? "stops at " + fullTime(v.stop_at) : "" }, st.text);
+    stop.dataset.vm = v.vm;
+    const keep = el("button", { class: "ghost", title: "Reset the idle timer", disabled: v.state !== "running" }, "Keep");
+    keep.onclick = async () => {
+      try { await api("/v1/jx/vms/" + encodeURIComponent(v.vm) + "/keep", { method: "POST" }); toast(v.vm + ": kept"); }
+      catch (e) { toast(e.message); }
+      loadMachines();
+    };
+    const lab = t => el("span", { class: "lab" }, t);
+    return el("div", { class: "vrow" },
+      el("span", { class: "nm", title: v.vm }, v.vm),
+      el("span", { class: "st-" + v.state }, v.state),
+      el("span", {}, lab("Kind "), popup(kind)),
+      el("span", {}, lab("Pin "), pin),
+      el("span", {}, lab("Idle "), idle),
+      el("span", { class: "held", title: holdersText(v.holders) }, lab("Held by "), holdersText(v.holders) || el("span", { class: "muted" }, "nothing")),
+      el("span", {}, lab("Stops "), stop),
+      keep);
+  }));
+  if (focused) { const f = box.querySelector(`[data-key="${CSS.escape(focused)}"]`); if (f) f.focus(); }
+}
+async function putVM(name, body) {
+  try {
+    const row = await j("/v1/jx/vms/" + encodeURIComponent(name), { method: "PUT", json: body });
+    if (row) { const i = jvms.findIndex(x => x.vm === name); if (i >= 0) jvms[i] = Object.assign({}, jvms[i], row); }
+  } catch (e) { toast(e.message, 5000); }
+  renderVMRows(true);
+}
+// the countdowns tick between refreshes
+setInterval(() => {
+  if (curTab !== "mach" || hidden) return;
+  for (const s of document.querySelectorAll("#vm-rows .stop")) {
+    const v = jvms.find(x => x.vm === s.dataset.vm);
+    if (!v) continue;
+    const st = stopsText(v);
+    s.textContent = st.text;
+    s.classList.toggle("soon", st.soon);
+  }
+}, 1000);
+
+let settingsDirty = false;
+function renderSettings() {
+  const s = settings || {};
+  const d = s.idle_defaults || {};
+  const box = $("#set-rows");
+  const num = (v, key) => { const i = el("input", { type: "text", inputmode: "numeric", value: v == null ? "" : String(v) }); i.style.width = "64px"; i.dataset.key = key; i.oninput = () => { settingsDirty = true; }; return i; };
+  const fields = { dev: num(d.dev, "dev"), agent: num(d.agent, "agent"), service: num(d.service, "service"), job: num(d.job, "job"),
+    warn: num(s.warn_minutes, "warn"), cap: num(s.memory_cap_percent, "cap") };
+  const row = (label, input, hint) => el("div", { class: "row" }, el("label", { class: "lbl" }, label), input, hint ? el("span", { class: "hint" }, hint) : null);
+  const save = el("button", { class: "ghost" }, "Save");
+  save.onclick = async () => {
+    const n = i => { const x = parseInt(i.value, 10); return x >= 0 ? x : 0; };
+    const body = { idle_defaults: { dev: n(fields.dev), agent: n(fields.agent), service: n(fields.service), job: n(fields.job) },
+      warn_minutes: n(fields.warn), memory_cap_percent: Math.min(100, n(fields.cap)) };
+    try { settings = (await j("/v1/jx/settings", { method: "PUT", json: body })) || body; settingsDirty = false; toast("Saved"); renderSettings(); loadMachines(); }
+    catch (e) { toast(e.message, 5000); }
+  };
+  box.replaceChildren(
+    el("div", { class: "row" }, el("span", { class: "muted" }, "Minutes a VM may sit idle — no terminal, SSH, agent turn, job or proxy traffic — before it is stopped. 0 is never.")),
+    row("Dev:", fields.dev, "min"), row("Agent:", fields.agent, "min"), row("Service:", fields.service, "min"), row("Job:", fields.job, "min"),
+    row("Warn before stop:", fields.warn, "min"),
+    row("Memory cap:", fields.cap, "% of host memory — a start that would cross it stops idle VMs first; 0 is off"),
+    el("div", { class: "row" }, el("span", { class: "lbl" }), save));
+}
+
+// ---- agents in a target: installed? signed in? ----
+let agSeq = 0, agWatch = 0, agWatchUntil = 0;
+async function loadAgents() {
+  const target = $("#ag-target").value || "host";
+  const my = ++agSeq;
+  let st;
+  try { st = (await j("/v1/jx/agents/status?" + new URLSearchParams({ target }))) || {}; }
+  catch (e) {
+    if (my !== agSeq) return;
+    $("#ag-rows").replaceChildren(el("div", { class: "ph" + (missing(e) ? "" : " err") }, missing(e) ? "Agent status is not available in this build." : e.message));
+    return;
+  }
+  if (my !== agSeq) return;
+  const AUTH = { token: "signed in with the saved token", login: "signed in in the guest", none: "not signed in" };
+  $("#ag-rows").replaceChildren(...Object.keys(AGENTS).map(a => {
+    const s = st[a] || {};
+    const what = s.installed
+      ? "installed" + (s.version ? " " + s.version : "") + " · " + (AUTH[s.auth] || s.auth || "auth unknown")
+      : "not installed";
+    const btn = el("button", { class: "ghost", disabled: !!s.installed }, s.installed ? "Installed" : "Install");
+    btn.onclick = () => installAgent(target, a, btn);
+    return el("div", { class: "agent-line" }, el("span", { class: "nm" }, AGENTS[a]), el("span", { class: "what" }, what), btn);
+  }));
+  const all = Object.keys(AGENTS).every(a => st[a] && st[a].installed);
+  if (agWatch && (all || Date.now() > agWatchUntil)) { clearInterval(agWatch); agWatch = 0; }
+}
+async function installAgent(target, agent, btn) {
+  btn.disabled = true;
+  try {
+    await api("/v1/jx/agents/install", { method: "POST", json: { target, agent } });
+    $("#ag-progress").textContent = "Installing " + AGENTS[agent] + " on " + targetName(target) + "…";
+    clearInterval(agWatch);
+    agWatchUntil = Date.now() + 10 * 60000;
+    agWatch = setInterval(loadAgents, 4000);
+  } catch (e) { toast(e.message, 5000); btn.disabled = false; }
+}
+function agentProgress(m) {
+  const t = $("#ag-target").value;
+  if (m.target && m.target !== t) return;
+  $("#ag-progress").textContent = (m.agent ? agentName(m.agent) + ": " : "") + (m.text || "");
+  if (/done|installed|failed|error/i.test(m.text || "")) loadAgents();
+}
+$("#ag-target").onchange = () => { $("#ag-progress").textContent = ""; loadAgents(); };
+
+// ---- secrets: write-only ----
+function renderSecrets(s) {
+  const mk = (key, label, hint, isSet) => {
+    const inp = el("input", { type: "password", autocomplete: "off", spellcheck: "false",
+      placeholder: isSet ? "set — type a new one to replace it" : "not set" });
+    const save = el("button", { class: "ghost" }, "Save");
+    const clear = el("button", { class: "ghost danger", disabled: !isSet }, "Clear");
+    save.onclick = async () => {
+      if (!inp.value.trim()) { toast("type the " + label.toLowerCase() + " first"); return; }
+      await putSecret({ [key]: inp.value.trim() });
+    };
+    clear.onclick = async () => {
+      const ok = await dialog({ msg: "Clear the " + label + "?", detail: "Agent turns then use whatever login each guest has.", ok: "Clear", danger: true });
+      if (ok) putSecret({ [key]: "" });
+    };
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") save.click(); });
+    return [
+      el("div", { class: "row secret-row" }, el("label", { class: "lbl" }, label + ":"), inp,
+        el("span", { class: "set" + (isSet ? " on" : "") }, isSet ? "set" : "not set"), save, clear),
+      el("div", { class: "row" }, el("span", { class: "lbl" }), el("span", { class: "hint" }, hint)),
+    ];
+  };
+  $("#sec-rows").replaceChildren(
+    el("div", { class: "row" }, el("span", { class: "muted" }, "Stored on this host and copied into each VM on first use. Never shown again here.")),
+    ...mk("claude_oauth_token", "Claude Code token", "from “claude setup-token” on a machine where you are signed in", !!s.claude_oauth_token_set),
+    ...mk("codex_api_key", "Codex API key", "an OpenAI API key; Codex in the VMs signs in with it", !!s.codex_api_key_set));
+}
+async function putSecret(body) {
+  try { renderSecrets((await j("/v1/jx/agents/secrets", { method: "PUT", json: body })) || {}); toast("Saved"); }
+  catch (e) { toast(e.message, 5000); }
+}
+
+// ======================================================================
+// tabs, status, refresh, the desktop bridge
+// ======================================================================
+let curTab = "threads", hidden = false;
+function showTab(name) {
+  if (!["threads", "sched", "mach"].includes(name)) name = "threads";
+  curTab = name;
+  setPref("tab", name);
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  $("#v-threads").hidden = name !== "threads";
+  $("#v-sched").hidden = name !== "sched";
+  $("#v-mach").hidden = name !== "mach";
+  hideMenu();
+  if (name === "sched") loadJobs();
+  if (name === "mach") loadMachines();
+  if (name === "threads") fitText();
+  renderStatus();
+}
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
+function renderStatus() {
+  if ($("#st-text").classList.contains("err") && Date.now() - lastErrAt < 8000) return;
+  let s = "";
+  if (curTab === "threads") {
+    if (boardOK === false) s = "Board backend not available";
+    else if (boardOK) {
+      const live = threads.filter(t => !t.archived);
+      const run = live.filter(t => t.state === "running").length, q = live.filter(t => t.state === "queued").length;
+      s = live.length + " thread" + (live.length === 1 ? "" : "s") + (run ? " · " + run + " running" : "") + (q ? " · " + q + " queued" : "");
+    }
+  } else if (curTab === "sched") {
+    s = cronOK === false ? "Schedules not available" : jobs.length + " schedule" + (jobs.length === 1 ? "" : "s")
+      + " · " + jobs.filter(x => x.enabled).length + " enabled";
+  } else {
+    const run = jvms.filter(v => v.state === "running").length;
+    s = jvms.length ? run + " of " + jvms.length + " VMs running" : "";
+  }
+  status(s);
+  $("#st-link").textContent = curTab === "threads" && view.id ? view.link : "";
+}
+
+async function refresh() {
+  await loadVMs();
+  await loadThreads();
+  if (curTab === "sched") loadJobs();
+  if (curTab === "mach") loadMachines();
+}
+setInterval(() => {
+  if (hidden || document.hidden) return;
+  if (curTab === "mach") loadMachines();
+  else if (curTab === "sched") loadJobs();
+  else { renderList(); }
+}, 15000);
+setInterval(() => { if (!hidden && !document.hidden) loadVMs(); }, 60000);
+
+window.addEventListener("message", e => {
+  if (e.origin !== location.origin || !e.data) return;
+  const m = e.data;
+  if (m.exe === "hide") {
+    hidden = true;
+    closeStream();
+    closeBoardStream();
+  } else if (m.exe === "show") {
+    if (!hidden) return;
+    hidden = false;
+    refresh().then(() => { openBoardStream(); if (view.id) openStream(); });
+  } else if (m.exe === "open" && typeof m.thread === "string") {
+    showTab("threads");
+    openThread(m.thread);
+  }
+});
+
+// ---- desktop window plumbing (the same bridge as Notes and Hub) ----
+window.addEventListener("pointerdown", () => {
+  if (window.parent !== window) parent.postMessage({ exe: "focus" }, location.origin);
+}, { capture: true, passive: true });
+const grow = $("#grow");
+if (window.parent === window) grow.style.display = "none";
+grow.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  grow.setPointerCapture(e.pointerId);
+  const sx = e.clientX, sy = e.clientY;
+  const move = ev =>
+    parent.postMessage({ exe: "grow", dx: ev.clientX - sx, dy: ev.clientY - sy }, location.origin);
+  const up = () => {
+    grow.removeEventListener("pointermove", move);
+    grow.removeEventListener("pointerup", up);
+    parent.postMessage({ exe: "grow-end" }, location.origin);
+  };
+  grow.addEventListener("pointermove", move);
+  grow.addEventListener("pointerup", up);
+  parent.postMessage({ exe: "grow-start" }, location.origin);
+});
+document.addEventListener("scroll", e => {
+  const t = e.target;
+  if (!(t instanceof Element)) return;
+  t.classList.toggle("scrolled-y", t.scrollTop >= 1);
+  t.classList.toggle("at-y-end", t.scrollTop >= 1 && t.scrollTop >= t.scrollHeight - t.clientHeight - 1);
+}, { capture: true, passive: true });
+
+// ---- boot ----
+(async () => {
+  renderComposer();
+  fitText();
+  showTab(pref("tab", "threads"));
+  await loadVMs();
+  await loadThreads();
+  openBoardStream();
+  const want = QS.get("thread");
+  if (want) openThread(want);
+  else if (!IS_MOBILE) newTask();
+  else { renderHead(); msgs.replaceChildren(); }
+})();
+</script>
+</body>
+</html>
