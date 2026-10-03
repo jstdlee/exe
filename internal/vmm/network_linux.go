@@ -82,6 +82,7 @@ func (m *fcManager) allocateNetwork() (*vmNetwork, error) {
 			HostIP:    host.String(),
 			GuestIP:   guest.String(),
 			PrefixLen: 30,
+			DNS:       append([]string(nil), m.opts.Firecracker.DNS...),
 		}, nil
 	}
 	return nil, fmt.Errorf("Firecracker network %s has no free /30 subnets", m.network.String())
@@ -173,7 +174,13 @@ func (m *fcManager) outboundInterface() (string, error) {
 	if configured := strings.TrimSpace(m.opts.Firecracker.OutboundInterface); configured != "" {
 		return configured, nil
 	}
-	output, err := exec.Command("ip", "-4", "route", "show", "default").Output()
+	// Ask for the route the kernel would really use: under policy routing
+	// (a VPN such as Mullvad or WireGuard) it differs from the main table's
+	// default route, and NAT out of the wrong interface drops every packet.
+	output, err := exec.Command("ip", "-4", "route", "get", "1.1.1.1").Output()
+	if err != nil {
+		output, err = exec.Command("ip", "-4", "route", "show", "default").Output()
+	}
 	if err != nil {
 		return "", fmt.Errorf("detect outbound interface: %w", err)
 	}

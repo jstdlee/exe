@@ -148,6 +148,7 @@ func cmdServe() error {
 			NetworkHelper:     cfg.Firecracker.NetworkHelper,
 			NetworkCIDR:       cfg.Firecracker.NetworkCIDR,
 			OutboundInterface: cfg.Firecracker.OutboundInterface,
+			DNS:               cfg.Firecracker.DNS,
 		},
 		QEMU: vmm.QEMUOptions{
 			Binary:      cfg.QEMU.Binary,

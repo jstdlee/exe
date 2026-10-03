@@ -644,16 +644,27 @@ func randomMAC() (string, error) {
 	return net.HardwareAddr(buf).String(), nil
 }
 
+var defaultDNS = []string{"1.1.1.1", "8.8.8.8"}
+
+func guestDNS(network *vmNetwork) []string {
+	if len(network.DNS) > 0 {
+		return network.DNS
+	}
+	return defaultDNS
+}
+
 func systemdNetworkConfig(mac string, network *vmNetwork) string {
+	var dns strings.Builder
+	for _, d := range guestDNS(network) {
+		dns.WriteString("DNS=" + d + "\n")
+	}
 	return fmt.Sprintf(`[Match]
 MACAddress=%s
 
 [Network]
 Address=%s/%d
 Gateway=%s
-DNS=1.1.1.1
-DNS=8.8.8.8
-`, mac, network.GuestIP, network.PrefixLen, network.HostIP)
+%s`, mac, network.GuestIP, network.PrefixLen, network.HostIP, dns.String())
 }
 
 // alpineInterfaces pins eth0 to the address the kernel's ip= already set,
@@ -674,7 +685,11 @@ func configureLinuxGuest(disk, hostname, user, authorizedKey, mac, image string,
 		if err := replaceExt4File(disk, "/etc/network/interfaces", alpineInterfaces(network)); err != nil {
 			return fmt.Errorf("configure guest network: %w", err)
 		}
-		if err := replaceExt4File(disk, "/etc/resolv.conf", "nameserver 1.1.1.1\nnameserver 8.8.8.8\n"); err != nil {
+		var resolv strings.Builder
+		for _, d := range guestDNS(network) {
+			resolv.WriteString("nameserver " + d + "\n")
+		}
+		if err := replaceExt4File(disk, "/etc/resolv.conf", resolv.String()); err != nil {
 			return fmt.Errorf("configure guest DNS: %w", err)
 		}
 	} else if err := writeExt4File(disk, "/etc/systemd/network/10-exe.network", systemdNetworkConfig(mac, network)); err != nil {
@@ -903,12 +918,21 @@ func (m *fcManager) waitSSH(ctx context.Context, host string, timeout time.Durat
 	}
 }
 
+// bootDNS is the kernel ip= DNS fields: at most two servers.
+func bootDNS(network *vmNetwork) string {
+	dns := guestDNS(network)
+	if len(dns) > 2 {
+		dns = dns[:2]
+	}
+	return strings.Join(dns, ":")
+}
+
 func (m *fcManager) writeFirecrackerConfig(name string, mt *vmMeta, kernel string) (string, error) {
 	dir := m.vmDir(name)
 	bootArgs := fmt.Sprintf(
 		"console=ttyS0 reboot=k panic=1 pci=off fstab=no network-config=disabled ds=nocloud;s=file:///var/lib/exe-seed/ "+
-			"ifname=eth0:%s ip=%s::%s:255.255.255.252:%s:eth0:off:1.1.1.1:8.8.8.8 root=/dev/vda rw",
-		mt.MAC, mt.Network.GuestIP, mt.Network.HostIP, name,
+			"ifname=eth0:%s ip=%s::%s:255.255.255.252:%s:eth0:off:%s root=/dev/vda rw",
+		mt.MAC, mt.Network.GuestIP, mt.Network.HostIP, name, bootDNS(mt.Network),
 	)
 	cfg := fcConfig{
 		BootSource: fcBootSource{

@@ -96,8 +96,13 @@ type FirecrackerConfig struct {
 	NetworkHelper string `json:"network_helper"`
 	// NetworkCIDR is divided into one /30 subnet per VM.
 	NetworkCIDR string `json:"network_cidr"`
-	// OutboundInterface is auto-detected from the default route when empty.
+	// OutboundInterface is auto-detected from the route to the internet
+	// when empty (which follows a VPN's policy routing).
 	OutboundInterface string `json:"outbound_interface"`
+	// DNS lists the resolvers a new VM is given; empty means 1.1.1.1 and
+	// 8.8.8.8. Behind a VPN that blocks outside DNS (Mullvad), use the
+	// VPN's resolver, e.g. ["10.64.0.1"].
+	DNS []string `json:"dns,omitempty"`
 }
 
 // QEMUConfig configures the Windows backend: QEMU accelerated by the Windows
@@ -353,6 +358,13 @@ func (c *Config) Normalize() {
 	c.Firecracker.NetworkHelper = strings.TrimSpace(c.Firecracker.NetworkHelper)
 	c.Firecracker.NetworkCIDR = strings.TrimSpace(c.Firecracker.NetworkCIDR)
 	c.Firecracker.OutboundInterface = strings.TrimSpace(c.Firecracker.OutboundInterface)
+	var dns []string
+	for _, d := range c.Firecracker.DNS {
+		if d = strings.TrimSpace(d); net.ParseIP(d) != nil {
+			dns = append(dns, d)
+		}
+	}
+	c.Firecracker.DNS = dns
 	c.QEMU.Binary = strings.TrimSpace(c.QEMU.Binary)
 	c.QEMU.FirmwareDir = strings.TrimSpace(c.QEMU.FirmwareDir)
 	c.QEMU.NetworkCIDR = strings.TrimSpace(c.QEMU.NetworkCIDR)

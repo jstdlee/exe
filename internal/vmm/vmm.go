@@ -108,6 +108,7 @@ type FirecrackerOptions struct {
 	NetworkHelper     string
 	NetworkCIDR       string
 	OutboundInterface string
+	DNS               []string
 }
 
 // QEMUOptions configures the Windows backend: QEMU accelerated by the
@@ -125,6 +126,8 @@ type vmNetwork struct {
 	GuestIP           string `json:"guest_ip"`
 	PrefixLen         int    `json:"prefix_len"`
 	OutboundInterface string `json:"outbound_interface,omitempty"`
+	// DNS is the guest's resolvers, fixed at create; empty = defaultDNS.
+	DNS []string `json:"dns,omitempty"`
 }
 
 type vmMeta struct {
