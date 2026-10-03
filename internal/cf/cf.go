@@ -60,8 +60,12 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(c.Token))
+	// A body-less request must not carry Content-Type: GET
+	// /user/tokens/verify answers 6003 "Invalid request headers" to it.
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	resp, err := c.httpc().Do(req)
 	if err != nil {
 		return err
