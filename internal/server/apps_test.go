@@ -84,7 +84,7 @@ func TestSystemAppAliases(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &apps); err != nil {
 		t.Fatal(err)
 	}
-	if len(apps) != 3 {
+	if all, _ := sysAppsFS.ReadDir("sysapps"); len(apps) != len(all) {
 		t.Fatalf("unexpected app list: %+v", apps)
 	}
 	for _, app := range apps {

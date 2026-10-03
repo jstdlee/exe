@@ -1,1 +1,58 @@
 /* jstdlee desktop extensions; see docs/jstdlee/PLAN.md */
+
+/* ---- only Claude Code and Codex: the removed agent UI never shows ---- */
+#chat-icon, #dd-chat-item, #win-chat, #cb-overlay,
+#win-detail .tab[data-tab="vibe"], #win-detail .tab[data-tab="sess"],
+#pane-vibe, #pane-sess, #n-mem-head, #n-memory { display: none !important; }
+
+/* the Set API Token window's note after a 401 */
+.jx-token-note { margin-bottom: 8px; padding: 5px 8px; background: #ffffc9; border: 1px solid var(--black); font-size: 11px; }
+
+/* ---- the terminal kit: key bar, compose box, select layer ----
+   A row of its own under the screen (docs/platinum.md: buttons never sit
+   on a status line): its top line is its one seam with the terminal, the
+   held row and the status bar keep their own. */
+.jx-host { position: relative; }
+.jx-kit { flex: none; border-top: 1px solid var(--black); background: var(--g300); }
+/* the VM window's Terminal tab: the box is framed, so the kit is framed
+   below it and shares the box's bottom line */
+#pane-term .jx-kit { border: 1px solid var(--black); border-top: 0; margin-top: 0; }
+#term-box[hidden] + .jx-kit { display: none !important; }
+.jx-keys { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px; }
+.jx-keys button.ghost { position: relative; min-width: 34px; height: 20px; padding: 2px 6px; flex: none; }
+/* Ctrl or Alt armed for the next key: the depressed segment; held: locked */
+.jx-keys button.ghost.on { background: #888; color: #fff;
+  box-shadow: inset 1px 1px 0 #666, inset -1px -1px 0 #aaa; }
+.jx-keys button.ghost.lock { background: #666; color: #fff;
+  box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #888, inset 2px 2px 0 #555, inset -2px -2px 0 #777; }
+.jx-compose { border-top: 1px solid var(--black); padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.jx-compose textarea { width: 100%; min-height: 40px; resize: none; font: 12px/1.45 var(--mono);
+  user-select: text; -webkit-user-select: text; }
+.jx-crow { display: flex; align-items: center; gap: 12px; }
+.jx-crow .popup { width: 130px; flex: none; }
+.jx-crow button.ghost { min-width: 58px; }
+.jx-check { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.jx-grow { flex: 1; min-width: 0; }
+.jx-sel { position: absolute; z-index: 20; display: flex; flex-direction: column; background: #fff;
+  border: 1px solid var(--black); box-sizing: border-box; }
+.jx-sel-text { flex: 1; min-height: 0; margin: 0; overflow: auto; padding: 6px 8px;
+  font: 11px/1.4 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: #000;
+  user-select: text; -webkit-user-select: text; cursor: text; touch-action: pan-x pan-y; }
+.jx-sel-bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px;
+  border-top: 1px solid var(--black); background: var(--g300); }
+.jx-sel-bar button.ghost { min-width: 58px; }
+.jx-sel-note { font-size: 11px; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* a phone: the bar wraps to two rows of 20px keys whose hit areas grow
+   past their pixels (the close box's trick), 10px apart so they never
+   overlap; the Terminal tab's box gives the kit its height back */
+body.mobile .jx-keys { gap: 10px 6px; padding: 8px; }
+body.mobile .jx-keys button.ghost::before { content: ""; position: absolute; inset: -5px -3px; box-sizing: border-box; }
+body.mobile .jx-sel-bar button.ghost, body.mobile .jx-crow button.ghost { position: relative; }
+body.mobile .jx-sel-bar button.ghost::before, body.mobile .jx-crow button.ghost::before {
+  content: ""; position: absolute; inset: -6px -3px; box-sizing: border-box; }
+body.mobile #pane-term.jx-has-kit #term-box { height: calc(var(--vvh, 100dvh) - 260px - var(--jx-kit-h, 0px)); min-height: 140px; }
+
+/* the Terminal tab in guest tmux: while the alternate screen shows, a
+   finger drag scrolls tmux's history (jx.js), never the page */
+#term-box.jx-alt { touch-action: none; }
