@@ -572,4 +572,38 @@
       }
     }, { passive: true });
   }
+
+  // ==================================================================
+  // Workspace: open every text file in the editor
+  // ==================================================================
+  // Upstream opens only a fixed list of extensions in the editor; a file
+  // with no extension or another one ("notes", "todo.note", ".rst") opened
+  // as a read-only blob in a new tab. Widen the list, and for anything else
+  // under 1 MB look at the bytes: valid UTF-8 without NULs is text.
+  try {
+    ("rst adoc asciidoc org tex bib lua pl php r jl dart vue svelte jsonl ndjson " +
+      "properties lock patch diff srt vtt note notes text me cmake gradle sbt nix " +
+      "tf hcl proto graphql gql zig nim ex exs erl hs ml clj scala cs fs vb ps1 bat").split(" ")
+      .forEach(x => ED_EXT.add(x));
+    ["NOTES", "AUTHORS", "CONTRIBUTING", "Procfile", "Justfile", "Gemfile", "Vagrantfile"]
+      .forEach(n => ED_NAMES.add(n));
+  } catch (e) {}
+  const origOpenWorkspaceFile = window.openWorkspaceFile;
+  if (typeof origOpenWorkspaceFile === "function") {
+    window.openWorkspaceFile = async function (rel) {
+      try {
+        const r = await api(wsUrl(rel));
+        const blob = await r.blob();
+        if (blob.size < 1 << 20) {
+          const head = new Uint8Array(await blob.slice(0, 8192).arrayBuffer());
+          if (!head.includes(0)) {
+            // stream: a multi-byte character cut at 8 KB is not an error
+            new TextDecoder("utf-8", { fatal: true }).decode(head, { stream: true });
+            return openEditorWin(rel);
+          }
+        }
+      } catch (e) { /* binary or unreadable: fall through */ }
+      return origOpenWorkspaceFile(rel);
+    };
+  }
 })();
