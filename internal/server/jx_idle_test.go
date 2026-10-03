@@ -105,8 +105,9 @@ const jxTestToken = "jx-test-token"
 // and no background loops.
 func newJXTestServer(t *testing.T, vms *jxFakeVMs) (*Server, *httptest.Server) {
 	t.Helper()
+	prev := jxStartLoops
 	jxStartLoops = false
-	t.Cleanup(func() { jxStartLoops = true })
+	t.Cleanup(func() { jxStartLoops = prev })
 	var mgr vmm.Manager
 	if vms != nil {
 		mgr = vms

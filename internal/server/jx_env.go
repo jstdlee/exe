@@ -456,6 +456,13 @@ func (s *Server) handleJXEnvUp(w http.ResponseWriter, r *http.Request) {
 		n.status("creating %s", name)
 		spec.Name, spec.Image = name, image
 		s.fillSpec(&spec)
+		// the same memory guard as POST /v1/vms (jx_idle.go)
+		if ctl, cerr := s.jxIdleCtl(); cerr == nil {
+			if err = ctl.MakeRoom(ctx, name, spec.MemoryMB); err != nil {
+				n.abort(fmt.Errorf("create %s: %w", name, err))
+				return
+			}
+		}
 		if info, err = s.VMs.Create(ctx, spec); err != nil {
 			n.abort(fmt.Errorf("create %s: %w", name, err))
 			return

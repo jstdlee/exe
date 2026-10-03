@@ -253,6 +253,10 @@ func jxEnsureVMUpImpl(s *Server, ctx context.Context, vm string) error {
 	if s.VMs == nil {
 		return errors.New("no VM backend on this node")
 	}
+	// a snapshot or restore is copying the disk (jx_snap.go)
+	if jxSnapBusy(vm) {
+		return fmt.Errorf("%s: a snapshot is copying its disk; try again when it is done", vm)
+	}
 	info, err := s.VMs.Get(ctx, vm)
 	if err != nil {
 		return err

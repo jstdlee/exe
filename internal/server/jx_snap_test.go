@@ -17,9 +17,9 @@ import (
 	"exe/internal/vmm"
 )
 
-func snapTestServer(t *testing.T, state string) (*Server, *jxFakeVMs, *httptest.Server) {
+func snapTestServer(t *testing.T, state string) (*Server, *envFakeVMs, *httptest.Server) {
 	t.Helper()
-	vms := newJXFakeVMs(&vmm.Info{Name: "box", State: "running", IP: "192.0.2.10"})
+	vms := newEnvFakeVMs(&vmm.Info{Name: "box", State: "running", IP: "192.0.2.10"})
 	s := New(&config.Config{SSHUser: "dev"}, vms, nil, filepath.Join(t.TempDir(), "id"), state)
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)

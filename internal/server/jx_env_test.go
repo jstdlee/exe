@@ -25,30 +25,30 @@ import (
 	"exe/internal/vmm"
 )
 
-// jxFakeVMs is an in-memory vmm.Manager.
-type jxFakeVMs struct {
+// envFakeVMs is an in-memory vmm.Manager.
+type envFakeVMs struct {
 	mu    sync.Mutex
 	vms   map[string]*vmm.Info
 	calls []string
 }
 
-func newJXFakeVMs(vms ...*vmm.Info) *jxFakeVMs {
-	f := &jxFakeVMs{vms: map[string]*vmm.Info{}}
+func newEnvFakeVMs(vms ...*vmm.Info) *envFakeVMs {
+	f := &envFakeVMs{vms: map[string]*vmm.Info{}}
 	for _, v := range vms {
 		f.vms[v.Name] = v
 	}
 	return f
 }
 
-func (f *jxFakeVMs) log(s string) { f.calls = append(f.calls, s) }
+func (f *envFakeVMs) log(s string) { f.calls = append(f.calls, s) }
 
-func (f *jxFakeVMs) Calls() []string {
+func (f *envFakeVMs) Calls() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.calls)
 }
 
-func (f *jxFakeVMs) Create(_ context.Context, spec vmm.Spec) (*vmm.Info, error) {
+func (f *envFakeVMs) Create(_ context.Context, spec vmm.Spec) (*vmm.Info, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.log(fmt.Sprintf("create %s image=%s mem=%d", spec.Name, spec.Image, spec.MemoryMB))
@@ -58,7 +58,7 @@ func (f *jxFakeVMs) Create(_ context.Context, spec vmm.Spec) (*vmm.Info, error) 
 	return &c, nil
 }
 
-func (f *jxFakeVMs) Start(_ context.Context, name string) (*vmm.Info, error) {
+func (f *envFakeVMs) Start(_ context.Context, name string) (*vmm.Info, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.log("start " + name)
@@ -71,7 +71,7 @@ func (f *jxFakeVMs) Start(_ context.Context, name string) (*vmm.Info, error) {
 	return &c, nil
 }
 
-func (f *jxFakeVMs) Stop(_ context.Context, name string) error {
+func (f *envFakeVMs) Stop(_ context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.log("stop " + name)
@@ -86,9 +86,9 @@ func (f *jxFakeVMs) Stop(_ context.Context, name string) error {
 	return nil
 }
 
-func (f *jxFakeVMs) Delete(context.Context, string) error { return errors.New("not in tests") }
+func (f *envFakeVMs) Delete(context.Context, string) error { return errors.New("not in tests") }
 
-func (f *jxFakeVMs) List(context.Context) ([]*vmm.Info, error) {
+func (f *envFakeVMs) List(context.Context) ([]*vmm.Info, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []*vmm.Info
@@ -99,7 +99,7 @@ func (f *jxFakeVMs) List(context.Context) ([]*vmm.Info, error) {
 	return out, nil
 }
 
-func (f *jxFakeVMs) Get(_ context.Context, name string) (*vmm.Info, error) {
+func (f *envFakeVMs) Get(_ context.Context, name string) (*vmm.Info, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	v, ok := f.vms[name]
@@ -172,13 +172,20 @@ func (r *fakeRunner) Commands() []string {
 	return slices.Clone(r.commands)
 }
 
-func envTestServer(t *testing.T, vms *jxFakeVMs) (*Server, *fakeRunner, *httptest.Server) {
+func envTestServer(t *testing.T, vms *envFakeVMs) (*Server, *fakeRunner, *httptest.Server) {
 	t.Helper()
 	s := New(&config.Config{SSHUser: "dev"}, vms, nil, filepath.Join(t.TempDir(), "id"), t.TempDir())
 	run := &fakeRunner{t: t, s: s}
 	old := jxEnvRunner
 	jxEnvRunner = func(*Server, *vmm.Info) envRunner { return run }
 	t.Cleanup(func() { jxEnvRunner = old })
+	// the real jxEnsureVMUp (jx_idle.go) dials SSH; here a start is enough
+	oldUp := jxEnsureVMUp
+	jxEnsureVMUp = func(s *Server, ctx context.Context, vm string) error {
+		_, err := s.VMs.Start(ctx, vm)
+		return err
+	}
+	t.Cleanup(func() { jxEnsureVMUp = oldUp })
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	return s, run, srv
@@ -213,7 +220,7 @@ func lastDone(t *testing.T, evs []EnvEvent) int {
 }
 
 func TestJXEnvPlan(t *testing.T) {
-	_, _, srv := envTestServer(t, newJXFakeVMs())
+	_, _, srv := envTestServer(t, newEnvFakeVMs())
 	body := `{"files":{"package.json":"{\"engines\":{\"node\":\"22\"}}","apt.txt":"ffmpeg\n"},"image":"alpine"}`
 	resp, err := http.Post(srv.URL+"/v1/jx/env/plan", "application/json", strings.NewReader(body))
 	if err != nil {
@@ -260,7 +267,7 @@ func projectTar(t *testing.T) *bytes.Buffer {
 }
 
 func TestJXEnvUpCreatesVM(t *testing.T) {
-	vms := newJXFakeVMs()
+	vms := newEnvFakeVMs()
 	s, run, srv := envTestServer(t, vms)
 	resp, err := http.Post(srv.URL+"/v1/jx/env/up?vm=box&image=alpine&mem=1024", "application/x-tar", projectTar(t))
 	if err != nil {
@@ -311,7 +318,7 @@ func TestJXEnvUpCreatesVM(t *testing.T) {
 }
 
 func TestJXEnvUpStartsStoppedVM(t *testing.T) {
-	vms := newJXFakeVMs(&vmm.Info{Name: "box", State: "stopped", Image: "debian"})
+	vms := newEnvFakeVMs(&vmm.Info{Name: "box", State: "stopped", Image: "debian"})
 	_, run, srv := envTestServer(t, vms)
 	resp, err := http.Post(srv.URL+"/v1/jx/env/up?vm=box", "application/x-tar", bytes.NewReader(nil))
 	if err != nil {
@@ -335,7 +342,7 @@ func TestJXEnvUpStartsStoppedVM(t *testing.T) {
 }
 
 func TestJXEnvUpRejects(t *testing.T) {
-	_, _, srv := envTestServer(t, newJXFakeVMs())
+	_, _, srv := envTestServer(t, newEnvFakeVMs())
 	evil := func(entries ...tar.Header) io.Reader {
 		var buf bytes.Buffer
 		tw := tar.NewWriter(&buf)
@@ -382,7 +389,7 @@ func TestJXEnvUpRejects(t *testing.T) {
 }
 
 func TestJXEnvRun(t *testing.T) {
-	vms := newJXFakeVMs(&vmm.Info{Name: "box", State: "stopped"})
+	vms := newEnvFakeVMs(&vmm.Info{Name: "box", State: "stopped"})
 	_, run, srv := envTestServer(t, vms)
 	post := func(body string) *http.Response {
 		resp, err := http.Post(srv.URL+"/v1/jx/env/run", "application/json", strings.NewReader(body))
