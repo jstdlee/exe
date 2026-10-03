@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [jstdlee]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
+          - os: macos-latest
+          - os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install tmux (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+      - name: Install tmux (macOS)
+        if: runner.os == 'macOS'
+        run: brew install tmux
+      - name: Build
+        if: runner.os != 'Windows'
+        run: make build
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: go build -o exe.exe ./cmd/exe
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exe-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            exe
+            exe.exe
+            exe-net-helper
+          if-no-files-found: ignore
