@@ -467,7 +467,7 @@ func TestBoardVMTurnThroughGuest(t *testing.T) {
 		t.Error("the token reached the log")
 	}
 	if runtime.GOOS != "windows" {
-		if fi, err := os.Stat(filepath.Join(s.jxDir(), "secrets.json")); err != nil || fi.Mode().Perm() != 0o600 {
+		if fi, err := os.Stat(filepath.Join(s.jxDir(), "secrets.json")); err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600) {
 			t.Errorf("secrets.json = %v %v", fi.Mode().Perm(), err)
 		}
 	}

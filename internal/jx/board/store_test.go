@@ -65,7 +65,7 @@ func TestStorePersistsThreadsAndEvents(t *testing.T) {
 			filepath.Join(dir, th.ID, "events.jsonl"): 0o600,
 		} {
 			st, err := os.Stat(p)
-			if err != nil || st.Mode().Perm() != want {
+			if err != nil || (runtime.GOOS != "windows" && st.Mode().Perm() != want) {
 				t.Errorf("%s mode = %v, want %v", p, st.Mode().Perm(), want)
 			}
 		}

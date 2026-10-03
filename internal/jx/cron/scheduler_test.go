@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -182,7 +183,7 @@ func TestStoreKeepsRunsAndPersists(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if fi.Mode().Perm()&0o077 != 0 {
+		if runtime.GOOS != "windows" && fi.Mode().Perm()&0o077 != 0 {
 			t.Errorf("%s mode %v", name, fi.Mode())
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -213,7 +214,7 @@ func TestStorePersistsAtomically(t *testing.T) {
 	}
 	for _, f := range []string{"vms.json", "settings.json"} {
 		fi, err := os.Stat(filepath.Join(dir, f))
-		if err != nil || fi.Mode().Perm() != 0o600 {
+		if err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600) {
 			t.Fatalf("%s: %v %v", f, fi, err)
 		}
 	}

@@ -35,7 +35,7 @@ func TestSecretStore(t *testing.T) {
 		t.Error("an unchanged set bumped the generation")
 	}
 	if runtime.GOOS != "windows" {
-		if st, err := os.Stat(path); err != nil || st.Mode().Perm() != 0o600 {
+		if st, err := os.Stat(path); err != nil || (runtime.GOOS != "windows" && st.Mode().Perm() != 0o600) {
 			t.Errorf("secrets file mode = %v %v", st.Mode().Perm(), err)
 		}
 	}
