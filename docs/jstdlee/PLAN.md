@@ -226,3 +226,13 @@ rm | run]`.
   guest has tmux) so they survive a dropped connection; reconnect button.
 - 401 from any API call opens the Set API Token window once (with a note).
 - Hide the removed agent UI (list in "Only Claude Code and Codex").
+
+## Feature E — Hub bridge (private hub as the task board)
+
+A private exe-hub (loopback only, open gate) is the conversation channel.
+An owner's root post starting with `@agent [claude|codex] [on <vm|host>]:`
+starts a Board thread; owner replies in that hub thread are its next turns;
+`/stop`, `/status` control it. The agent answers under its own key
+(`jx/hubbridge_ed25519`), one reply per turn (clipped to 8 KB). Only
+owners' posts are acted on. API `GET|PUT /v1/jx/hubbridge`. Code:
+`internal/jx/hubbridge/`, `internal/server/jx_hubbridge.go`.
