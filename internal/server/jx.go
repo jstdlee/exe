@@ -88,6 +88,9 @@ func (s *Server) jxWrap(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusGone, map[string]string{"error": "removed in this build: use the Board with Claude Code or Codex"})
 			return
 		}
+		if !s.jxMemoryGuard(w, r) { // jx_idle.go
+			return
+		}
 		if name, sub, ok := vmFromPath(r.URL.Path); ok {
 			switch {
 			case sub == "terminal":
