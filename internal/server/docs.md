@@ -1219,6 +1219,18 @@ runs the bootstrap; `exe env run <vm> -- <command>` runs a job and can
 copy outputs back. `exe snap create|restore|rm <vm>` copies the VM's disk
 (reflink or sparse, never a full copy); restore replaces the disk.
 
+## VM Tools
+
+A VM window's **Tools** tab lists about 40 terminal programs by kind:
+Claude Code and Codex, monitors (btop, htop, Glances), file managers
+(ncdu, nnn, Midnight Commander), git (lazygit, tig, gh), editors (Vim,
+Neovim, micro), data clients (sqlite3, psql, redis-cli), text browsers,
+shell tools (ripgrep, fd, bat, fzf, tmux) and language REPLs. One click
+opens the tool in a terminal window on that VM; a tool that is missing is
+installed first (apt on Debian, apk on Alpine). A tool that the VM's
+system does not package is greyed out. Tools you run with arguments
+(ripgrep, jq, gh) open a shell once they are installed.
+
 ## Terminals on a phone
 
 Every terminal gets a key bar on a phone (Esc, Tab, Ctrl, Alt, arrows,

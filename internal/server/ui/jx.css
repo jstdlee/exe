@@ -56,3 +56,14 @@ body.mobile #pane-term.jx-has-kit #term-box { height: calc(var(--vvh, 100dvh) - 
 /* the Terminal tab in guest tmux: while the alternate screen shows, a
    finger drag scrolls tmux's history (jx.js), never the page */
 #term-box.jx-alt { touch-action: none; }
+
+/* VM window: Tools tab */
+#pane-tools.jx-tools { overflow: auto; padding: 8px 12px; }
+.jx-tools-note { padding: 0 0 6px; }
+.jx-tools-cat { font-weight: bold; margin: 10px 0 4px; }
+.jx-tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 12px; }
+.jx-tool-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.jx-tool { flex: none; width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jx-tool-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.mobile .jx-tools-grid { grid-template-columns: 1fr; }
+body.mobile .jx-tool { width: 150px; min-height: 32px; }

@@ -606,4 +606,65 @@
       return origOpenWorkspaceFile(rel);
     };
   }
+
+  // ==================================================================
+  // VM window: Tools tab (catalog from GET /v1/jx/tools)
+  // ==================================================================
+  // One click opens the tool in a VM terminal window; the guest command
+  // installs it first when it is missing. Terminal windows get the phone
+  // key bar like every other terminal (section above).
+  (() => {
+    const bar = document.querySelector("#win-detail .tabbar");
+    const panel = document.querySelector("#win-detail .tabpanel");
+    if (!bar || !panel) return;
+    const tab = el("div", { class: "tab", "data-tab": "tools" }, "Tools");
+    const after = bar.querySelector('[data-tab="term"]');
+    after ? after.after(tab) : bar.append(tab);
+    const pane = el("div", { class: "pane jx-tools", id: "pane-tools", hidden: "" });
+    panel.append(pane);
+    tab.addEventListener("click", () => showPane("tools"));
+
+    let catalog = null;
+    const imageOf = async vm => {
+      try { return (await j("/v1/vms/" + encodeURIComponent(vm))).image || "debian"; } catch (e) { return "debian"; }
+    };
+    const open = (t, vm) => {
+      if ($("#d-state") && $("#d-state").textContent !== "running") { toast("Start " + vm + " first"); return; }
+      const w = openHostTermWin(null, t.command, vm);
+      const title = w && w.querySelector(".title");
+      if (title) title.textContent = vm + " — " + t.name;
+    };
+    async function render() {
+      const vm = currentVM;
+      if (!vm) return;
+      pane.replaceChildren(el("div", { class: "muted jx-tools-note" }, "Loading tools…"));
+      try { catalog = catalog || await j("/v1/jx/tools"); }
+      catch (e) { pane.replaceChildren(el("div", { class: "muted jx-tools-note" }, "Tools are not available: " + e.message)); return; }
+      const image = await imageOf(vm);
+      if (currentVM !== vm) return;
+      const kids = [el("div", { class: "muted jx-tools-note" },
+        "Opens in a terminal on " + vm + ". A missing tool is installed first (" + (image === "alpine" ? "apk" : "apt") + ").")];
+      for (const cat of catalog.categories) {
+        const items = catalog.tools.filter(t => t.category === cat);
+        if (!items.length) continue;
+        kids.push(el("div", { class: "jx-tools-cat" }, cat));
+        const grid = el("div", { class: "jx-tools-grid" });
+        for (const t of items) {
+          const ok = t.agent || (image === "alpine" ? t.alpine : t.debian);
+          const b = el("button", { class: "ghost jx-tool", title: t.desc }, t.name);
+          if (!ok) { b.disabled = true; b.title = t.name + " is not packaged for " + (image === "alpine" ? "Alpine" : "Debian"); }
+          b.addEventListener("click", () => open(t, vm));
+          grid.append(el("div", { class: "jx-tool-row" }, b, el("span", { class: "muted jx-tool-desc" }, t.desc)));
+        }
+        kids.push(grid);
+      }
+      pane.replaceChildren(...kids);
+    }
+    const showPane1 = W.showPane;
+    W.showPane = function (key) {
+      const r = showPane1.call(this, key);
+      if (key === "tools") render();
+      return r;
+    };
+  })();
 })();
