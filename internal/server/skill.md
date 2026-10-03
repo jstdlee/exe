@@ -233,3 +233,26 @@ This build adds routes under `/v1/jx/`, same token. The CLI wraps them
   (open terminal, SSH, agent turn) unless `force`. **Restore replaces the
   disk: only when the user asks.**
 - `GET /v1/jx/leases`: what keeps each VM busy.
+- **Board** (Claude Code / Codex as task threads; the only agents in this
+  build, the Ollama/ChatGPT chat agent and `exe code` are removed):
+  `POST /v1/jx/board/threads` `{"target":"VM|host","agent":"claude|codex",
+  "prompt","session?","fork?"}` starts a thread (one headless CLI session;
+  the VM starts and the CLI installs on demand). `POST
+  .../threads/{id}/turns` `{"prompt"}` continues it (queued while a turn
+  runs), `POST .../stop`, `GET .../threads/{id}` (turns + events), `GET
+  .../threads/{id}/events?after=N` (SSE). `GET /v1/jx/board/sessions?
+  target=&agent=` lists existing CLI sessions to continue. CLI: `exe board
+  ls|new|say|tail|stop`. VM turns run with permissions bypassed (the VM is
+  the sandbox); host turns do not.
+- **Idle stop**: a VM stops after N idle minutes with no lease (terminal,
+  SSH, agent turn, env job, cron run, pin). `GET /v1/jx/vms`, `PUT
+  /v1/jx/vms/{name}` `{"kind":"dev|agent|service|job","pinned","idle_minutes"}`,
+  `POST .../keep`. Pin a VM that serves something or runs long jobs.
+  CLI: `exe idle ls|set|keep`.
+- **Memory guard**: a VM create/start that would push host memory over
+  `memory_cap_percent` (default 80) first stops idle VMs, else answers
+  507. `GET /v1/jx/memory`.
+- **Cron**: `GET|POST /v1/jx/cron`, `PUT|DELETE /v1/jx/cron/{id}`, `POST
+  .../run`, `GET .../runs`. Jobs `{"name","schedule":"*/30 * * * *|@every 1h",
+  "kind":"board|shell","target","agent?","prompt?","thread_id?","command?"}`.
+  CLI: `exe cron ls|add|rm|run|runs`.
