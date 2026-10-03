@@ -118,14 +118,16 @@ func (m *fcManager) setupNetwork(name string, mt *vmMeta) error {
 	}
 	mt.Network.Tap = tapName(name)
 
+	// Find the outbound interface before tearing anything down, so a
+	// host with no default route fails with the old rules still in place.
+	outbound, err := m.outboundInterface()
+	if err != nil {
+		return err
+	}
 	if mt.Network.OutboundInterface != "" {
 		if err := m.runNetworkHelper("cleanup", name, mt.Network); err != nil {
 			return fmt.Errorf("clean stale network for VM %s: %w", name, err)
 		}
-	}
-	outbound, err := m.outboundInterface()
-	if err != nil {
-		return err
 	}
 	if outbound == mt.Network.Tap {
 		return fmt.Errorf("outbound interface cannot be VM TAP %s", outbound)
