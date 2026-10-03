@@ -47,13 +47,12 @@ Usage:
   exe rm <name>
   exe ip <name>
   exe ssh <name> [command...]
-  exe code <name> [-m model] <prompt...>   vibecode inside the VM (Ollama agent)
   exe expose <name> -port N [-sub name]    publish https://<sub>.<domain> -> VM port
   exe expose <host> -redirect https://target  permanent redirect, preserving path/query
   exe site [-sub name]                     publish this daemon's homepage (default exe.<domain>)
   exe unexpose <host>                      remove a proxy route
   exe routes                               show proxy routes
-
+%JX_USAGE%
 The daemon also speaks SSH on :2222 (config ssh_listen):
   ssh -p 2222 exe@<mac>     lobby: ls / new / rm / code / expose ... (--json for scripts)
   ssh -p 2222 <vm>@<mac>    full SSH into the VM (scp, sftp, -L/-R; auto-starts it)
@@ -62,11 +61,18 @@ The daemon also speaks SSH on :2222 (config ssh_listen):
 func main() {
 	log.SetFlags(log.Ltime)
 	if len(os.Args) < 2 {
-		fmt.Print(usage)
+		fmt.Print(usageText())
 		os.Exit(2)
 	}
 	cmd, args := os.Args[1], os.Args[2:]
 	var err error
+	if run, ok := jxCommands[cmd]; ok { // jx_cli.go
+		if err := run(args); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	switch cmd {
 	case "serve":
 		err = cmdServe()
@@ -86,8 +92,6 @@ func main() {
 		err = cmdIP(args)
 	case "ssh":
 		err = cmdSSH(args)
-	case "code":
-		err = cmdCode(args)
 	case "expose":
 		err = cmdExpose(args)
 	case "site":
@@ -97,9 +101,9 @@ func main() {
 	case "routes":
 		err = cmdRoutes()
 	case "help", "-h", "--help":
-		fmt.Print(usage)
+		fmt.Print(usageText())
 	default:
-		fmt.Printf("unknown command %q\n\n%s", cmd, usage)
+		fmt.Printf("unknown command %q\n\n%s", cmd, usageText())
 		os.Exit(2)
 	}
 	if err != nil {
@@ -242,7 +246,7 @@ func cmdServe() error {
 		apiHandler = al.Wrap(apiHandler)
 		srv.AccessLogs = al.Ring
 	}
-	proxyHandler := px.Handler()
+	proxyHandler := srv.JXWrapProxy(px.Handler())
 	errc := make(chan error, 4)
 	serveHTTP := func(h http.Handler, lns ...net.Listener) *http.Server {
 		hs := &http.Server{Handler: h}

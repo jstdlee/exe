@@ -69,6 +69,8 @@ type Server struct {
 	cfg        atomic.Pointer[config.Config]
 	activeRuns sync.Map // transcript id -> struct{}
 
+	jx jxState // jstdlee extensions (jx.go)
+
 	// agentLast is the tmux session each agent's window showed last,
 	// by app — the tiebreak when tmux's own stamps cannot tell where a
 	// reopened window belongs (lastAgentSession, agentsessions.go).
@@ -336,7 +338,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /ui/", uiStatic)
 	mux.HandleFunc("GET /sw.js", handleServiceWorker)
 	mux.HandleFunc("GET /", s.handleUI)
-	return buildHeader(s.auth(mux))
+	s.registerJX(mux)
+	return buildHeader(s.auth(s.jxWrap(mux)))
 }
 
 // auth guards the API; the static UI page itself is public (it holds no

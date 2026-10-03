@@ -161,6 +161,7 @@ func (g *SSHGate) bridgeVM(sconn *ssh.ServerConn, chans <-chan ssh.NewChannel, r
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 	go func() { sconn.Wait(); cancel() }()
+	defer g.s.JXHold(name, "ssh")()
 
 	failAll := func(err error) {
 		log.Printf("ssh gate: vm %s: %v", name, err)
@@ -573,7 +574,7 @@ func (g *SSHGate) runLobbyCommand(ctx context.Context, out io.Writer, line strin
 		fmt.Fprintln(out, info.IP)
 		return 0
 	case "code":
-		return g.lobbyCode(ctx, out, rest, fail)
+		return fail("code: removed in this build; use the Board (Claude Code or Codex)")
 	case "expose":
 		return g.lobbyExpose(ctx, out, rest, fail)
 	case "unexpose":
