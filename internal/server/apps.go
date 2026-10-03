@@ -629,7 +629,7 @@ func (s *Server) handleWorkspaceList(w http.ResponseWriter, r *http.Request) {
 type dirEntry struct {
 	Name     string    `json:"name"`
 	Dir      bool      `json:"dir,omitempty"`
-	Size     int64     `json:"size,omitempty"`
+	Size     int64     `json:"size"` // always sent: an empty file must read as 0 bytes, not "unknown"
 	Modified time.Time `json:"modified"`
 }
 
