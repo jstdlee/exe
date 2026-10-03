@@ -17,6 +17,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -426,4 +428,24 @@ func (s *Server) jxVMInfo(ctx context.Context, name string) (*vmm.Info, error) {
 		return nil, vmm.ErrNoBackend
 	}
 	return s.VMs.Get(ctx, name)
+}
+
+// jxForgetVM drops a deleted VM's jx state: its pin lease, lease history
+// and idle policy. Snapshots stay (they are the only copy of its disk);
+// an empty snapshot folder goes.
+func (s *Server) jxForgetVM(vm string) {
+	rt := s.jxIdleRT()
+	rt.pinMu.Lock()
+	if release, ok := rt.pins[vm]; ok {
+		release()
+		delete(rt.pins, vm)
+	}
+	rt.pinMu.Unlock()
+	s.Leases().Forget(vm)
+	if rt.ctl != nil {
+		if err := rt.ctl.Store().ForgetPolicy(vm); err != nil {
+			log.Printf("jx: forget %s policy: %v", vm, err)
+		}
+	}
+	_ = os.Remove(filepath.Join(s.jxDir(), "snapshots", vm)) // only if empty
 }

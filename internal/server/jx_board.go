@@ -37,6 +37,10 @@ type jxBoard struct {
 	mu   sync.Mutex
 	subs map[chan []byte]bool
 
+	// guestLocks serializes guest setup (package installs, credentials)
+	// per VM: two at once collide on apt's or apk's lock.
+	guestLocks sync.Map // vm -> *sync.Mutex
+
 	installMu sync.Mutex
 	installs  map[string]bool // vm/agent installs in flight
 }
@@ -364,4 +368,12 @@ func (b *jxBoard) handleBoardEvents(w http.ResponseWriter, r *http.Request) {
 			fl.Flush()
 		}
 	}
+}
+
+// guestLock locks vm's guest setup and returns the unlock.
+func (b *jxBoard) guestLock(vm string) func() {
+	m, _ := b.guestLocks.LoadOrStore(vm, &sync.Mutex{})
+	mu := m.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
 }

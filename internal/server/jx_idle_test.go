@@ -317,3 +317,25 @@ func TestJXEnsureVMUpGuardsAndStarts(t *testing.T) {
 		t.Fatal("unknown VM came up")
 	}
 }
+
+// Deleting a VM drops its policy, so a new VM with the same name starts
+// from the defaults instead of inheriting, say, a 1-minute idle limit.
+func TestJXDeleteForgetsPolicy(t *testing.T) {
+	s, ts := newJXTestServer(t, newJXFakeVMs(vmm.Info{Name: "a", State: "running", MemoryMB: 512}))
+	if c := jxDo(t, ts, "PUT", "/v1/jx/vms/a", `{"pinned": true, "idle_minutes": 1}`, nil); c != 200 {
+		t.Fatalf("put: %d", c)
+	}
+	if c := jxDo(t, ts, "DELETE", "/v1/vms/a", nil, nil); c >= 300 {
+		t.Fatalf("delete: %d", c)
+	}
+	ctl, err := s.jxIdleCtl()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := ctl.Store().Policy("a"); p.Pinned || p.IdleMinutes != nil {
+		t.Fatalf("policy survived delete: %+v", p)
+	}
+	if st := s.Leases().Get("a"); len(st.Holders) != 0 {
+		t.Fatalf("pin lease survived delete: %+v", st.Holders)
+	}
+}

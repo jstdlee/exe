@@ -681,7 +681,7 @@ func cmdCreate(args []string) error {
 		return err
 	}
 	printVMs([]*vmm.Info{&info})
-	fmt.Printf("\nnext:\n  exe ssh %s\n  exe code %s \"build me ...\"\n  exe expose %s -port 8000\n", name, name, name)
+	fmt.Printf("\nnext:\n  exe ssh %s\n  exe board new %s claude \"build me ...\"\n  exe expose %s -port 8000\n", name, name, name)
 	return nil
 }
 

@@ -100,9 +100,25 @@ func (s *Server) jxWrap(next http.Handler) http.Handler {
 				s.Leases().Touch(name)
 			}
 		}
+		if name, sub, ok := vmFromPath(r.URL.Path); ok && sub == "" && r.Method == http.MethodDelete {
+			rec := &jxStatus{ResponseWriter: w, code: http.StatusOK}
+			next.ServeHTTP(rec, r)
+			if rec.code < 300 {
+				s.jxForgetVM(name)
+			}
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }
+
+// jxStatus records the status code a handler wrote.
+type jxStatus struct {
+	http.ResponseWriter
+	code int
+}
+
+func (r *jxStatus) WriteHeader(code int) { r.code = code; r.ResponseWriter.WriteHeader(code) }
 
 // JXWrapProxy counts proxy traffic as activity of the VM behind the route.
 func (s *Server) JXWrapProxy(next http.Handler) http.Handler {

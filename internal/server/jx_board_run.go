@@ -29,7 +29,10 @@ func (r *boardRunner) Run(ctx context.Context, spec board.Spec, status func(stri
 	if err != nil {
 		return err
 	}
-	if err := r.b.guests.Prepare(ctx, spec.Target, rem, spec.Agent, status); err != nil {
+	unlock := r.b.guestLock(spec.Target)
+	err = r.b.guests.Prepare(ctx, spec.Target, rem, spec.Agent, status)
+	unlock()
+	if err != nil {
 		return err
 	}
 	return board.RunVMTurn(ctx, rem, spec, line)

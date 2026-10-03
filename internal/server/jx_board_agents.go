@@ -280,10 +280,12 @@ func (b *jxBoard) install(vm, agent string) {
 	status(fmt.Sprintf("installing %s in %s", board.Titles[agent], vm))
 	rem, err := b.vmRemote(ctx, vm, status)
 	if err == nil {
+		unlock := b.guestLock(vm)
 		err = board.Install(ctx, rem, agent, status)
-	}
-	if err == nil {
-		err = b.guests.WriteCreds(ctx, vm, rem, agent, true)
+		if err == nil {
+			err = b.guests.WriteCreds(ctx, vm, rem, agent, true)
+		}
+		unlock()
 	}
 	end(err)
 }

@@ -173,6 +173,27 @@ func (st *Store) SetPolicy(vm string, p Policy) error {
 	return nil
 }
 
+// ForgetPolicy drops vm's policy (the VM was deleted), so a new VM that
+// reuses the name starts from the defaults.
+func (st *Store) ForgetPolicy(vm string) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if _, ok := st.policies[vm]; !ok {
+		return nil
+	}
+	next := make(map[string]Policy, len(st.policies))
+	for k, v := range st.policies {
+		if k != vm {
+			next[k] = v
+		}
+	}
+	if err := writeJSONAtomic(st.policiesPath(), next); err != nil {
+		return err
+	}
+	st.policies = next
+	return nil
+}
+
 // Settings returns the settings.
 func (st *Store) Settings() Settings {
 	st.mu.Lock()

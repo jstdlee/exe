@@ -130,8 +130,8 @@ else
   for t in curl git tmux; do command -v "$t" >/dev/null 2>&1 || need="$need $t"; done
   if [ -n "$need" ]; then
     echo "exe: apt-get install$need"
-    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -q || exit 1
-    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -q ca-certificates$need || exit 1
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update -q || exit 1
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y -q ca-certificates$need || exit 1
   fi
 fi
 `
