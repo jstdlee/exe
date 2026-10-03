@@ -44,5 +44,6 @@ require (
 
 require (
 	github.com/livid/exe-stats v0.1.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.59.0
 )

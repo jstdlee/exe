@@ -207,3 +207,29 @@ curl -s "${AUTH[@]}" -X POST $BASE/v1/vms/scratch/expose -d '{"port":8000}'
 
 **Clean up when the user is done:** `POST .../stop` keeps the disk;
 `DELETE` destroys it — confirm with the user before deleting.
+
+## jstdlee extensions (/v1/jx/*)
+
+This build adds routes under `/v1/jx/`, same token. The CLI wraps them
+(`exe env`, `exe snap`); `exe skill` prints this file.
+
+- `POST /v1/jx/env/plan` `{"files":{"package.json":"..."},"image":"alpine"}`
+  → `{plan, distro, script}`: a Debian (apt) or Alpine (apk) bootstrap
+  derived from compose files, `.github/workflows/*.yml`, `package.json`,
+  `pyproject.toml` / `requirements*.txt`, `go.mod`, `Cargo.toml`,
+  `apt.txt`. `plan.notes` lists what it could not map.
+- `POST /v1/jx/env/up?vm=NAME[&image=][&mem=MB]`, body = tar of the project:
+  creates or starts the VM, unpacks into `~/work`, runs the bootstrap
+  (kept at `~/.exe-env/bootstrap.sh`). Streams NDJSON
+  `{"type":"status|stdout|stderr|plan|error|done",...}`; the last line is
+  `{"type":"done","code":N}`.
+- `POST /v1/jx/env/run` `{"vm","command","outputs":["dist"]}`: runs the
+  command in `~/work` (login shell), streams NDJSON like `up`, then sends
+  the outputs as base64 `{"type":"tar","data"}` chunks before `done`.
+- Snapshots: `GET|POST /v1/jx/vms/{name}/snapshots` (POST body
+  `{"label","force"}`), `POST .../snapshots/{id}/restore`, `DELETE
+  .../snapshots/{id}`. A snapshot stops the VM, copies its disk (reflink
+  or sparse) and starts it again; it answers 409 while the VM is in use
+  (open terminal, SSH, agent turn) unless `force`. **Restore replaces the
+  disk: only when the user asks.**
+- `GET /v1/jx/leases`: what keeps each VM busy.

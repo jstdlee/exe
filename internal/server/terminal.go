@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -46,39 +47,47 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := s.vmTarget(info)
-	dctx, dcancel := context.WithTimeout(r.Context(), 15*time.Second)
-	client, err := target.Dial(dctx)
-	dcancel()
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, err)
-		return
-	}
-
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 	if err != nil {
-		client.Close()
 		return
 	}
 	c.SetReadLimit(1 << 20)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer client.Close()
 	defer c.CloseNow()
+	out := &wsWriter{ctx: ctx, c: c}
+	// fail shows the error in the terminal itself: a close reason is
+	// invisible to the user.
+	fail := func(err error) {
+		fmt.Fprintf(out, "\r\n\x1b[31mexe: %v\x1b[0m\r\n", err)
+		c.Close(websocket.StatusInternalError, "terminal failed")
+	}
+
+	dctx, dcancel := context.WithTimeout(r.Context(), 15*time.Second)
+	client, err := target.Dial(dctx)
+	dcancel()
+	if err != nil {
+		fail(err)
+		return
+	}
+	defer client.Close()
 
 	sess, err := client.NewSession()
 	if err != nil {
-		c.Close(websocket.StatusInternalError, err.Error())
+		fail(err)
 		return
 	}
-	defer sess.Close()
+	defer func() {
+		sess.Signal(ssh.SIGHUP) // end the remote shell, not only the channel
+		sess.Close()
+	}()
 
-	out := &wsWriter{ctx: ctx, c: c}
 	sess.Stdout = out
 	sess.Stderr = out
 	stdin, err := sess.StdinPipe()
 	if err != nil {
-		c.Close(websocket.StatusInternalError, err.Error())
+		fail(err)
 		return
 	}
 	modes := ssh.TerminalModes{
@@ -87,7 +96,7 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 		ssh.TTY_OP_OSPEED: 14400,
 	}
 	if err := sess.RequestPty("xterm-256color", 24, 80, modes); err != nil {
-		c.Close(websocket.StatusInternalError, err.Error())
+		fail(err)
 		return
 	}
 	command := r.URL.Query().Get("cmd")
@@ -97,7 +106,7 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 		err = sess.Shell()
 	}
 	if err != nil {
-		c.Close(websocket.StatusInternalError, err.Error())
+		fail(err)
 		return
 	}
 
@@ -135,7 +144,7 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 				pong, _ := json.Marshal(map[string]json.RawMessage{"pong": msg.Ping})
 				out.WriteText(pong)
 			}
-			if len(msg.Resize) == 2 {
+			if len(msg.Resize) == 2 && termDim(msg.Resize[0]) && termDim(msg.Resize[1]) {
 				sess.WindowChange(msg.Resize[1], msg.Resize[0])
 			}
 		}
