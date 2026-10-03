@@ -667,6 +667,8 @@ leave on a LAN.
 
 ## The coding agent
 
+> **This build (jstdlee):** the Ollama/ChatGPT agent below is removed. Use the **Board** (see *jstdlee extensions* at the end) with Claude Code or Codex.
+
 Point exe at Ollama in **Windows → Configuration** (`ollama.base_url` and
 `ollama.model`; `ollama.effort` sets the thinking effort on models that
 support it, or `off` to disable thinking). A local signed-in Ollama at `http://127.0.0.1:11434` can
@@ -1167,3 +1169,83 @@ reconnect that follows a daemon restart, which resends the recent lines
 and looks yours up again (a line the daemon no longer holds sends you to
 the tail). This page lives at `/docs.md`, and the machine-readable
 counterpart for agents at `/skill.md`.
+
+# jstdlee extensions
+
+This build adds the features below to upstream exe. Their API is under
+`/v1/jx/` (same token); `/skill.md` lists every route.
+
+## Board: Claude Code and Codex as task threads
+
+Open **Board** on the desktop. A thread is one Claude Code or Codex session
+on one target: a VM, or this host. Pick the target, the agent and the
+session (**New**, **Continue** an existing CLI session, or **Fork** one),
+then write the task. Each message runs one headless turn; the daemon owns
+the run, so it keeps going when you close the window or lose the network.
+A message sent while a turn runs waits in the queue. **Stop** ends the turn.
+
+In a VM the agent runs with its permission prompts off (the VM is the
+sandbox). On the host it runs with the CLI's safer modes. The first turn
+in a VM installs the CLI if it is missing. Log in once per VM through its
+terminal, or store a token under **Board → Machines → Secrets** (the token
+is write-only and reaches the VM through stdin).
+
+## Hub threads as the task board
+
+With a private exe-hub (loopback only) and **hub bridge** turned on, a
+root post of yours that starts with `@agent` is a task:
+`@agent: <task>` or `@agent codex on myvm: <task>`. Your replies in that
+thread are the next turns; `/status` and `/stop` control it. The agent
+answers under its own key. Only posts signed with your node key are ever
+acted on. Settings: `GET|PUT /v1/jx/hubbridge`.
+
+## Idle stop, memory guard and cron
+
+A VM stops after it has been idle for its limit: no open terminal or SSH
+session, no agent turn, env job or cron run, no proxy traffic, no pin.
+Limits by kind: dev 60 min, agent 20, job 5, service never. Pin a VM that
+must stay up (**Board → Machines**, or `exe idle set <vm> -pin`). A start
+that would push host memory over the cap (80 % by default) first stops
+idle VMs, else it is refused. Cron jobs (**Board → Schedules**, `exe
+cron`) post a prompt to the Board or run a shell command in a VM.
+
+## Environments and snapshots
+
+`exe env plan <dir>` reads compose files, GitHub workflows,
+`package.json`, `pyproject.toml`/`requirements*.txt`, `go.mod` and
+`Cargo.toml` and prints a Debian or Alpine bootstrap. `exe env up <vm>
+[dir]` creates the VM if needed, uploads the project into `~/work` and
+runs the bootstrap; `exe env run <vm> -- <command>` runs a job and can
+copy outputs back. `exe snap create|restore|rm <vm>` copies the VM's disk
+(reflink or sparse, never a full copy); restore replaces the disk.
+
+## Terminals on a phone
+
+Every terminal gets a key bar on a phone (Esc, Tab, Ctrl, Alt, arrows,
+PgUp/PgDn, ^C), a **Compose** box that takes the phone keyboard, dictation
+and paste, and **Select**, which shows the screen and scrollback as plain
+text you can select and copy. On a desktop, right-click a terminal for the
+same. VM terminals open in tmux inside the VM, so a dropped connection
+does not end the session.
+
+## Security context
+
+Know where each thing runs:
+
+- **The host** runs the daemon, the host Terminal, and Claude Code /
+  Codex windows and host Board turns. Those act as your user on this
+  machine, with your files and credentials.
+- **A VM** is the sandbox. Agent turns in a VM can change anything inside
+  it, but reach the host only through the network like any other machine.
+- **Who can reach the daemon** is decided by `listen`, `proxy_listen` and
+  `ssh_listen`. A Tailscale or LAN address exposes the API to that
+  network; always set `api_token`. The API answers `GET /v1/config` with
+  every secret in it, so the token is the key to everything.
+- **Agent secrets** (Board → Machines → Secrets) live in
+  `~/.exe/jx/secrets.json` (0600) and are never returned by the API.
+- **Published services** (`exe expose`) are public on the internet. Put
+  Cloudflare Access in front of anything that is not meant for everyone.
+- **Behind a VPN** (Mullvad, WireGuard), guest traffic follows the VPN's
+  route. Set `firecracker.dns` to the VPN's resolver if it blocks outside
+  DNS, and restart VMs after the VPN changes state.
+
