@@ -67,3 +67,42 @@ body.mobile #pane-term.jx-has-kit #term-box { height: calc(var(--vvh, 100dvh) - 
 .jx-tool-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body.mobile .jx-tools-grid { grid-template-columns: 1fr; }
 body.mobile .jx-tool { width: 150px; min-height: 32px; }
+
+/* Configuration → LLM Providers */
+.jx-llm-note { margin-bottom: 8px; }
+.jx-llm-list .listbox { max-height: 180px; }
+.jx-llm-list table { table-layout: fixed; }
+.jx-llm-list td { padding: 3px 9px; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
+.jx-llm-list th:nth-child(1) { width: 26%; }
+.jx-llm-list th:nth-child(2) { width: 64px; }
+.jx-llm-list th:nth-child(4) { width: 26%; }
+.jx-llm-list th:nth-child(5) { width: 118px; }
+.jx-llm-list td.jx-llm-acts { text-align: right; white-space: nowrap; overflow: visible; }
+.jx-llm-acts button.ghost.sm + button.ghost.sm { margin-left: 6px; }
+.jx-llm-add { margin: 8px 0 0; }
+.jx-llm-form { margin-top: 12px; padding-top: 10px; border-top: 1px solid #888; }
+.jx-llm-title { font-weight: bold; margin-bottom: 8px; }
+.jx-llm-form .popup, .jx-llm-form .popup select { width: 100%; box-sizing: border-box; }
+.jx-llm-form .jx-check { margin-top: 4px; font-size: 11px; }
+.jx-llm-mrow { margin-top: 12px; }
+.jx-llm-mline { display: flex; align-items: center; gap: 12px; }
+.jx-llm-mline button.ghost { flex: none; }
+.jx-llm-mline .muted { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jx-llm-modelbox { flex: 1; min-width: 0; }
+.jx-llm-modelbox input { width: 100%; box-sizing: border-box; }
+.jx-llm-btns { justify-content: flex-end; gap: 12px; margin: 12px 0 0; }
+.jx-llm-btns button { min-width: 58px; }
+
+/* the agent launch dialog (VM Tools) */
+.window.modal.jx-ln { max-width: 420px; }
+.jx-ln-head { margin-bottom: 10px; }
+.jx-ln-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.jx-ln-row > label { flex: none; width: 64px; text-align: right; }
+.jx-ln-row > .popup, .jx-ln-box { flex: 1; min-width: 0; }
+.jx-ln-row .popup select, .jx-ln-box .popup { width: 100%; box-sizing: border-box; }
+.jx-ln-box input { width: 100%; box-sizing: border-box; }
+.jx-ln-note { min-height: 28px; margin: 2px 0 4px 72px; overflow-wrap: anywhere; }
+.jx-ln-btns { justify-content: flex-end; gap: 12px; margin: 8px 0 2px; }
+.jx-ln-btns button { min-width: 58px; }
+body.mobile .jx-llm-list th:nth-child(3), body.mobile .jx-llm-list td:nth-child(3),
+body.mobile .jx-llm-list th:nth-child(2), body.mobile .jx-llm-list td:nth-child(2) { display: none; }

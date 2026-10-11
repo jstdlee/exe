@@ -236,3 +236,24 @@ starts a Board thread; owner replies in that hub thread are its next turns;
 (`jx/hubbridge_ed25519`), one reply per turn (clipped to 8 KB). Only
 owners' posts are acted on. API `GET|PUT /v1/jx/hubbridge`. Code:
 `internal/jx/hubbridge/`, `internal/server/jx_hubbridge.go`.
+
+## Feature F — LLM providers for VM agents
+
+Configuration → LLM Providers (jx.js) edits `~/.exe/jx/llm.json` (0600):
+providers `{id, name, kind: openai|anthropic|both, base_url, api_key,
+model}` plus `last[agent] = {provider, model, thinking}`. Magpie
+(`http://127.0.0.1:3425/v1`, kind both) is built in and never saved. API:
+`GET /v1/jx/llm` (keys never returned, `api_key_set` instead),
+`PUT /v1/jx/llm/providers` (empty key keeps the saved one, `-` clears it),
+`POST /v1/jx/llm/models` (a saved provider by id, or the form's values).
+VM Tools agents (claude, codex, opencode, pi, omp, grok) open a Start
+dialog; Start opens the VM terminal with `cmd=jx-launch:<query>`. The
+`jxWrap` terminal hook (`jxLaunch`) remembers the choice, opens an SSH
+remote forward (guest `127.0.0.1:<port>` → host) for a loopback provider,
+writes the launch script on stdin to `~/.config/exe/llm/launch-<id>.sh`
+(it removes itself, then exports `EXE_LLM_API_KEY`, writes the agent's
+`exe` provider entry and execs the CLI), and swaps in
+`tools.LaunchCommand`. Codex installs with OpenAI's standalone installer
+(`install.sh`, CODEX_NON_INTERACTIVE=1); a bare `~/.local/bin/codex` from
+older builds counts as missing. Code: `internal/jx/llm/`,
+`internal/server/jx_llm.go`, `internal/jx/tools/` (installers).

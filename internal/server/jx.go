@@ -18,11 +18,15 @@ import (
 	"time"
 
 	"exe/internal/jx/lease"
+	"exe/internal/jx/llm"
 )
 
 type jxState struct {
 	once   sync.Once
 	leases *lease.Table
+
+	llmOnce sync.Once
+	llm     *llm.Store // jx_llm.go
 
 	// ipVM caches guest IP -> VM name for proxy traffic (refreshed lazily).
 	ipMu sync.Mutex
@@ -96,6 +100,7 @@ func (s *Server) jxWrap(next http.Handler) http.Handler {
 			case sub == "terminal":
 				// the WebSocket handler blocks for the session's life
 				defer s.JXHold(name, "terminal")()
+				defer s.jxLaunch(r, name)() // jx_llm.go: an agent on an LLM provider
 			case r.Method == http.MethodPost && sub == "start":
 				s.Leases().Touch(name)
 			}

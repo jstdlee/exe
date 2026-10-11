@@ -48,7 +48,7 @@ func (g *fakeGuest) Exec(ctx context.Context, script string, stdin io.Reader, st
 		if strings.Contains(script, "claude.ai/install.sh") {
 			g.installed[Claude] = true
 		}
-		if strings.Contains(script, "codex-$a-unknown-linux-musl") {
+		if strings.Contains(script, "codex/releases/latest/download/install.sh") {
 			g.installed[Codex] = true
 		}
 	case strings.HasPrefix(script, guestPath+"[ -f /etc/alpine-release ]") && g.turn != nil:
@@ -112,7 +112,7 @@ func TestPrepareInstallsAndWritesCredsOnStdin(t *testing.T) {
 	}
 	scripts, _ = guest.calls()
 	n := len(scripts)
-	if !strings.Contains(scripts[n-3], "codex-$a-unknown-linux-musl") || scripts[n-2] != writeEnvScript || scripts[n-1] != codexLoginScript {
+	if !strings.Contains(scripts[n-3], "codex/releases/latest/download/install.sh") || scripts[n-2] != writeEnvScript || scripts[n-1] != codexLoginScript {
 		t.Errorf("codex prepare = %q", scripts[n-3:])
 	}
 }

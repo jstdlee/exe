@@ -1222,14 +1222,39 @@ copy outputs back. `exe snap create|restore|rm <vm>` copies the VM's disk
 ## VM Tools
 
 A VM window's **Tools** tab lists about 40 terminal programs by kind:
-Claude Code and Codex, monitors (btop, htop, Glances), file managers
-(ncdu, nnn, Midnight Commander), git (lazygit, tig, gh), editors (Vim,
-Neovim, micro), data clients (sqlite3, psql, redis-cli), text browsers,
-shell tools (ripgrep, fd, bat, fzf, tmux) and language REPLs. One click
-opens the tool in a terminal window on that VM; a tool that is missing is
-installed first (apt on Debian, apk on Alpine). A tool that the VM's
-system does not package is greyed out. Tools you run with arguments
-(ripgrep, jq, gh) open a shell once they are installed.
+coding agents (Claude Code, Codex, OpenCode, Pi, Oh My Pi, Grok Build),
+monitors (btop, htop, Glances), file managers (ncdu, nnn, Midnight
+Commander), git (lazygit, tig, gh), editors (Vim, Neovim, micro), data
+clients (sqlite3, psql, redis-cli), text browsers, shell tools (ripgrep,
+fd, bat, fzf, tmux) and language REPLs. One click opens the tool in a
+terminal window on that VM; a tool that is missing is installed first (apt
+on Debian, apk on Alpine). A tool that the VM's system does not package is
+greyed out. Tools you run with arguments (ripgrep, jq, gh) open a shell
+once they are installed.
+
+An agent opens a **Start** dialog first: the **Provider** (the agent's own
+sign-in, or an LLM provider), the **Model** (listed from the provider's
+`/models`) and the **Thinking** level (the levels the model lists, when it
+lists them). The dialog remembers the last choice for each agent. Codex
+installs with OpenAI's standalone installer; a VM that has the old bare
+`codex` binary gets the full package on the next start.
+
+## LLM providers
+
+**Configuration → LLM Providers** keeps the endpoints that VM agents can
+run on: a name, the API (OpenAI compatible, Anthropic compatible, or both),
+the base URL (with `/v1` when the API has it), an API key, and a default
+model picked from the provider's model list. **Magpie** on this host
+(`http://127.0.0.1:3425/v1`) is built in. A provider on this host's
+loopback reaches the VM through the terminal's SSH link: the daemon opens
+a port on the VM's own loopback for as long as the terminal is open. The
+key stays on the host (`~/.exe/jx/llm.json`, mode 0600); a launch hands it
+to the VM in a file that removes itself before the agent starts. Claude
+Code needs an Anthropic-compatible provider and Codex an OpenAI-compatible
+one (with the Responses API); OpenCode, Pi, Oh My Pi and Grok Build use
+either. The agent's own config gets one entry named `exe` (Pi:
+`~/.pi/agent/models.json`, Oh My Pi: `~/.omp/agent/models.yml`, Grok:
+`~/.grok/config.toml`); the rest of that config is left as it is.
 
 ## Terminals on a phone
 

@@ -630,6 +630,7 @@
     };
     const open = (t, vm) => {
       if ($("#d-state") && $("#d-state").textContent !== "running") { toast("Start " + vm + " first"); return; }
+      if (t.launch) { launchDialog(t, vm); return; } // section 4: provider, model, thinking
       const w = openHostTermWin(null, t.command, vm);
       const title = w && w.querySelector(".title");
       if (title) title.textContent = vm + " — " + t.name;
@@ -650,7 +651,7 @@
         kids.push(el("div", { class: "jx-tools-cat" }, cat));
         const grid = el("div", { class: "jx-tools-grid" });
         for (const t of items) {
-          const ok = t.agent || (image === "alpine" ? t.alpine : t.debian);
+          const ok = t.agent || t.launch || (image === "alpine" ? t.alpine : t.debian);
           const b = el("button", { class: "ghost jx-tool", title: t.desc }, t.name);
           if (!ok) { b.disabled = true; b.title = t.name + " is not packaged for " + (image === "alpine" ? "Alpine" : "Debian"); }
           b.addEventListener("click", () => open(t, vm));
@@ -667,4 +668,249 @@
       return r;
     };
   })();
+  // ==================================================================
+  // 4. LLM providers: Configuration tab, and the agent launch dialog
+  // ==================================================================
+  // GET /v1/jx/llm (jx_llm.go) lists the providers (Magpie, this host's
+  // gateway, is built in), the agents and what each can run on, and the
+  // last launch of each agent. A launch opens the VM terminal with
+  // cmd=jx-launch:<query>; the daemon swaps in the real command and
+  // remembers the choice.
+  const LLM_KINDS = [["openai", "OpenAI compatible"], ["anthropic", "Anthropic compatible"], ["both", "OpenAI and Anthropic"]];
+  const kindLabel = k => (LLM_KINDS.find(x => x[0] === k) || [k, k])[1];
+  const kindShort = k => ({ openai: "OpenAI", anthropic: "Anthropic", both: "Both" })[k] || k;
+  const pop = sel => el("span", { class: "popup" }, sel, el("span", { class: "well" }, el("i", {}, el("b"))));
+  const opt = (v, label, extra) => { const o = el("option", { value: v }, label); if (extra && extra.disabled) o.disabled = true; return o; };
+  const llmGet = () => j("/v1/jx/llm");
+  const llmModels = body => j("/v1/jx/llm/models", { method: "POST", json: body }).then(r => r.models || []);
+
+  // ---- Configuration → LLM Providers ----
+  safely("llm config", () => {
+    const GROUP = "LLM Providers";
+    if (!CONFIG_FIELDS.some(g => g.group === GROUP)) CONFIG_FIELDS.push({ group: GROUP, fields: [] });
+    const load0 = W.loadConfig;
+    W.loadConfig = async function () {
+      const r = await load0.apply(this, arguments);
+      const i = CONFIG_FIELDS.findIndex(g => g.group === GROUP);
+      const pane = document.querySelectorAll("#cfg-form .pane")[i];
+      if (pane) safely("llm pane", () => renderProviders(pane));
+      return r;
+    };
+  });
+
+  function renderProviders(pane) {
+    const list = el("div", { class: "jx-llm-list" }, el("div", { class: "muted" }, "Loading providers…"));
+    const form = el("div", { class: "jx-llm-form", hidden: "" });
+    const addBtn = el("button", { class: "ghost" }, "Add Provider…");
+    pane.replaceChildren(
+      el("div", { class: "muted jx-llm-note" },
+        "Endpoints that agents in VMs can run on. Changes here save at once; the Save button below is for the other tabs. " +
+        "A provider on this host (127.0.0.1) reaches the VM through the terminal's SSH link."),
+      list, el("div", { class: "row jx-llm-add" }, addBtn), form);
+    let providers = [];
+    const save = async next => {
+      const res = await j("/v1/jx/llm/providers", { method: "PUT", json: { providers: next.filter(p => !p.builtin) } });
+      providers = res.providers || [];
+      draw();
+    };
+    function draw() {
+      const rows = providers.map(p => {
+        const tools = el("td", { class: "jx-llm-acts" });
+        if (p.builtin) tools.append(el("span", { class: "muted" }, "built in"));
+        else {
+          tools.append(el("button", { class: "ghost sm", onclick: () => edit(p) }, "Edit"),
+            el("button", { class: "ghost sm", onclick: async () => {
+              const ok = await confirmDialog({ message: "Delete " + p.name + "?", detail: "Agents started on it keep running; new launches cannot pick it.", action: "Delete", danger: true });
+              if (ok) save(providers.filter(x => x.id !== p.id)).catch(e => toast(e.message));
+            } }, "Delete"));
+        }
+        return el("tr", {},
+          el("td", { title: p.name }, p.name), el("td", { title: kindLabel(p.kind) }, kindShort(p.kind)),
+          el("td", { title: p.base_url }, p.base_url),
+          el("td", { title: p.model || "" }, p.model || el("span", { class: "muted" }, "—")), tools);
+      });
+      list.replaceChildren(el("div", { class: "listbox" }, el("table", {},
+        el("thead", {}, el("tr", {}, el("th", {}, "Name"), el("th", {}, "API"), el("th", {}, "URL"), el("th", {}, "Model"), el("th", {}, ""))),
+        el("tbody", {}, ...rows))));
+    }
+    function edit(p) {
+      p = p || { name: "", kind: "openai", base_url: "", model: "" };
+      const name = el("input", { type: "text", id: "jx-llm-name", value: p.name, spellcheck: "false" });
+      const kind = el("select", { id: "jx-llm-kind" }, ...LLM_KINDS.map(([v, l]) => opt(v, l)));
+      kind.value = p.kind || "openai";
+      const url = el("input", { type: "text", id: "jx-llm-url", value: p.base_url, spellcheck: "false", placeholder: "https://api.example.com/v1" });
+      const key = el("input", { type: "password", id: "jx-llm-key", autocomplete: "off",
+        placeholder: p.api_key_set ? "saved — leave empty to keep it" : "none" });
+      const clearKey = el("label", { class: "jx-check" }, el("input", { type: "checkbox" }), "Remove the saved key");
+      clearKey.hidden = !p.api_key_set;
+      let model = el("select", { id: "jx-llm-model" }, opt(p.model || "", p.model || "(none)"));
+      const modelBox = el("span", { class: "jx-llm-modelbox" }, pop(model));
+      const status = el("span", { class: "muted" });
+      const listBtn = el("button", { class: "ghost" }, "List Models");
+      const fill = async () => {
+        const body = { id: p.id || "", kind: kind.value, base_url: url.value.trim(), api_key: key.value.trim() };
+        if (!body.base_url) { status.textContent = "Enter the URL first."; return; }
+        status.textContent = "Asking " + body.base_url + "/models…";
+        try {
+          const ms = await llmModels(body);
+          const cur = model.value;
+          model = el("select", { id: "jx-llm-model" }, opt("", "(none)"), ...ms.map(m => opt(m.id, m.name && m.name !== m.id ? m.id + " — " + m.name : m.id)));
+          if (cur && !ms.some(m => m.id === cur)) model.append(opt(cur, cur + " (not listed)"));
+          model.value = cur;
+          modelBox.replaceChildren(pop(model));
+          status.textContent = ms.length + " models.";
+        } catch (e) {
+          // no list: the model stays editable as text
+          const v = model.value;
+          model = el("input", { type: "text", id: "jx-llm-model", value: v, spellcheck: "false", placeholder: "model id" });
+          modelBox.replaceChildren(model);
+          status.textContent = "No model list: " + e.message;
+        }
+      };
+      listBtn.onclick = fill;
+      const field = (label, input, hint) => el("div", { class: "field" }, el("label", { for: input.id || "" }, label), input,
+        ...(hint ? [el("div", { class: "hint" }, hint)] : []));
+      const cancel = el("button", { class: "ghost", onclick: () => { form.hidden = true; addBtn.disabled = false; } }, "Cancel");
+      const ok = el("button", { class: "btn" }, "Save");
+      ok.onclick = async () => {
+        const next = { id: p.id || "", name: name.value.trim(), kind: kind.value, base_url: url.value.trim(),
+          api_key: clearKey.querySelector("input").checked ? "-" : key.value.trim(), model: model.value.trim() };
+        ok.disabled = true;
+        try {
+          await save(p.id ? providers.map(x => x.id === p.id ? next : x) : providers.concat([next]));
+          form.hidden = true; addBtn.disabled = false;
+          toast("Saved " + next.name);
+        } catch (e) { toast(e.message); }
+        ok.disabled = false;
+      };
+      form.replaceChildren(
+        el("div", { class: "jx-llm-title" }, p.id ? "Edit " + p.name : "New Provider"),
+        el("div", { class: "grid" },
+          field("name", name),
+          field("api", pop(kind), "the API the endpoint speaks"),
+          field("base url", url, "with /v1 when the API has it, as the OpenAI SDK takes it"),
+          el("div", { class: "field" }, el("label", { for: "jx-llm-key" }, "api key"), key, clearKey)),
+        el("div", { class: "field jx-llm-mrow" }, el("label", { for: "jx-llm-model" }, "default model"),
+          el("div", { class: "jx-llm-mline" }, modelBox, listBtn, status)),
+        el("div", { class: "row jx-llm-btns" }, cancel, ok));
+      form.hidden = false;
+      addBtn.disabled = true;
+      if (p.base_url) fill();
+      name.focus();
+    }
+    addBtn.onclick = () => edit(null);
+    llmGet().then(d => { providers = d.providers || []; draw(); })
+      .catch(e => list.replaceChildren(el("div", { class: "muted" }, "Providers are not available: " + e.message)));
+  }
+
+  // ---- the launch dialog: provider, model, thinking ----
+  let launchOv = null;
+  function launchDialog(t, vm) {
+    if (launchOv) launchOv.remove();
+    const provider = el("select", { id: "jx-ln-prov" });
+    let model = el("select", { id: "jx-ln-model" });
+    const thinking = el("select", { id: "jx-ln-think" });
+    const modelBox = el("span", { class: "jx-ln-box" }, pop(model));
+    const note = el("div", { class: "muted jx-ln-note" }, "Loading providers…");
+    const go = el("button", { class: "btn" }, "Start");
+    const cancel = el("button", { class: "ghost" }, "Cancel");
+    const close = () => { if (launchOv) { launchOv.remove(); launchOv = null; } document.removeEventListener("keydown", onKey, true); };
+    const onKey = e => {
+      if (e.key === "Escape") { e.stopPropagation(); close(); }
+      else if (e.key === "Enter" && !e.isComposing && e.target.tagName !== "BUTTON") { e.preventDefault(); go.click(); }
+    };
+    const row = (label, input) => el("div", { class: "jx-ln-row" }, el("label", { for: input.id || "" }, label), input);
+    launchOv = el("div", { class: "overlay" },
+      el("div", { class: "window modal front jx-ln" },
+        el("div", { class: "titlebar" }, el("button", { class: "tbox close", onclick: close }), el("div", { class: "stripe" }),
+          el("div", { class: "title" }, "Start " + t.name), el("div", { class: "stripe" })),
+        el("div", { class: "win-frame" }, el("div", { class: "win-body" },
+          el("div", { class: "jx-ln-head" }, t.name + " in a terminal on " + vm + "."),
+          row("Provider:", pop(provider)),
+          el("div", { class: "jx-ln-row" }, el("label", { for: "jx-ln-model" }, "Model:"), modelBox),
+          row("Thinking:", pop(thinking)),
+          note,
+          el("div", { class: "row jx-ln-btns" }, cancel, go)))));
+    document.body.append(launchOv);
+    document.addEventListener("keydown", onKey, true);
+    cancel.onclick = close;
+
+    let data = null, agent = null, models = [];
+    const levelsFor = m => {
+      // a model that lists its levels offers those ("none" is off)
+      const ef = m && m.efforts && m.efforts.length ? m.efforts.map(x => x === "none" ? "off" : x) : null;
+      return ef ? data.levels.filter(l => ef.includes(l)) : data.levels;
+    };
+    const fillThinking = keep => {
+      const own = provider.value === "";
+      const m = models.find(x => x.id === model.value);
+      thinking.replaceChildren(opt("", "(default)"), ...levelsFor(own ? null : m).map(l => opt(l, l)));
+      thinking.value = [...thinking.options].some(o => o.value === keep) ? keep : "";
+      thinking.disabled = own && !agent.own_thinking;
+    };
+    const setModelSelect = (items, keep, fallback) => {
+      model = el("select", { id: "jx-ln-model" }, ...items);
+      const want = [keep, fallback].find(v => v && [...model.options].some(o => o.value === v));
+      model.value = want || (model.options[0] ? model.options[0].value : "");
+      model.onchange = () => fillThinking(thinking.value);
+      modelBox.replaceChildren(pop(model));
+    };
+    async function fillModels(keepModel, keepThink) {
+      const pid = provider.value;
+      models = [];
+      if (!pid) {
+        setModelSelect([opt("", "(the agent's own default)")]);
+        model.disabled = true;
+        note.textContent = "Runs on " + t.name + "'s own sign-in in the VM.";
+        fillThinking(keepThink);
+        return;
+      }
+      const p = data.providers.find(x => x.id === pid);
+      setModelSelect([opt(keepModel || p.model || "", "Loading models…")]);
+      model.disabled = true;
+      note.textContent = "Runs on " + p.name + " (" + p.base_url + ").";
+      fillThinking(keepThink);
+      try {
+        const ms = await llmModels({ id: pid });
+        if (provider.value !== pid) return; // the person moved on meanwhile
+        models = ms;
+        const items = ms.map(m => opt(m.id, m.name && m.name !== m.id ? m.id + " — " + m.name : m.id));
+        if (keepModel && !ms.some(m => m.id === keepModel)) items.unshift(opt(keepModel, keepModel + " (not listed)"));
+        setModelSelect(items.length ? items : [opt("", "(no models listed)")], keepModel, p.model);
+        model.disabled = !items.length;
+      } catch (e) {
+        if (provider.value !== pid) return;
+        // no list: type the model id
+        model = el("input", { type: "text", id: "jx-ln-model", value: keepModel || p.model || "", spellcheck: "false", placeholder: "model id" });
+        modelBox.replaceChildren(model);
+        note.textContent = "No model list from " + p.name + ": " + e.message;
+      }
+      fillThinking(keepThink);
+    }
+    provider.onchange = () => fillModels("", thinking.value);
+    go.onclick = () => {
+      if (!data) return;
+      const pid = provider.value, mid = (model.value || "").trim();
+      if (pid && !mid) { note.textContent = "Pick a model."; return; }
+      const qs = new URLSearchParams({ tool: t.id, provider: pid, model: pid ? mid : "", thinking: thinking.value });
+      close();
+      const w = openHostTermWin(null, "jx-launch:" + qs, vm);
+      const title = w && w.querySelector(".title");
+      if (title) title.textContent = vm + " — " + t.name + (pid ? " · " + mid : "");
+    };
+    llmGet().then(d => {
+      if (!launchOv) return;
+      data = d;
+      agent = (d.agents || []).find(a => a.id === t.id) || { kinds: ["openai"], own_thinking: false };
+      const speaks = p => agent.kinds.some(k => p.kind === k || p.kind === "both");
+      provider.replaceChildren(opt("", "Own sign-in"),
+        ...d.providers.map(p => opt(p.id, p.name + (speaks(p) ? "" : " (needs " + agent.kinds.map(kindLabel).join(" or ") + ")"), { disabled: !speaks(p) })));
+      const last = (d.last || {})[t.id] || {};
+      const lp = d.providers.find(p => p.id === last.provider);
+      provider.value = lp && speaks(lp) ? lp.id : "";
+      fillModels(provider.value ? last.model : "", last.thinking || "");
+      go.focus();
+    }).catch(e => { note.textContent = "Providers are not available (" + e.message + "): Start uses the agent's own sign-in."; data = { providers: [], levels: [], last: {} }; agent = { kinds: [], own_thinking: false };
+      provider.replaceChildren(opt("", "Own sign-in")); fillModels("", ""); });
+  }
 })();

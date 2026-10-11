@@ -29,6 +29,12 @@ type Tool struct {
 	Alpine string `json:"alpine,omitempty"`
 	// Agent marks Claude Code / Codex, installed by the Board's script.
 	Agent string `json:"agent,omitempty"`
+	// Install is the guest installer of an agent the Board does not run
+	// (it follows board.Prereqs, which sets SUDO).
+	Install string `json:"-"`
+	// Launch: an agent CLI the desktop starts through the provider dialog
+	// (llm.Agents), so its terminal runs LaunchCommand.
+	Launch bool `json:"launch,omitempty"`
 
 	Command string `json:"command"`
 }
@@ -37,8 +43,12 @@ type Tool struct {
 var Categories = []string{"Agents", "Monitor", "Files", "Git", "Edit", "Data", "Network", "Shell tools", "Languages"}
 
 var catalog = []Tool{
-	{ID: "claude", Name: "Claude Code", Category: "Agents", Desc: "Anthropic's coding agent", Agent: board.Claude, Bin: "claude", Run: "claude"},
-	{ID: "codex", Name: "Codex", Category: "Agents", Desc: "OpenAI's coding agent", Agent: board.Codex, Bin: "codex", Run: "codex"},
+	{ID: "claude", Name: "Claude Code", Category: "Agents", Desc: "Anthropic's coding agent", Agent: board.Claude, Bin: "claude", Run: "claude", Launch: true},
+	{ID: "codex", Name: "Codex", Category: "Agents", Desc: "OpenAI's coding agent", Agent: board.Codex, Bin: "codex", Run: "codex", Launch: true},
+	{ID: "opencode", Name: "OpenCode", Category: "Agents", Desc: "open source coding agent, any provider", Bin: "opencode", Run: "opencode", Install: opencodeInstall, Launch: true},
+	{ID: "pi", Name: "Pi", Category: "Agents", Desc: "minimal coding agent (pi-coding-agent)", Bin: "pi", Run: "pi", Install: piInstall, Launch: true},
+	{ID: "omp", Name: "Oh My Pi", Category: "Agents", Desc: "omp: Pi with batteries included", Bin: "omp", Run: "omp", Install: ompInstall, Launch: true},
+	{ID: "grok", Name: "Grok Build", Category: "Agents", Desc: "xAI's coding agent", Bin: "grok", Run: "grok", Install: grokInstall, Launch: true},
 
 	{ID: "btop", Name: "btop", Category: "Monitor", Desc: "CPU, memory, disks, processes", Bin: "btop", Run: "btop", Debian: "btop", Alpine: "btop"},
 	{ID: "htop", Name: "htop", Category: "Monitor", Desc: "process viewer", Bin: "htop", Run: "htop", Debian: "htop", Alpine: "htop"},
@@ -107,19 +117,95 @@ func Find(id string) (Tool, bool) {
 	return Tool{}, false
 }
 
+// pkgFn installs distro packages: apk on Alpine, apt on Debian (without a
+// fresh index first: most VMs already have one).
+const pkgFn = `pkg() {
+  if [ -f /etc/alpine-release ]; then $SUDO apk add --no-cache "$@"; return; fi
+  $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y -q "$@" ||
+    { $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update -q &&
+      $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y -q "$@"; }
+}
+`
+
+const opencodeInstall = `echo "exe: installing OpenCode (opencode.ai/install)"
+command -v tar >/dev/null 2>&1 || pkg tar || exit 1
+curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path || exit 1
+`
+
+const grokInstall = `echo "exe: installing Grok Build (x.ai/cli/install.sh)"
+curl -fsSL https://x.ai/cli/install.sh | bash || exit 1
+`
+
+// piInstall needs Node.js 22.19 or newer: Alpine's package is new enough,
+// Debian 13's (20) is not, so there Node 22 comes from nodejs.org into
+// ~/.local/share/exe-node.
+const piInstall = `node_ok() {
+  v=$(node -v 2>/dev/null | sed 's/^v//'); [ -n "$v" ] || return 1
+  maj=${v%%.*}; r=${v#*.}; min=${r%%.*}
+  [ "$maj" -gt 22 ] || { [ "$maj" -eq 22 ] && [ "$min" -ge 19 ]; }
+}
+if ! node_ok; then
+  if [ -f /etc/alpine-release ]; then
+    pkg nodejs npm || exit 1
+  else
+    case "$(uname -m)" in x86_64|amd64) na=x64 ;; aarch64|arm64) na=arm64 ;; *) echo "no Node.js build for $(uname -m)" >&2; exit 1 ;; esac
+    n=$(curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt | grep -o "node-v[0-9.]*-linux-$na.tar.gz" | head -n1)
+    [ -n "$n" ] || { echo "cannot find Node.js 22 for linux-$na" >&2; exit 1; }
+    echo "exe: installing Node.js ($n)"
+    d="$HOME/.local/share/exe-node"
+    rm -rf "$d" && mkdir -p "$d" "$HOME/.local/bin" || exit 1
+    curl -fsSL "https://nodejs.org/dist/latest-v22.x/$n" | tar -xzf - -C "$d" --strip-components=1 || exit 1
+    ln -sf "$d/bin/node" "$d/bin/npm" "$d/bin/npx" "$HOME/.local/bin/"
+  fi
+fi
+node_ok || { echo "Node.js 22.19 or newer is needed" >&2; exit 1; }
+echo "exe: installing Pi (npm @earendil-works/pi-coding-agent)"
+npm install -g --prefix "$HOME/.local" @earendil-works/pi-coding-agent || exit 1
+`
+
+// ompInstall: omp runs on Bun (1.3.14 or newer), whose installer wants unzip.
+const ompInstall = `command -v unzip >/dev/null 2>&1 || pkg unzip || exit 1
+if command -v bun >/dev/null 2>&1; then
+  bun upgrade >/dev/null 2>&1 || true
+else
+  echo "exe: installing Bun (bun.sh/install)"
+  curl -fsSL https://bun.sh/install | bash || exit 1
+fi
+echo "exe: installing Oh My Pi (bun @oh-my-pi/pi-coding-agent)"
+"$HOME/.bun/bin/bun" install -g @oh-my-pi/pi-coding-agent || bun install -g @oh-my-pi/pi-coding-agent || exit 1
+`
+
+// guestPATH is where the agent installers put their CLIs.
+const guestPATH = `export PATH="$HOME/.local/bin:$HOME/.bun/bin:$HOME/.opencode/bin:$HOME/.grok/bin:/usr/local/bin:$PATH"; `
+
 // shellAfter is what a tool without a program leaves you in.
 const shellAfter = `exec "${SHELL:-/bin/sh}" -l`
 
 // Command is the one shell line a VM terminal runs for t.
-func Command(t Tool) string {
+func Command(t Tool) string { return command(t, t.Run) }
+
+// LaunchCommand is Command for an agent started on a provider: after the
+// install it sources script (a shell word, "$HOME/..."), the file the
+// daemon wrote with the agent's settings and key (llm.Script), which
+// execs the CLI.
+func LaunchCommand(t Tool, script string) string { return command(t, ". "+script) }
+
+func command(t Tool, run string) string {
 	var b strings.Builder
-	b.WriteString(`export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"; `)
-	// "have" is true when any of the tool's binaries is on PATH.
+	b.WriteString(guestPATH)
+	// "have" is true when any of the tool's binaries is on PATH; a Codex
+	// that is not a whole package counts as missing (board.InstallScript)
 	fmt.Fprintf(&b, `have() { for x in %s; do command -v "$x" >/dev/null 2>&1 && return 0; done; return 1; }; `, t.Bin)
+	if t.Agent == board.Codex {
+		b.WriteString(`have() { p=$(command -v codex 2>/dev/null) || return 1; case "$(readlink -f "$p" 2>/dev/null)" in */.codex/packages/*) return 0 ;; esac; [ "$p" != "$HOME/.local/bin/codex" ]; }; `)
+	}
 	b.WriteString(`if ! have; then echo "exe: installing ` + t.Name + `..."; `)
 	if t.Agent != "" {
 		// the Board's own installer: prerequisites, the CLI, PATH
 		fmt.Fprintf(&b, `sh -c %s || { echo "exe: install failed"; %s; }; `, quote(board.InstallScript(t.Agent)), shellAfter)
+	} else if t.Install != "" {
+		fmt.Fprintf(&b, `sh -c %s || { echo "exe: install failed"; %s; }; `, quote(board.Prereqs()+pkgFn+t.Install), shellAfter)
+		b.WriteString(`have || { echo "exe: ` + t.Name + ` is not on PATH after the install"; ` + shellAfter + `; }; `)
 	} else {
 		b.WriteString(`S=""; [ "$(id -u)" = 0 ] || { command -v sudo >/dev/null 2>&1 && S="sudo -n" || S="doas -n"; }; `)
 		b.WriteString(`if [ -f /etc/alpine-release ]; then `)
@@ -140,10 +226,10 @@ func Command(t Tool) string {
 		b.WriteString(`fi; `)
 	}
 	b.WriteString(`fi; `)
-	if t.Run == "" {
+	if run == "" {
 		fmt.Fprintf(&b, `echo; echo "%s is ready. Try: %s --help"; %s`, t.Name, strings.Fields(t.Bin)[0], shellAfter)
 	} else {
-		b.WriteString(t.Run)
+		b.WriteString(run)
 	}
 	return b.String()
 }

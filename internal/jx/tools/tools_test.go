@@ -19,7 +19,7 @@ func TestCatalogCommandsParse(t *testing.T) {
 		if !cats[tl.Category] {
 			t.Errorf("%s: unknown category %q", tl.ID, tl.Category)
 		}
-		if tl.Agent == "" && tl.Debian == "" && tl.Alpine == "" {
+		if tl.Agent == "" && tl.Install == "" && tl.Debian == "" && tl.Alpine == "" {
 			t.Errorf("%s: no package anywhere", tl.ID)
 		}
 		if out, err := exec.Command("sh", "-n", "-c", tl.Command).CombinedOutput(); err != nil {

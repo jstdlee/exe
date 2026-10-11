@@ -54,12 +54,13 @@ func (p Probe) Agent(a string) AgentProbe {
 }
 
 // ProbeScript prints the target's state as key=value lines (ParseProbe).
-const ProbeScript = guestPath + `os=other
+const ProbeScript = guestPath + codexOK + `os=other
 if [ -f /etc/alpine-release ]; then os=alpine; elif [ -f /etc/debian_version ]; then os=debian; fi
 echo "os=$os"
 echo "arch=$(uname -m)"
 for a in claude codex; do
   p=$(command -v "$a" 2>/dev/null)
+  [ "$a" = codex ] && ! codex_ok && p=
   echo "path_$a=$p"
   if [ -n "$p" ]; then echo "ver_$a=$("$a" --version 2>/dev/null | head -n1)"; fi
 done
@@ -76,7 +77,7 @@ exit 0
 
 // ReadyScript is the probe a turn runs first: only what Prepare needs to
 // decide on an install, without starting the CLIs for their versions.
-const ReadyScript = guestPath + `for a in claude codex; do echo "path_$a=$(command -v "$a" 2>/dev/null)"; done
+const ReadyScript = guestPath + codexOK + `for a in claude codex; do p=$(command -v "$a" 2>/dev/null); [ "$a" = codex ] && ! codex_ok && p=; echo "path_$a=$p"; done
 for t in curl git tmux bash; do command -v "$t" >/dev/null 2>&1 && echo "has_$t=1"; done
 exit 0
 `
@@ -144,26 +145,33 @@ command -v claude >/dev/null 2>&1 || { echo "claude is not on PATH after the ins
 echo "exe: $(claude --version 2>/dev/null | head -n1)"
 `
 
-// codexInstall fetches the static musl build, which runs on Debian and
-// Alpine alike.
-const codexInstall = `if ! command -v codex >/dev/null 2>&1; then
-  case "$(uname -m)" in
-    x86_64|amd64) a=x86_64 ;;
-    aarch64|arm64) a=aarch64 ;;
-    *) echo "no Codex build for $(uname -m)" >&2; exit 1 ;;
-  esac
-  echo "exe: installing Codex (codex-$a-unknown-linux-musl)"
-  mkdir -p "$HOME/.local/bin" || exit 1
-  t=$(mktemp -d) || exit 1
-  if curl -fsSL "https://github.com/openai/codex/releases/latest/download/codex-$a-unknown-linux-musl.tar.gz" | tar -xzf - -C "$t"; then
-    f=$(find "$t" -type f -name 'codex*' | head -n1)
-    [ -n "$f" ] && mv -f "$f" "$HOME/.local/bin/codex" && chmod 755 "$HOME/.local/bin/codex"
-  fi
-  rm -rf "$t"
+// codexOK defines codex_ok: Codex is on PATH and whole. Since 0.160 the
+// codex binary needs the package it ships in (it fails at start with "this
+// CLI has no complete local package"), so the bare binary that older exe
+// builds put at ~/.local/bin/codex counts as missing and is replaced.
+const codexOK = `codex_ok() {
+  p=$(command -v codex 2>/dev/null) || return 1
+  case "$(readlink -f "$p" 2>/dev/null)" in */.codex/packages/*) return 0 ;; esac
+  [ "$p" != "$HOME/.local/bin/codex" ]
+}
+`
+
+// codexInstall runs OpenAI's standalone installer, which puts the full
+// package under ~/.codex/packages and links ~/.local/bin/codex to it; it
+// has musl builds, so Debian and Alpine take the same path.
+const codexInstall = codexOK + `if ! codex_ok; then
+  echo "exe: installing Codex (the standalone installer)"
+  if [ -f "$HOME/.local/bin/codex" ] && [ ! -L "$HOME/.local/bin/codex" ]; then rm -f "$HOME/.local/bin/codex"; fi
+  curl -fsSL https://github.com/openai/codex/releases/latest/download/install.sh | CODEX_NON_INTERACTIVE=1 sh || exit 1
 fi
 command -v codex >/dev/null 2>&1 || { echo "codex is not on PATH after the install" >&2; exit 1; }
 echo "exe: $(codex --version 2>/dev/null | head -n1)"
 `
+
+// Prereqs is the shell that installs what every agent CLI needs (curl,
+// git, tmux; on Alpine bash and the C++ runtime) and sets SUDO, for
+// installers outside the Board's two agents (the VM Tools catalog).
+func Prereqs() string { return guestPath + prereqScript }
 
 // InstallScript installs agent's CLI and the prerequisites in a guest.
 func InstallScript(agent string) string {
